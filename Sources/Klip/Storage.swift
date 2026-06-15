@@ -47,6 +47,8 @@ final class Storage {
         encoder.outputFormatting = [.prettyPrinted]
         guard let data = try? encoder.encode(items) else { return }
         try? data.write(to: itemsURL, options: .atomic)
+        // El historial puede contener credenciales en texto: restringir a solo el usuario.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: itemsURL.path)
     }
 
     // MARK: - Imágenes

@@ -204,7 +204,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         manager.copyToPasteboard(item)
         let target = previousApp
         hide(restoreFocus: false)
-        pasteOrRestore(target)
+        if item.isCredential == true { target?.activate() }   // no auto-pegar secretos: solo copiar + devolver foco
+        else { pasteOrRestore(target) }
     }
 
     private func pickSelected() {
@@ -264,6 +265,7 @@ final class PanelController: NSObject, NSWindowDelegate {
                                  styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = true
             p.level = .floating; p.isReleasedWhenClosed = false
+            p.hidesOnDeactivate = false   // no ocultarse al volver el foco a la app del usuario
             let fx = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 360, height: 320))
             fx.material = .hudWindow; fx.blendingMode = .behindWindow; fx.state = .active
             fx.wantsLayer = true; fx.layer?.cornerRadius = 16; fx.layer?.masksToBounds = true

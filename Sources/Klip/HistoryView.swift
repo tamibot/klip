@@ -180,6 +180,7 @@ struct HistoryView: View {
                     ForEach(filtered) { item in
                         ItemRow(item: item,
                                 isSelected: item.id == selection.selectedID,
+                                resetToken: selection.openToken,
                                 manager: manager,
                                 onPick: onPick, onSaveImage: onSaveImage,
                                 onCopyMarkdown: onCopyMarkdown, onOCR: { runOCR(item) })
@@ -253,6 +254,7 @@ struct HistoryView: View {
 struct ItemRow: View {
     let item: ClipboardItem
     let isSelected: Bool
+    let resetToken: Int
     @ObservedObject var manager: ClipboardManager
     var onPick: (ClipboardItem) -> Void
     var onSaveImage: (ClipboardItem) -> Void
@@ -282,6 +284,7 @@ struct ItemRow: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture { onPick(item) }
+        .onChange(of: resetToken) { _, _ in revealed = false }   // re-enmascarar al reabrir el panel
     }
 
     private var imageCard: some View {

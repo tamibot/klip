@@ -11,7 +11,7 @@ enum CredentialDetector {
         "ya29\\.[0-9A-Za-z_-]+",                               // Google OAuth
         "eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{6,}", // JWT
         "(?i)bearer\\s+[A-Za-z0-9._-]{20,}",                   // Bearer token
-        "(?i)(api[_-]?key|secret|access[_-]?token|password)\\s*[:=]\\s*\\S{8,}"
+        "(?i)(api[_-]?key|secret|access[_-]?token|password)\\s*[:=]\\s*[A-Za-z0-9._\\-+/]{12,}"
     ]
 
     static func looksLikeCredential(_ text: String) -> Bool {

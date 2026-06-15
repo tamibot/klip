@@ -101,6 +101,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     func cancel() {
         startRequested = false
         stopMeterTimer()
+        recorder?.delegate = nil   // evita que el delegate sobrescriba .idle con .error
         recorder?.stop()
         recorder = nil
         if let f = currentFileName { storage.deleteAudio(fileName: f) }
@@ -156,18 +157,21 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         Task { @MainActor in
             let model = Settings.shared.transcriptionModel
             let language = Settings.shared.transcriptionLanguage
+            var okCount = 0
             var lastError: String?
             for url in urls {
                 do {
                     let text = try await client.transcribe(audioURL: url, language: language, model: model)
-                    onTranscribed?(text)
+                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { onTranscribed?(trimmed); okCount += 1 }
                 } catch let e as OpenAIError {
                     lastError = e.errorDescription
                 } catch {
                     lastError = error.localizedDescription
                 }
             }
-            state = lastError.map { RecorderState.error($0) } ?? .idle
+            // Si al menos una salió bien, cerrar normal; solo error si fallaron todas.
+            if okCount == 0, let lastError { state = .error(lastError) } else { state = .idle }
         }
     }
 
@@ -183,14 +187,14 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         Task { @MainActor in
             recorder = nil
             guard ok, let name = currentFileName else { state = .error("La grabación falló"); return }
+            currentFileName = nil
+            defer { storage.deleteAudio(fileName: name) }        // borrar el .m4a en TODOS los caminos
             let url = storage.audioURL(for: name)
             state = .transcribing
             let model = Settings.shared.transcriptionModel       // leídos en MainActor (evita data race)
             let language = Settings.shared.transcriptionLanguage
             do {
                 let text = try await client.transcribe(audioURL: url, language: language, model: model)
-                storage.deleteAudio(fileName: name)
-                currentFileName = nil
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmed.isEmpty {
                     state = .error("No se detectó voz. Intenta de nuevo.")

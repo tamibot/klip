@@ -35,7 +35,7 @@ Historial de texto e imágenes · búsqueda instantánea · **notas de voz → t
   ```bash
   xcode-select --install
   ```
-- *(Opcional)* Una **API key de OpenAI** para las notas de voz y el Markdown por IA. Se guarda cifrada en el **Llavero**, nunca en el código.
+- *(Opcional)* Una **API key de OpenAI** para las notas de voz y el Markdown por IA. Se guarda en un **archivo local** de la app, nunca en el código ni en el repositorio.
 
 ## ⚡ Instalación rápida
 
@@ -87,7 +87,8 @@ Abre **Preferencias** (`⌘,` desde el menú de Klip):
 ## 🔐 Privacidad
 
 - **Local primero**: tu historial vive en `~/Library/Application Support/Klip/` (`items.json` + `images/`). Nada sale de tu Mac salvo el audio que **tú** envías a OpenAI para transcribir.
-- **Sin secretos en el repo**: la API key se guarda cifrada en el **Llavero de macOS**, jamás en el código ni en los ajustes.
+- **Sin secretos en el repo**: la API key se guarda en un **archivo local** (`~/Library/Application Support/Klip/openai.key`, permisos `0600`), jamás en el código ni en el repositorio.
+- El **historial** (`items.json`) también se guarda solo en tu Mac con permisos `0600`. El enmascarado de credenciales es visual; el contenido vive localmente como el resto del historial.
 - **Sin telemetría**.
 - Klip **ignora** el contenido marcado como oculto por los gestores de contraseñas, y puedes **excluir** apps concretas.
 - Los **tokens/API keys** que copies se detectan y se guardan **enmascarados** (filtro 🔑).
