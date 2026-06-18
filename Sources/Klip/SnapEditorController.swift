@@ -18,14 +18,16 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     func present() {
         let imgSize = canvas.bounds.size
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
-        let maxW = screen.width * 0.85, maxH = screen.height * 0.85 - 52
+        let minBarWidth: CGFloat = 780   // ancho mínimo para que la toolbar no se encime
+        let maxW = screen.width * 0.9, maxH = screen.height * 0.85 - 52
         let scale = min(1, min(maxW / imgSize.width, maxH / imgSize.height))
-        let contentW = max(420, imgSize.width * scale)
+        let contentW = max(minBarWidth, imgSize.width * scale)
         let contentH = imgSize.height * scale + 52   // 52 = barra de herramientas
 
         let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: contentW, height: contentH),
                            styleMask: [.titled, .closable], backing: .buffered, defer: false)
         win.title = "Anotar captura — Klip"
+        win.minSize = NSSize(width: minBarWidth, height: 240)
         win.isReleasedWhenClosed = false
         win.delegate = self
         win.center()
@@ -61,13 +63,17 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         bar.material = .titlebar
         bar.blendingMode = .withinWindow
         bar.state = .active
+        let size: CGFloat = 30
 
-        var x: CGFloat = 12
-        let y: CGFloat = 10
-        let size: CGFloat = 32
+        // Grupo izquierdo: herramientas + color + grosor + deshacer.
+        let leading = NSStackView()
+        leading.orientation = .horizontal
+        leading.spacing = 4
+        leading.alignment = .centerY
+        leading.translatesAutoresizingMaskIntoConstraints = false
 
         for tool in SnapTool.allCases {
-            let b = NSButton(frame: NSRect(x: x, y: y, width: size, height: size))
+            let b = NSButton()
             b.bezelStyle = .texturedRounded
             b.setButtonType(.toggle)
             b.image = NSImage(systemSymbolName: tool.symbol, accessibilityDescription: tool.tooltip)
@@ -76,47 +82,61 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
             b.target = self
             b.action = #selector(toolTapped(_:))
             b.tag = SnapTool.allCases.firstIndex(of: tool) ?? 0
-            bar.addSubview(b)
+            b.translatesAutoresizingMaskIntoConstraints = false
+            b.widthAnchor.constraint(equalToConstant: size).isActive = true
+            b.heightAnchor.constraint(equalToConstant: size).isActive = true
             toolButtons[tool] = b
-            x += size + 4
+            leading.addArrangedSubview(b)
         }
 
-        x += 10
-        // Color.
-        let well = NSColorWell(frame: NSRect(x: x, y: y, width: 40, height: size))
+        let well = NSColorWell()
         well.color = .systemRed
         well.target = self
         well.action = #selector(colorChanged(_:))
-        bar.addSubview(well); x += 50
+        well.translatesAutoresizingMaskIntoConstraints = false
+        well.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        well.heightAnchor.constraint(equalToConstant: size).isActive = true
+        leading.addArrangedSubview(well)
 
-        // Grosor.
-        let widths = NSSegmentedControl(labels: ["S", "M", "L"], trackingMode: .selectOne, target: self, action: #selector(widthChanged(_:)))
-        widths.frame = NSRect(x: x, y: y, width: 110, height: size)
+        let widths = NSSegmentedControl(labels: ["S", "M", "L"], trackingMode: .selectOne,
+                                        target: self, action: #selector(widthChanged(_:)))
         widths.selectedSegment = 1
-        bar.addSubview(widths); x += 120
+        leading.addArrangedSubview(widths)
 
-        // Deshacer.
         let undo = makeActionButton(symbol: "arrow.uturn.backward", tip: "Deshacer (⌘Z)", action: #selector(undoTapped))
-        undo.frame = NSRect(x: x, y: y, width: size, height: size)
         undo.keyEquivalent = "z"; undo.keyEquivalentModifierMask = [.command]
-        bar.addSubview(undo); x += size + 4
+        undo.translatesAutoresizingMaskIntoConstraints = false
+        undo.widthAnchor.constraint(equalToConstant: size).isActive = true
+        leading.addArrangedSubview(undo)
 
-        // Acciones a la derecha.
+        // Grupo derecho: copiar + guardar + cerrar.
+        let trailing = NSStackView()
+        trailing.orientation = .horizontal
+        trailing.spacing = 6
+        trailing.alignment = .centerY
+        trailing.translatesAutoresizingMaskIntoConstraints = false
+
         let copy = makeTextButton(title: "Copiar", tip: "Copiar (⌘C)", action: #selector(copyTapped))
-        copy.frame = NSRect(x: width - 230, y: y, width: 80, height: size); copy.autoresizingMask = [.minXMargin]
         copy.keyEquivalent = "c"; copy.keyEquivalentModifierMask = [.command]
-        bar.addSubview(copy)
-
         let save = makeTextButton(title: "Guardar", tip: "Guardar (⌘S)", action: #selector(saveTapped))
-        save.frame = NSRect(x: width - 145, y: y, width: 80, height: size); save.autoresizingMask = [.minXMargin]
         save.keyEquivalent = "s"; save.keyEquivalentModifierMask = [.command]
-        bar.addSubview(save)
-
         let close = makeActionButton(symbol: "xmark", tip: "Cerrar (Esc)", action: #selector(closeTapped))
-        close.frame = NSRect(x: width - 52, y: y, width: size, height: size); close.autoresizingMask = [.minXMargin]
         close.keyEquivalent = "\u{1b}"   // Esc
-        bar.addSubview(close)
+        close.translatesAutoresizingMaskIntoConstraints = false
+        close.widthAnchor.constraint(equalToConstant: size).isActive = true
+        trailing.addArrangedSubview(copy)
+        trailing.addArrangedSubview(save)
+        trailing.addArrangedSubview(close)
 
+        bar.addSubview(leading)
+        bar.addSubview(trailing)
+        NSLayoutConstraint.activate([
+            leading.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 12),
+            leading.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+            trailing.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -12),
+            trailing.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+            leading.trailingAnchor.constraint(lessThanOrEqualTo: trailing.leadingAnchor, constant: -16)
+        ])
         return bar
     }
 
