@@ -14,6 +14,7 @@ enum RecorderState: Equatable {
 
 /// Records a voice note to .m4a and transcribes it with OpenAI (not live: the whole note at once).
 /// Transcription runs in the background: once stopped, the recorder is free to record another.
+@MainActor
 final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @Published private(set) var state: RecorderState = .idle
     @Published private(set) var duration: TimeInterval = 0
@@ -176,12 +177,14 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
     private func startMeterTimer() {
         let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self, let rec = self.recorder else { return }
-            rec.updateMeters()
-            self.duration = rec.currentTime
-            let lvl = Self.normalized(power: rec.averagePower(forChannel: 0))
-            self.level = lvl
-            self.trackSilence(level: lvl)
+            MainActor.assumeIsolated {   // runs on RunLoop.main; assert it for the compiler
+                guard let self, let rec = self.recorder else { return }
+                rec.updateMeters()
+                self.duration = rec.currentTime
+                let lvl = Self.normalized(power: rec.averagePower(forChannel: 0))
+                self.level = lvl
+                self.trackSilence(level: lvl)
+            }
         }
         RunLoop.main.add(t, forMode: .common)
         meterTimer = t
@@ -283,7 +286,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         return min(1, (db - minDb) / -minDb)
     }
 
-    func audioRecorderDidFinishRecording(_ r: AVAudioRecorder, successfully ok: Bool) {
+    nonisolated func audioRecorderDidFinishRecording(_ r: AVAudioRecorder, successfully ok: Bool) {
         Task { @MainActor in
             removeDeviceListener()   // ensures the listener is also removed if the delegate fires on its own
             finishing = false
@@ -295,5 +298,16 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         }
     }
 
-    deinit { removeDeviceListener() }   // safety net (doesn't touch @MainActor: only CoreAudio + the var)
+    deinit {
+        // Safety net. deinit is nonisolated and can't call the @MainActor method, so remove the CoreAudio
+        // listener inline (accessing the instance's own stored property in deinit is allowed).
+        if let block = deviceListener {
+            var addr = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject), &addr, DispatchQueue.main, block)
+        }
+    }
 }

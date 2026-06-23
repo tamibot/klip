@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 import Combine
 import UniformTypeIdentifiers
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let recentsMenu = NSMenu()

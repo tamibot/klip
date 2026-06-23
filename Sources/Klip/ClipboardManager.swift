@@ -8,6 +8,9 @@ struct CaptureSource {
 }
 
 /// Monitors the pasteboard, maintains the history, and exposes actions.
+/// @MainActor: all state (items, voicePasteGuards…) is driven by the main-RunLoop poll and SwiftUI, so the
+/// main-thread requirement is compiler-enforced rather than by convention.
+@MainActor
 final class ClipboardManager: ObservableObject {
     @Published private(set) var items: [ClipboardItem] = []
 
@@ -52,7 +55,9 @@ final class ClipboardManager: ObservableObject {
     }
 
     func start() {
-        let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in self?.poll() }
+        let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.poll() }   // runs on RunLoop.main; assert it for the compiler
+        }
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }

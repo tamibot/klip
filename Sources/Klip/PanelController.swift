@@ -10,6 +10,7 @@ final class KeyablePanel: NSPanel {
 
 /// Controls the history popup window: HUD vibrancy, contextual positioning,
 /// animated appearance, keyboard navigation, dismiss on outside click, auto-paste, voice and Markdown.
+@MainActor
 final class PanelController: NSObject, NSWindowDelegate {
     private var panel: KeyablePanel!
     private var effectView: NSVisualEffectView!
