@@ -19,6 +19,11 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let recorder = Recorder()
     /// True while audio is being recorded, finishing, or transcribing — used to block a destructive import.
     var isBusyWithAudio: Bool { recorder.isRecording || recorder.finishing || recorder.transcribingCount > 0 }
+    /// True while one of our own auxiliary windows is on screen, so the panel's outside-click / resign-key
+    /// auto-hide doesn't fire when the user is interacting with one of them (Upload/Guide/Welcome/Recording).
+    private var auxWindowVisible: Bool {
+        [uploadWindow, guideWindow, welcomeWindow, recordingPanel].contains { $0?.isVisible == true }
+    }
     private weak var statusItem: NSStatusItem?
     private weak var previousApp: NSRunningApplication?
 
@@ -163,7 +168,8 @@ final class PanelController: NSObject, NSWindowDelegate {
             matching: [.leftMouseDown, .rightMouseDown]) { e in e }
         globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            guard let self, !self.isModalActive, !self.isRenaming, !self.recorder.isRecording else { return }
+            guard let self, !self.isModalActive, !self.isRenaming, !self.recorder.isRecording,
+                  !self.auxWindowVisible else { return }   // don't close while a child window is up
             self.hide(restoreFocus: false)
         }
     }
@@ -180,7 +186,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
         if event.keyCode == 53 {   // Esc (the monitor always runs on the main thread)
-            if recorder.state == .recording {
+            if recorder.finishing {
+                return nil   // a stop is finalizing: let it complete — don't cancel (would delete the note)
+            } else if recorder.state == .recording {
                 MainActor.assumeIsolated { recorder.cancel() }   // aborts the recording, doesn't close
             } else if !recorder.isRecording {
                 hide(restoreFocus: true)                         // don't close while transcribing
@@ -607,10 +615,10 @@ final class PanelController: NSObject, NSWindowDelegate {
     // MARK: - NSWindowDelegate (fallback for closing when focus is lost)
 
     func windowDidResignKey(_ notification: Notification) {
-        guard !isModalActive, !isRenaming, !recorder.isRecording else { return }
+        guard !isModalActive, !isRenaming, !recorder.isRecording, !auxWindowVisible else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.panel.isVisible, !self.isModalActive, !self.isRenaming,
-                  !self.recorder.isRecording, !self.panel.isKeyWindow else { return }
+                  !self.recorder.isRecording, !self.auxWindowVisible, !self.panel.isKeyWindow else { return }
             self.hide(restoreFocus: false)
         }
     }

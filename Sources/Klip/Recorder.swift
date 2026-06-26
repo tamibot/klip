@@ -268,7 +268,11 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         let id = onVoiceNoteStarted?(audioFileName, duration)
         if let uploadName, let id {   // show this file's progress + result in the Upload window
             uploadResults.insert(UploadTranscription(id: id, name: uploadName), at: 0)
-            if uploadResults.count > 25 { uploadResults.removeLast() }
+            // Cap the list, but only evict a COMPLETED/failed entry — never one still transcribing (that
+            // would orphan its in-flight fillUploadResult, so its result would never appear).
+            if uploadResults.count > 25, let i = uploadResults.lastIndex(where: { $0.text != nil || $0.failed }) {
+                uploadResults.remove(at: i)
+            }
         }
         transcribeInBackground(id: id, url: transcribeURL, languageOverride: language)
     }
