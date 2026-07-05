@@ -283,6 +283,13 @@ final class ClipboardManager: ObservableObject {
         items[idx].audioDuration = duration
     }
 
+    /// Attaches the saved audio file to a voice note after the fact (an audio-only upload that arrived in a
+    /// movie-typed container and was stored once we confirmed it wasn't a real video). Keeps it playable/retryable.
+    func setVoiceNoteAudioFile(id: UUID, fileName: String) {
+        guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
+        items[idx].audioFileName = fileName
+    }
+
     /// Marks an item as "Transcribiendo…" again (retry of a failed note).
     func markVoiceNoteTranscribing(id: UUID) {
         guard let idx = items.firstIndex(where: { $0.id == id }) else { return }

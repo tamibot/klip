@@ -18,6 +18,7 @@ struct UploadTranscription: Identifiable, Equatable {
     let name: String        // original file name
     var text: String?       // filled in when transcription completes
     var failed: Bool = false
+    var errorKey: String? = nil   // L10n key for a SPECIFIC failure (no audio track / DRM / too large); nil → generic
 }
 
 /// Records a voice note to .m4a and transcribes it with OpenAI (not live: the whole note at once).
@@ -38,6 +39,9 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     /// Transcriptions of files dropped/picked in the Upload window, newest first — so the result shows up
     /// right there when it finishes (not only in history). Capped; cleared when a fresh upload session opens.
     @Published private(set) var uploadResults: [UploadTranscription] = []
+    /// Number of uploads currently DEMUXING a video's audio track (before transcription starts). Drives the
+    /// "Extracting audio…" status so a long video doesn't look stuck on a bare "Transcribing…" spinner.
+    @Published private(set) var extractingCount = 0
 
     /// The audio is already saved: creates the voice-note item (placeholder) and returns its id.
     /// `audioFileName` may be nil if the file couldn't be saved (the transcription is still saved).
@@ -52,6 +56,11 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     var onVoiceNoteRetrying: ((UUID) -> Void)?
     /// First on-device use: the model is downloading, so show a distinct status instead of "Transcribing…".
     var onVoiceNoteDownloadingModel: ((UUID) -> Void)?
+    /// A SINGLE-file upload finished successfully: copy its transcription to the clipboard automatically.
+    var onAutoCopyTranscript: ((String) -> Void)?
+    /// A video-classified upload turned out to be plain audio (audio-only .mp4 etc.): its audio was stored, so
+    /// attach it to the note to keep playback/retry working (real videos are intentionally not stored).
+    var onVoiceNoteAudioStored: ((UUID, String) -> Void)?
 
     // Silence detection (timer at 0.1 s): warn at 2 min, stop at 3 min.
     private var silentTicks = 0
@@ -241,21 +250,29 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
             if state != .recording && !finishing { state = .missingAPIKey }
             return
         }
+        let autoCopy = urls.count == 1   // single upload → land the text on the clipboard automatically
         for url in urls {
-            let stored = storage.importAudio(from: url)                       // copies to audio/ (nil if it fails)
+            // Video: don't copy the (often large) file into the audio store — transcribe straight from the
+            // original (the app isn't sandboxed, so the URL stays readable) and let the transcription choke
+            // point demux its audio to a temp file. The resulting note is text-only (no playback/retry), which
+            // is honest since we deliberately don't keep the video. Audio keeps the copy-to-store behavior so
+            // it stays playable/retryable in history.
+            let isVideo = MediaAudioExtractor.isVideo(url)
+            let stored = isVideo ? nil : storage.importAudio(from: url)        // copies to audio/ (nil if it fails)
             let transcribeURL = stored.map { storage.audioURL(for: $0) } ?? url
             enqueueTranscription(audioFileName: stored, transcribeURL: transcribeURL,
-                                 uploadName: url.lastPathComponent, language: language)
+                                 uploadName: url.lastPathComponent, language: language, autoCopy: autoCopy)
         }
     }
 
     /// Clears the Upload window's result list (called when a fresh upload session opens, see PanelController).
     @MainActor func clearUploadResults() { uploadResults.removeAll() }
 
-    private func fillUploadResult(_ id: UUID, text: String?, failed: Bool) {
+    private func fillUploadResult(_ id: UUID, text: String?, failed: Bool, errorKey: String? = nil) {
         guard let i = uploadResults.firstIndex(where: { $0.id == id }) else { return }   // not an upload: no-op
         uploadResults[i].text = text
         uploadResults[i].failed = failed
+        uploadResults[i].errorKey = errorKey
     }
 
     /// Creates the voice-note item with its audio already saved and kicks off the transcription.
@@ -271,7 +288,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     /// Kicks off a background transcription: creates the placeholder item and fills it in when done.
     /// Doesn't touch `state` (only the counter), so it won't interfere with a new recording in progress.
     @MainActor
-    private func enqueueTranscription(audioFileName: String?, transcribeURL: URL, uploadName: String? = nil, language: String? = nil) {
+    private func enqueueTranscription(audioFileName: String?, transcribeURL: URL, uploadName: String? = nil, language: String? = nil, autoCopy: Bool = false) {
         let id = onVoiceNoteStarted?(audioFileName, nil)
         // Reading the duration constructs an AVAudioPlayer (parses the file) — do it off the main actor so a
         // bulk upload doesn't freeze the UI, then fill it in. Persisted by the imminent transcription save.
@@ -292,7 +309,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
                 else if uploadResults.count > 50 { uploadResults.removeLast() }
             }
         }
-        transcribeInBackground(id: id, url: transcribeURL, languageOverride: language)
+        transcribeInBackground(id: id, url: transcribeURL, languageOverride: language, autoCopy: autoCopy)
     }
 
     /// Retries transcribing the audio of an item that already exists (a failed note with its audio).
@@ -304,7 +321,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
     /// Core of the background transcription (shared by record, upload and retry). Doesn't touch `state`.
     @MainActor
-    private func transcribeInBackground(id: UUID?, url: URL, languageOverride: String? = nil) {
+    private func transcribeInBackground(id: UUID?, url: URL, languageOverride: String? = nil, autoCopy: Bool = false) {
         transcribingCount += 1
         // Resolve the active provider's model here, on the MainActor (avoids reading Settings.shared
         // from the transcription thread). Gemini and OpenAI each have their own model setting.
@@ -327,13 +344,52 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
             // is then actually transcribing, not preparing).
             defer { transcribingCount -= 1; if transcribingCount == 0 || LocalTranscriber.pipelineReady { preparingModel = false } }
             do {
-                let text = try await AIProvider.transcribe(provider: provider, audioURL: url, language: language, model: model, vocabulary: vocabulary)
+                // VIDEO NORMALIZATION: WhisperKit/AVAudioFile can't decode video containers, so demux the audio
+                // track to a temp 16 kHz mono AAC .m4a first. Only runs for video inputs; audio (record / retry /
+                // audio-upload) skips this entirely. Runs off the MainActor → the await suspends without blocking
+                // the UI. Upstream of the provider switch, so local + both clouds get decodable audio (and it
+                // fixes the latent bug where a video-track .mp4 silently failed on the local path).
+                let mediaURL: URL
+                if MediaAudioExtractor.isVideo(url) {
+                    extractingCount += 1
+                    do { mediaURL = try await MediaAudioExtractor.audioForTranscription(from: url) }
+                    catch { extractingCount -= 1; throw error }
+                    extractingCount -= 1
+                    // Passthrough (mediaURL == url) means it was audio in a movie-typed container (e.g. an
+                    // audio-only .mp4), NOT a real video — so store it now to keep the note playable/retryable
+                    // (a real video is deliberately not stored, see transcribeFiles). Never stores a demuxed temp.
+                    if mediaURL == url, let id, let stored = storage.importAudio(from: url) {
+                        onVoiceNoteAudioStored?(id, stored)
+                    }
+                } else {
+                    mediaURL = url
+                }
+                let cleanupTemp = (mediaURL != url)
+                defer { if cleanupTemp { try? FileManager.default.removeItem(at: mediaURL) } }
+
+                // Pre-flight cloud size guard: 16 kHz mono AAC is ~14 MB/hr, so a very long clip can still
+                // exceed the cloud caps. OpenAI posts raw bytes (~25 MB limit → 24 MB floor); Gemini posts
+                // base64 inline_data (~4/3 inflation against a ~20 MB request cap → ~15 MB of raw audio).
+                // Convert the opaque HTTP failure into a clear "too large — switch to on-device" row. Local
+                // (WhisperKit) has no size limit → skip.
+                let cloudLimit = provider == "gemini" ? 15_000_000 : 24_000_000
+                if provider != "local",
+                   let sz = try? FileManager.default.attributesOfItem(atPath: mediaURL.path)[.size] as? Int,
+                   sz > cloudLimit {
+                    throw MediaAudioExtractor.ExtractionError.tooLargeForCloud
+                }
+
+                let text = try await AIProvider.transcribe(provider: provider, audioURL: mediaURL, language: language, model: model, vocabulary: vocabulary)
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmed.isEmpty { if let id { onVoiceNoteFailed?(id); fillUploadResult(id, text: nil, failed: true) } }
-                else { if let id { onVoiceNoteTranscribed?(id, trimmed); fillUploadResult(id, text: trimmed, failed: false) } }
+                else {
+                    if let id { onVoiceNoteTranscribed?(id, trimmed); fillUploadResult(id, text: trimmed, failed: false) }
+                    if autoCopy { onAutoCopyTranscript?(trimmed) }   // single-file upload → text lands on the clipboard
+                }
             } catch {
                 NSLog("Klip: transcription failed — %@", String(describing: error))   // surface, don't fail silently
-                if let id { onVoiceNoteFailed?(id); fillUploadResult(id, text: nil, failed: true) }   // the audio stays in history to retry/recover
+                let key = (error as? MediaAudioExtractor.ExtractionError)?.uploadErrorKey
+                if let id { onVoiceNoteFailed?(id); fillUploadResult(id, text: nil, failed: true, errorKey: key) }   // the audio stays in history to retry/recover
             }
         }
     }

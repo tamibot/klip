@@ -45,9 +45,11 @@ struct UploadView: View {
                 if recorder.transcribingCount > 0 {
                     HStack(spacing: 7) {
                         ProgressView().controlSize(.small)
-                        Text(recorder.preparingModel
-                             ? L10n.t("upload.preparing")
-                             : String(format: L10n.t(recorder.transcribingCount == 1 ? "upload.transcribing.one" : "upload.transcribing.many"), recorder.transcribingCount))
+                        Text(recorder.extractingCount > 0
+                             ? L10n.t("upload.extracting")
+                             : recorder.preparingModel
+                               ? L10n.t("upload.preparing")
+                               : String(format: L10n.t(recorder.transcribingCount == 1 ? "upload.transcribing.one" : "upload.transcribing.many"), recorder.transcribingCount))
                     }
                     .font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 10).padding(.vertical, 6)
@@ -99,7 +101,7 @@ struct UploadView: View {
                 Text(t).font(.system(size: 12)).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).lineLimit(8)
             } else if r.failed {
-                Text(L10n.t("upload.failed")).font(.system(size: 11)).foregroundStyle(.orange)
+                Text(L10n.t(r.errorKey ?? "upload.failed")).font(.system(size: 11)).foregroundStyle(.orange)
             }
         }
         .padding(8)
@@ -161,8 +163,10 @@ struct UploadView: View {
             }
         }
         group.notify(queue: .main) {
-            let audio = urls.filter { exts.contains($0.pathExtension.lowercased()) }
-            if !audio.isEmpty { onFiles(audio, effectiveLanguage) }
+            // Accept audio (exts) and video (MediaAudioExtractor is the single source of truth for video, so the
+            // drop filter and the file picker admit the same set); a video's audio is extracted before transcribing.
+            let media = urls.filter { exts.contains($0.pathExtension.lowercased()) || MediaAudioExtractor.isVideo($0) }
+            if !media.isEmpty { onFiles(media, effectiveLanguage) }
         }
     }
 }

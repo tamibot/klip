@@ -62,6 +62,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         recorder.onVoiceNoteFailed = { [weak self] id in self?.manager.failVoiceNote(id: id) }
         recorder.onVoiceNoteRetrying = { [weak self] id in self?.manager.markVoiceNoteTranscribing(id: id) }
         recorder.onVoiceNoteDownloadingModel = { [weak self] id in self?.manager.markVoiceNoteDownloadingModel(id: id) }
+        recorder.onAutoCopyTranscript = { [weak self] in self?.manager.setClipboardText($0) }   // single-file upload → clipboard
+        recorder.onVoiceNoteAudioStored = { [weak self] id, fn in self?.manager.setVoiceNoteAudioFile(id: id, fileName: fn) }
 
         let root = HistoryView(
             manager: manager,
@@ -538,8 +540,12 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private func chooseAudioFiles(language: String) {
         let p = NSOpenPanel()
-        // WhatsApp's .opus doesn't always conform to public.audio, so add it (and .oga) explicitly.
-        let types = [UTType.audio] + ["opus", "oga"].compactMap { UTType(filenameExtension: $0) }
+        // Audio + video: the audio track of a video is extracted before transcription (see MediaAudioExtractor).
+        // WhatsApp's .opus doesn't always conform to public.audio, so add it (and .oga) explicitly; the video
+        // extensions cover containers macOS doesn't register a UTType for (mkv/webm → nil, harmless).
+        let types = [UTType.audio, .movie, .audiovisualContent]
+            + ["opus", "oga"].compactMap { UTType(filenameExtension: $0) }
+            + MediaAudioExtractor.videoExtensions.compactMap { UTType(filenameExtension: $0) }
         p.allowedContentTypes = types
         p.allowsMultipleSelection = true
         p.canChooseDirectories = false
