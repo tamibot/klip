@@ -380,7 +380,26 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         a.addButton(withTitle: L10n.t("common.ok")); a.runModal()
     }
 
-    @objc private func closeTapped() { finish(with: nil) }
+    @objc private func closeTapped() {
+        guard confirmDiscardIfNeeded() else { return }
+        finish(with: nil)
+    }
+
+    /// Annotations take real work: closing with any on the canvas asks first (an empty canvas closes
+    /// instantly). Esc reaches here via the close button's key equivalent; the title-bar close goes
+    /// through windowShouldClose.
+    private func confirmDiscardIfNeeded() -> Bool {
+        guard !canvas.annotations.isEmpty else { return true }
+        let a = NSAlert()
+        a.messageText = L10n.t("editor.discard.title")
+        a.informativeText = L10n.t("editor.discard.info")
+        let discard = a.addButton(withTitle: L10n.t("editor.discard.confirm"))
+        discard.hasDestructiveAction = true
+        a.addButton(withTitle: L10n.t("common.cancel"))
+        return a.runModal() == .alertFirstButtonReturn
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool { confirmDiscardIfNeeded() }
 
     /// When closing the editor, also close the shared NSColorPanel (if it was opened via "more colors"):
     /// otherwise it would keep floating over a menu-bar app with no windows, pointing to an

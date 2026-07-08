@@ -73,7 +73,15 @@ final class SnapController {
         Task { @MainActor [weak self] in
             let text = await Task.detached { OCR.recognizeText(in: cg) }.value   // OCR off the main thread
             guard let self else { return }
-            guard self.manager.addCapturedText(text) else { NSSound.beep(); return }   // nothing recognized
+            guard self.manager.addCapturedText(text) else {   // nothing recognized: say so — a bare beep
+                NSSound.beep()                                    // can't be told apart from "the feature broke"
+                let a = NSAlert()
+                a.messageText = L10n.t("snap.notext.title")
+                a.informativeText = L10n.t("snap.notext.info")
+                a.addButton(withTitle: L10n.t("common.ok"))
+                a.runModal()
+                return
+            }
             self.onCaptured?()
         }
     }
