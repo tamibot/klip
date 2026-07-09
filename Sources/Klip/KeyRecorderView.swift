@@ -74,26 +74,3 @@ final class RecorderNSView: NSView {
         (label as NSString).draw(at: point, withAttributes: attrs)
     }
 }
-
-/// Shortcut field with a recorder + a menu of suggested combinations.
-struct HotKeyField: View {
-    @Binding var combo: KeyCombo
-    var onChange: (KeyCombo) -> Void
-
-    var body: some View {
-        HStack(spacing: 6) {
-            KeyRecorderView(combo: $combo, onChange: onChange)
-                .frame(width: 150, height: 28)
-            Menu {
-                ForEach(Array(KeyCombo.suggestions.enumerated()), id: \.offset) { _, c in
-                    Button(c.displayString) { combo = c; onChange(c) }
-                }
-            } label: {
-                Image(systemName: "chevron.down.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .frame(width: 28)
-            .help(L10n.t("hotkey.suggestions"))
-        }
-    }
-}
