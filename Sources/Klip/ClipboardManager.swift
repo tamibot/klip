@@ -342,6 +342,7 @@ final class ClipboardManager: ObservableObject {
             // The popup closed on stop and the user is waiting in another app: a soft cue says
             // "the transcript is on your clipboard now" without any window.
             NSSound(named: "Pop")?.play()
+            ToastHUD.show(L10n.t("toast.transcriptCopied"), detail: clean)
         }
     }
 
@@ -392,6 +393,7 @@ final class ClipboardManager: ObservableObject {
     // MARK: - Actions
 
     func copyToPasteboard(_ item: ClipboardItem) {
+        defer { NotificationCenter.default.post(name: .klipDidCopy, object: nil) }
         let pb = NSPasteboard.general
         switch item.kind {
         case .text:
@@ -406,6 +408,7 @@ final class ClipboardManager: ObservableObject {
     }
 
     func setClipboardText(_ text: String) {
+        defer { NotificationCenter.default.post(name: .klipDidCopy, object: nil) }
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
@@ -415,6 +418,7 @@ final class ClipboardManager: ObservableObject {
     /// Copies for an email body as RICH text (RTF): renders **bold**/*italics*/links and PRESERVES
     /// line breaks, so Mail/Gmail display it formatted instead of flat plain text. Headings/bullets are cleaned to plain/•.
     func copyForEmail(_ text: String) {
+        defer { NotificationCenter.default.post(name: .klipDidCopy, object: nil) }
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
         var md = t.replacingOccurrences(of: "\r\n", with: "\n")

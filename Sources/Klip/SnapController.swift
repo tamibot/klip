@@ -82,6 +82,7 @@ final class SnapController {
                 a.runModal()
                 return
             }
+            ToastHUD.show(L10n.t("toast.textCopied"), detail: text)
             self.onCaptured?()
         }
     }

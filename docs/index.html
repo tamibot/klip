@@ -3,144 +3,182 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Klip — the copy manager for vibe coders</title>
-<meta name="description" content="Klip is a macOS menu-bar copy manager for people who build with AI: searchable clipboard history, screen capture + OCR, on-device voice-to-text, favorites & rename, copy for WhatsApp/email, and encrypted credentials. Free & open source.">
-<meta property="og:title" content="Klip — the copy manager for vibe coders">
-<meta property="og:description" content="Your clipboard history, screen captures, OCR and voice notes — one keystroke away while you build with AI. Free & open source for macOS.">
+<title>Klip — clipboard manager for vibe coders</title>
+<meta name="description" content="Klip is a tiny and fast Mac clipboard manager with screen capture, OCR, on-device voice-to-text and encrypted credentials. Free & open source.">
+<meta property="og:title" content="Klip — clipboard manager for vibe coders">
+<meta property="og:description" content="A tiny and fast Mac clipboard manager with capture, OCR, on-device voice-to-text and encrypted credentials. Free & open source.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tamibot.github.io/klip/">
 <meta property="og:image" content="https://tamibot.github.io/klip/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Klip — the copy manager for vibe coders">
-<meta name="twitter:description" content="Your clipboard history, captures, OCR and voice notes — one keystroke away. Free & open source for macOS.">
+<meta name="twitter:title" content="Klip — clipboard manager for vibe coders">
+<meta name="twitter:description" content="A tiny and fast Mac clipboard manager with capture, OCR, on-device voice-to-text and encrypted credentials. Free & open source.">
 <meta name="twitter:image" content="https://tamibot.github.io/klip/og.png">
 <style>
   :root{
-    --bg:#ffffff; --bg2:#f6f7f9; --line:#e6e9f0; --txt:#16181f; --muted:#5a6270;
-    --accent:#5b6bf0; --accent-deep:#4453d6; --maxw:980px;
+    --txt:#16181f; --muted:#5a6270; --line:#e6e9f0; --band:#f8f9f9;
+    --accent:#5b6bf0; --accent-deep:#4453d6; --maxw:920px;
     --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--font);line-height:1.6;-webkit-font-smoothing:antialiased}
+  body{margin:0;background:#fff;color:var(--txt);font-family:var(--font);line-height:1.6;-webkit-font-smoothing:antialiased}
   a{color:var(--accent-deep);text-decoration:none}
   a:hover{text-decoration:underline}
-  a:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+  a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
   .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
-  section{padding:46px 0;border-top:1px solid var(--line)}
-  h2{font-size:1.45rem;letter-spacing:-.01em;margin:0 0 4px}
-  .lead{color:var(--muted);margin:0 0 26px}
   kbd{font-family:var(--mono);font-size:.82em;background:#eef0f6;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 7px;color:#39414f;white-space:nowrap;font-weight:600}
-  code{font-family:var(--mono);font-size:.88em;background:var(--bg2);padding:1px 5px;border-radius:5px;color:var(--accent-deep);overflow-wrap:anywhere}
+  code{font-family:var(--mono);font-size:.88em;background:var(--band);padding:1px 5px;border-radius:5px;color:var(--accent-deep);overflow-wrap:anywhere}
+  section{padding:56px 0}
+  h2{font-size:1.6rem;letter-spacing:-.01em;margin:0 0 8px;text-align:center}
+  .lead{color:var(--muted);text-align:center;max-width:640px;margin:0 auto 34px}
+  /* header nav */
+  nav{display:flex;align-items:center;gap:22px;padding:18px 0;font-size:.92rem}
+  nav .logo{font-weight:800;font-size:1.05rem;color:var(--txt);display:flex;align-items:center;gap:7px}
+  nav a{color:var(--muted)}
+  nav .spacer{flex:1}
+  @media (max-width:640px){ nav .hidesm{display:none} }
   /* hero */
-  .hero{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;padding:60px 0 54px}
-  .pill{display:inline-block;font-size:.78rem;color:var(--accent-deep);border:1px solid var(--line);background:var(--bg2);padding:5px 12px;border-radius:999px;font-weight:600;margin-bottom:18px}
-  .brand{display:flex;align-items:center;gap:8px;font-size:1.1rem;font-weight:700;margin-bottom:6px}
-  h1{font-size:clamp(2.1rem,4.6vw,3.1rem);line-height:1.08;letter-spacing:-.025em;margin:.1em 0 .35em}
-  .hero p.sub{color:var(--muted);font-size:1.08rem;margin:0 0 26px;max-width:30ch}
-  .cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-  .btn{display:inline-block;padding:12px 22px;border-radius:12px;font-weight:600;border:1px solid var(--line)}
-  .btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent-deep));color:#fff;border:none;box-shadow:0 10px 22px -10px rgba(91,107,240,.7)}
-  .btn.ghost{background:#fff;color:var(--txt)}
-  .meta{margin-top:16px;color:var(--muted);font-size:.86rem}
-  .shotwrap{display:flex;justify-content:center}
-  .shot{width:100%;max-width:360px;height:auto;filter:drop-shadow(0 30px 60px rgba(16,24,40,.22))}
-  /* feature list */
-  .feat{display:grid;grid-template-columns:repeat(2,1fr);gap:18px 34px}
-  .feat .it{display:flex;gap:12px}
-  .feat .ic{font-size:1.3rem;line-height:1.4;flex:0 0 auto}
-  .feat b{display:block}
-  .feat p{margin:.15em 0 0;color:var(--muted);font-size:.95rem}
-  /* shortcuts */
-  .keys{border:1px solid var(--line);border-radius:14px;overflow:hidden;max-width:600px}
-  .keys .row{display:flex;justify-content:space-between;gap:14px;padding:12px 18px;border-top:1px solid var(--line);font-size:.96rem}
-  .keys .row:first-child{border-top:none}
-  .keys .row span:last-child{color:var(--muted);text-align:right}
-  /* install */
-  .install{background:#0e1117;border-radius:14px;max-width:640px;margin-top:4px}
-  pre{margin:0;padding:18px 22px;overflow:auto;font-family:var(--mono);font-size:.9rem;color:#cdd3e4;line-height:1.7}
+  .hero{text-align:center;padding:46px 0 10px}
+  .hero h1{font-size:clamp(2rem,5vw,2.9rem);letter-spacing:-.02em;line-height:1.15;margin:0}
+  .rotator{display:block;position:relative;height:1.3em;overflow:hidden}
+  .rotator span{position:absolute;left:0;right:0;top:0;color:var(--accent);opacity:0;animation:rot 12s infinite}
+  .rotator span:nth-child(2){animation-delay:3s}
+  .rotator span:nth-child(3){animation-delay:6s}
+  .rotator span:nth-child(4){animation-delay:9s}
+  @keyframes rot{0%{opacity:0;transform:translateY(14px)}4%{opacity:1;transform:none}23%{opacity:1;transform:none}28%{opacity:0;transform:translateY(-14px)}100%{opacity:0}}
+  .dl{display:inline-block;margin-top:30px;padding:15px 44px;border-radius:999px;background:linear-gradient(180deg,#fbfbfd,#eef0f6);border:1px solid var(--line);box-shadow:0 2px 6px rgba(16,24,40,.08);color:var(--accent-deep);font-weight:800;letter-spacing:.12em;font-size:1rem}
+  .dl:hover{text-decoration:none;box-shadow:0 4px 12px rgba(16,24,40,.14)}
+  .dl small{display:block;letter-spacing:0;font-weight:500;color:var(--muted);font-size:.78rem;margin-top:2px}
+  .heroshot{display:block;width:100%;max-width:420px;margin:40px auto -10px;filter:drop-shadow(0 24px 48px rgba(16,24,40,.25))}
+  .intro{max-width:620px;margin:34px auto 0;text-align:center;color:var(--muted)}
+  /* feature grid */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:34px 28px}
+  @media (max-width:760px){ .grid{grid-template-columns:1fr 1fr} }
+  @media (max-width:520px){ .grid{grid-template-columns:1fr} }
+  .f .ic{font-size:1.9rem;line-height:1}
+  .f h3{margin:.45em 0 .2em;font-size:1.02rem}
+  .f p{margin:0;color:var(--muted);font-size:.92rem}
+  /* tips band */
+  .band{background:var(--band);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .tips{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  @media (max-width:760px){ .tips{grid-template-columns:1fr} }
+  .tip{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .tip h4{margin:0 0 .25em;font-size:.98rem}
+  .tip p{margin:0;color:var(--muted);font-size:.9rem}
+  .tips .hidden{display:none}
+  .more{display:block;margin:22px auto 0;padding:9px 26px;border-radius:999px;border:1px solid var(--line);background:#fff;font-weight:600;font-size:.9rem;cursor:pointer;color:var(--txt)}
+  /* survey */
+  .chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .chips a{border:1px solid var(--line);border-radius:999px;padding:8px 16px;font-size:.9rem;color:var(--txt);background:#fff}
+  .chips a:hover{border-color:var(--accent);color:var(--accent-deep);text-decoration:none}
+  /* faq */
+  .faq{max-width:680px;margin:0 auto}
+  .faq h4{margin:1.4em 0 .2em;font-size:1rem}
+  .faq p{margin:0;color:var(--muted);font-size:.94rem}
+  /* releases */
+  .rel{max-width:680px;margin:0 auto;border-top:1px solid var(--line)}
+  .rel .row{display:grid;grid-template-columns:110px 64px 1fr;gap:14px;padding:12px 4px;border-bottom:1px solid var(--line);font-size:.92rem}
+  .rel .row .d{color:var(--muted);font-variant-numeric:tabular-nums}
+  .rel .row .v{font-family:var(--mono);color:var(--accent-deep);font-weight:600}
+  footer{padding:36px 0 60px;text-align:center;color:var(--muted);font-size:.88rem}
+  .install-box{background:#0e1117;border-radius:14px;max-width:600px;margin:0 auto}
+  pre{margin:0;padding:16px 20px;overflow:auto;font-family:var(--mono);font-size:.88rem;color:#cdd3e4;line-height:1.7}
   pre .c{color:#7782a0}
   pre .g{color:#7fd6c4}
-  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:22px}
-  .steps div{font-size:.93rem;color:var(--muted)}
-  .steps b{color:var(--txt)}
-  .n{display:inline-flex;width:22px;height:22px;border-radius:7px;background:var(--accent);color:#fff;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;margin-right:7px}
-  /* faq */
-  .faq{display:grid;grid-template-columns:repeat(2,1fr);gap:16px 34px}
-  .faq b{display:block;margin-bottom:.15em}
-  .faq p{margin:0;color:var(--muted);font-size:.95rem}
-  .macnote{margin-top:24px;color:var(--muted);font-size:.9rem}
-  footer{border-top:1px solid var(--line);padding:30px 0 56px;color:var(--muted);font-size:.9rem}
-  @media (max-width:760px){
-    .hero{grid-template-columns:1fr;gap:30px;padding:40px 0}
-    .hero p.sub{max-width:none}
-    .feat,.faq{grid-template-columns:1fr}
-    .cta .btn{flex:1 1 auto;text-align:center}
-    .shotwrap{order:-1}
-  }
+  .note{text-align:center;color:var(--muted);font-size:.88rem;margin-top:14px}
 </style>
 </head>
 <body>
 
-<header class="wrap">
-  <div class="hero">
-    <div>
-      <span class="pill">macOS 14+ · Free &amp; open source · No telemetry</span>
-      <div class="brand">📋 Klip</div>
-      <h1>The copy manager for vibe coders</h1>
-      <p class="sub">Your clipboard history, screen captures, OCR and voice notes — one keystroke away while you build with AI.</p>
-      <div class="cta">
-        <a class="btn primary" href="#install">⚡ Install for macOS</a>
-        <a class="btn ghost" href="https://github.com/tamibot/klip">View on GitHub</a>
-      </div>
-      <p class="meta">Native Swift · runs offline · your clips stay on your Mac</p>
-    </div>
-    <div class="shotwrap">
-      <img class="shot" src="shot-history.png" width="480" height="640" alt="The Klip window: a search box, type filters (All, Text, Links, Images, Voice, Credentials), and a list of copied clips — code, a SQL query, a git command, a URL, an error message.">
-    </div>
-  </div>
+<div class="wrap">
+  <nav>
+    <span class="logo">📋 Klip</span>
+    <span class="spacer"></span>
+    <a href="#section-features" class="hidesm">Features</a>
+    <a href="#section-tips" class="hidesm">Tips &amp; Tricks</a>
+    <a href="#section-faq">FAQ</a>
+    <a href="#section-releasenotes" class="hidesm">Release Notes</a>
+    <a href="https://github.com/tamibot/klip">GitHub</a>
+  </nav>
+</div>
+
+<header class="hero wrap">
+  <h1>Clipboard manager for
+    <span class="rotator" aria-label="vibe coders, prompt engineers, AI builders, people who paste all day">
+      <span>vibe coders</span>
+      <span>prompt engineers</span>
+      <span>AI builders</span>
+      <span>people who paste all day</span>
+    </span>
+  </h1>
+  <a class="dl" href="#install">INSTALL
+    <small>Klip for Mac · free &amp; open source · macOS 14+</small>
+  </a>
+  <img class="heroshot" src="shot-history.png" width="480" height="640" decoding="async"
+       alt="The Klip window: search, type filters and a list of copied clips — code, a SQL query, a git command, a URL, an error message.">
+  <p class="intro">Klip is a tiny and fast Mac clipboard manager with screen capture, OCR, on-device voice-to-text and encrypted credentials. Built with love in Swift — no Electron, no accounts, no telemetry.</p>
 </header>
 
-<section>
+<section id="section-features">
   <div class="wrap">
-    <h2>What it does</h2>
-    <p class="lead">Everything you copy while coding with AI, in one menu-bar window.</p>
-    <div class="feat">
-      <div class="it"><span class="ic">🔎</span><div><b>Searchable history</b><p>Every copy — text &amp; images — with instant search, type filters and keyboard navigation.</p></div></div>
-      <div class="it"><span class="ic">⭐️</span><div><b>Favorite &amp; rename</b><p>Star the clips you reuse and give them names like “Deploy script” — find them by what they do.</p></div></div>
-      <div class="it"><span class="ic">✂️</span><div><b>Capture + annotate</b><p>Snip a screen region, mark it up with arrows/text, and it lands in your history.</p></div></div>
-      <div class="it"><span class="ic">🔤</span><div><b>Fast OCR</b><p>Snip an area and its text goes straight to the clipboard — pull a log out of a screenshot.</p></div></div>
-      <div class="it"><span class="ic">🎙️</span><div><b>Voice → text</b><p>Dictate a prompt — or drop an audio/video file — and it transcribes on-device (no key, nothing uploaded).</p></div></div>
-      <div class="it"><span class="ic">🧹</span><div><b>Paste clean / for chat</b><p>Paste as a clean code block, or reformat for WhatsApp / email — bold &amp; italic kept.</p></div></div>
-      <div class="it"><span class="ic">🔐</span><div><b>Encrypted credentials</b><p>API keys are auto-detected, masked, and encrypted at rest (AES-256-GCM, key in the Keychain).</p></div></div>
-      <div class="it"><span class="ic">🌐</span><div><b>8 languages</b><p>Interface in English, Spanish, French, German, Italian, Portuguese, Chinese &amp; Japanese.</p></div></div>
+    <h2>What's inside</h2>
+    <p class="lead">Everything you copy while building with AI, one keystroke away.</p>
+    <div class="grid">
+      <div class="f"><div class="ic">⚡️</div><h3>Designed to be lightweight</h3><p>A native Swift menu-bar app. No Electron, no accounts, no background sync — your clips never leave your Mac.</p></div>
+      <div class="f"><div class="ic">🔎</div><h3>Searchable history</h3><p>Press <kbd>⌥⇧E</kbd> and your last hundred clips are one keystroke away — instant search with highlighting, filters by type, full keyboard navigation.</p></div>
+      <div class="f"><div class="ic">✂️</div><h3>Capture &amp; annotate</h3><p>Press <kbd>⌥⇧D</kbd>, drag over the frozen screen and mark it up — arrows, text, highlighter, shapes, undo. It lands in history and on the clipboard.</p></div>
+      <div class="f"><div class="ic">🔤</div><h3>Text recognition (OCR)</h3><p>Came by a text that won't select? Press <kbd>⌥⇧F</kbd> and select an area — Klip parses the text and copies it to the clipboard, with a little toast to confirm.</p></div>
+      <div class="f"><div class="ic">🎙️</div><h3>Voice → text</h3><p>Press <kbd>⌥⇧R</kbd>, dictate, press again — the transcript lands on your clipboard. Runs fully on-device with Whisper; no API key, nothing uploaded.</p></div>
+      <div class="f"><div class="ic">🎬</div><h3>Video → text</h3><p>Drop a video (or any audio file) with <kbd>⌥⇧O</kbd> — Klip extracts the audio track and transcribes it, with per-upload language.</p></div>
+      <div class="f"><div class="ic">🧹</div><h3>Always paste clean</h3><p>A copy from a dark-themed AI chat is stored as clean text — bold, italics and emojis kept; backgrounds, colours and fonts dropped.</p></div>
+      <div class="f"><div class="ic">💬</div><h3>Copy for where it's going</h3><p>One click reformats a clip for WhatsApp (<code>*bold*</code>, • bullets), rich email, Markdown, or a fenced code block (<kbd>⌘↩</kbd>) for AI chats.</p></div>
+      <div class="f"><div class="ic">🔑</div><h3>Encrypted credentials</h3><p>Tokens and API keys are auto-detected, shown masked, encrypted at rest (AES-256-GCM, key in the Keychain) and never auto-pasted.</p></div>
+      <div class="f"><div class="ic">⭐️</div><h3>Favorites &amp; names</h3><p>Star the clips you reuse and give them names like “Deploy script” — filter to favorites and find things by what they do.</p></div>
+      <div class="f"><div class="ic">📦</div><h3>Bundle context</h3><p>Multi-select clips and combine them into a PDF or ZIP — upload a whole task's context to the AI in one shot.</p></div>
+      <div class="f"><div class="ic">🌍</div><h3>8 languages</h3><p>English, Spanish, French, German, Italian, Portuguese, Chinese and Japanese. OCR reads your system's languages too.</p></div>
     </div>
   </div>
 </section>
 
-<section>
+<section id="section-tips" class="band">
   <div class="wrap">
-    <h2>Shortcuts</h2>
-    <p class="lead"><kbd>⌥⇧</kbd> + a letter, grouped by function — fully configurable.</p>
-    <div class="keys">
-      <div class="row"><span><kbd>⌥⇧E</kbd></span><span>Open the clipboard history</span></div>
-      <div class="row"><span><kbd>⌥⇧R</kbd></span><span>Record / stop a voice note</span></div>
-      <div class="row"><span><kbd>⌥⇧D</kbd></span><span>Capture a region &amp; annotate</span></div>
-      <div class="row"><span><kbd>⌥⇧F</kbd></span><span>Fast text capture → OCR to clipboard</span></div>
-      <div class="row"><span><kbd>⌥⇧O</kbd></span><span>Upload an audio or video file to transcribe</span></div>
-      <div class="row"><span><kbd>⌘↩</kbd></span><span>Copy the selected clip as a code block</span></div>
+    <h2>Tips and Tricks</h2>
+    <p class="lead">Small things that make the loop faster.</p>
+    <div class="tips" id="tips">
+      <div class="tip"><h4>Paste into an AI chat, cleanly</h4><p>Select a clip and hit <kbd>⌘↩</kbd> — it's copied as a fenced code block with the language auto-detected. No more mangled indentation.</p></div>
+      <div class="tip"><h4>Back out with Esc</h4><p>Esc exits multi-select first, then clears the search, then closes the panel — one key, layer by layer.</p></div>
+      <div class="tip"><h4>Star it, then filter</h4><p>Hit the ★ on a clip and it joins your Favorites filter — right next to “All”. Stars don't reorder your history.</p></div>
+      <div class="tip hidden"><h4>Keyboard all the way</h4><p><kbd>↑</kbd>/<kbd>↓</kbd> to move, <kbd>Enter</kbd> to paste, <kbd>⌘⇧F</kbd> to star, <kbd>⌘⌫</kbd> to delete. The mouse is optional.</p></div>
+      <div class="tip hidden"><h4>Teach the transcriber your words</h4><p>Add names like <code>Klip, Supabase, webhook</code> in Preferences › Context words — dictation stops writing “clip”.</p></div>
+      <div class="tip hidden"><h4>Rename your keys</h4><p>Detected credentials are masked and encrypted. Rename one to “Prod DB URL” and find it by name — it's never auto-pasted.</p></div>
+    </div>
+    <button class="more" onclick="document.querySelectorAll('#tips .hidden').forEach(t=>t.classList.remove('hidden'));this.remove()">Show More</button>
+  </div>
+</section>
+
+<section id="section-survey">
+  <div class="wrap">
+    <h2>What feature should we build next?</h2>
+    <p class="lead">Pick one — it opens a GitHub issue you can +1.</p>
+    <div class="chips">
+      <a href="https://github.com/tamibot/klip/issues/new?title=Feature%20request%3A%20pin%20a%20clip%20as%20a%20floating%20window">Pin a clip as a floating window</a>
+      <a href="https://github.com/tamibot/klip/issues/new?title=Feature%20request%3A%20scrolling%20capture">Scrolling capture</a>
+      <a href="https://github.com/tamibot/klip/issues/new?title=Feature%20request%3A%20sync%20between%20Macs">Sync between Macs</a>
+      <a href="https://github.com/tamibot/klip/issues/new?title=Feature%20request%3A%20Windows%20version">Windows version</a>
+      <a href="https://github.com/tamibot/klip/issues/new?title=Feature%20request%3A%20">Suggest your own…</a>
     </div>
   </div>
 </section>
 
-<section id="install">
+<section id="install" class="band">
   <div class="wrap">
     <h2>Install</h2>
-    <p class="lead">Build from source with just the Xcode Command Line Tools — no full Xcode.</p>
-    <div class="install">
+    <p class="lead">Builds from source with just the Xcode Command Line Tools — no full Xcode.</p>
+    <div class="install-box">
 <pre><span class="c"># Command Line Tools (if you don't have them)</span>
 xcode-select --install
 
@@ -149,34 +187,40 @@ xcode-select --install
 <span class="g">cd</span> klip
 <span class="g">./install.sh</span></pre>
     </div>
-    <div class="steps">
-      <div><span class="n">1</span><b>It builds &amp; installs</b> Klip to <code>/Applications</code> and launches it.</div>
-      <div><span class="n">2</span>The <b>📋 icon</b> appears in the menu bar — press <kbd>⌥⇧E</kbd> to open it.</div>
-      <div><span class="n">3</span>Grant <b>Accessibility</b> (auto-paste) and <b>Screen Recording</b> (capture) when asked — once.</div>
-    </div>
-    <p class="macnote">🖥️ Currently macOS only (14 Sonoma+, Intel or Apple Silicon). A Windows version is coming soon. A prebuilt download will land on the <a href="https://github.com/tamibot/klip/releases/latest">GitHub releases</a> page.</p>
+    <p class="note">The 📋 icon appears in the menu bar — press <kbd>⌥⇧E</kbd>. Currently macOS only (14+, Intel or Apple Silicon); Windows is coming. A prebuilt download will land on <a href="https://github.com/tamibot/klip/releases">GitHub releases</a>.</p>
   </div>
 </section>
 
-<section>
+<section id="section-faq">
   <div class="wrap">
     <h2>FAQ</h2>
-    <p class="lead">Open source — read every line before you run it.</p>
     <div class="faq">
-      <div><b>Do I need an M1 / Apple Silicon Mac?</b><p>No. Klip runs on <b>Intel and Apple Silicon</b> — the only requirement is macOS 14 (Sonoma)+. On-device transcription is faster on Apple Silicon, but works on Intel.</p></div>
-      <div><b>Does it work on Windows?</b><p>Not yet — macOS only for now. A <b>Windows version is coming soon</b>.</p></div>
-      <div><b>Is it private?</b><p>No telemetry, nothing tracked. Clips stay on your Mac; transcription is on-device by default. Cloud transcription (OpenAI/Gemini) is opt-in.</p></div>
-      <div><b>Is it safe to run?</b><p>100% MIT open source — auditable on <a href="https://github.com/tamibot/klip">GitHub</a>. It only asks for Accessibility, Screen Recording and the Microphone — and only when you first use those features.</p></div>
-      <div><b>Is it free?</b><p>Yes — free and open source under MIT.</p></div>
-      <div><b>Can I contribute?</b><p>Please do — we're <b>open to issues, pull requests and ideas</b> on <a href="https://github.com/tamibot/klip">GitHub</a>.</p></div>
+      <h4>Is Klip free?</h4>
+      <p>Yes — free and open source under MIT. Use it, fork it, ship it. If it helps you, a star on <a href="https://github.com/tamibot/klip">GitHub</a> helps us.</p>
+      <h4>Where do my clips and API keys live?</h4>
+      <p>On your Mac, in <code>~/Library/Application Support/Klip</code> with <code>0600</code> permissions. Credentials are AES-256-GCM encrypted at rest. Nothing is uploaded except the audio you explicitly send to a cloud transcriber — and on-device is the default.</p>
+      <h4>When does Klip talk to the internet?</h4>
+      <p>Only if you choose OpenAI/Gemini for transcription (your own key), or on the one-time Whisper model download. No telemetry, no update pings, no analytics. The code is public — check it.</p>
+      <h4>Which macOS versions are supported?</h4>
+      <p>macOS 14 (Sonoma) and up, Intel or Apple Silicon. On-device transcription is faster on Apple Silicon but works on both.</p>
     </div>
   </div>
 </section>
 
-<footer class="wrap">
-  📋 <b>Klip</b> — the copy manager for vibe coders · Free &amp; open source under
-  <a href="https://github.com/tamibot/klip/blob/main/LICENSE">MIT</a> ·
-  <a href="https://github.com/tamibot/klip">github.com/tamibot/klip</a>
+<section id="section-releasenotes" class="band">
+  <div class="wrap">
+    <h2>Release Notes</h2>
+    <div class="rel">
+      <div class="row"><span class="d">Jul 2026</span><span class="v">0.4</span><span>Video → text (audio track extraction) · copy confirmation toasts + menu-bar flash · lighter capture overlay · 30+ UX frictions fixed · Favorites next to “All”.</span></div>
+      <div class="row"><span class="d">Jun 2026</span><span class="v">0.3</span><span>⌥⇧ shortcut family (E/R/D/F/O) · encrypted credentials (AES-256-GCM) · copy for WhatsApp/email · always-paste-clean · links filter.</span></div>
+      <div class="row"><span class="d">Jun 2026</span><span class="v">0.2</span><span>Fast OCR to clipboard · on-device Whisper (WhisperKit) · upload audio with per-upload language · 8 UI languages.</span></div>
+      <div class="row"><span class="d">Jun 2026</span><span class="v">0.1</span><span>First release — clipboard history, screen capture + annotation, voice notes, collections, PDF/ZIP export.</span></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Klip · MIT © 2026 Martin Velasco O. · <a href="https://github.com/tamibot/klip">GitHub</a> · <a href="https://github.com/tamibot/klip/issues">Contact</a>
 </footer>
 
 </body>

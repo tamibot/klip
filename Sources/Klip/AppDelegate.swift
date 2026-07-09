@@ -42,6 +42,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         snapController.onCaptured = { [weak self] in self?.panelController.show() }
         panelController.onCaptureAnnotate = { [weak self] in self?.snapController.start() }
         manager.start()
+        // Zero-real-estate copy confirmation (Shottr-style): flash the menu-bar icon to a checkmark
+        // whenever anything lands on the pasteboard through Klip.
+        NotificationCenter.default.addObserver(forName: .klipDidCopy, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.flashStatusIcon() }
+        }
         setupHotKeys()
         maybeEnableLoginOnce()
         // On-device is the default: pre-load (and, if first run, download) the model now so the first
@@ -83,6 +88,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         editMenuItem.submenu = editMenu
 
         NSApp.mainMenu = mainMenu
+    }
+
+    private var iconFlashWork: DispatchWorkItem?
+    private func flashStatusIcon() {
+        guard let button = statusItem.button else { return }
+        let cfg = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+        button.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Copied")?
+            .withSymbolConfiguration(cfg)
+        iconFlashWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.statusItem.button?.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Klip")?
+                .withSymbolConfiguration(cfg)
+        }
+        iconFlashWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
     }
 
     private func buildMenu() {

@@ -290,6 +290,9 @@ enum L10n {
         "rec.discard.confirm": "¿Descartar?",
         "row.copyonly": "Copiar",
         "upload.unsupported": "Formato no compatible. Audio: m4a, mp3, wav, opus, ogg, flac… · Video: mp4, mov, mkv, webm…",
+        "toast.copied": "Copiado",
+        "toast.textCopied": "Texto copiado",
+        "toast.transcriptCopied": "Transcripción copiada",
     ]
 
     private static let en: [String: String] = [
@@ -563,6 +566,9 @@ enum L10n {
         "rec.discard.confirm": "Discard?",
         "row.copyonly": "Copy",
         "upload.unsupported": "Unsupported format. Audio: m4a, mp3, wav, opus, ogg, flac… · Video: mp4, mov, mkv, webm…",
+        "toast.copied": "Copied",
+        "toast.textCopied": "Text copied",
+        "toast.transcriptCopied": "Transcript copied",
     ]
 
     // The translations below (fr/de/it/pt/zh/ja) are filled in by the translation workflow; any
@@ -839,6 +845,9 @@ enum L10n {
         "rec.discard.confirm": "Abandonner ?",
         "row.copyonly": "Copier",
         "upload.unsupported": "Format non pris en charge. Audio : m4a, mp3, wav, opus, ogg, flac… · Vidéo : mp4, mov, mkv, webm…",
+        "toast.copied": "Copié",
+        "toast.textCopied": "Texte copié",
+        "toast.transcriptCopied": "Transcription copiée",
     ]
 
     private static let de: [String: String] = [
@@ -1113,6 +1122,9 @@ enum L10n {
         "rec.discard.confirm": "Verwerfen?",
         "row.copyonly": "Kopieren",
         "upload.unsupported": "Nicht unterstütztes Format. Audio: m4a, mp3, wav, opus, ogg, flac… · Video: mp4, mov, mkv, webm…",
+        "toast.copied": "Kopiert",
+        "toast.textCopied": "Text kopiert",
+        "toast.transcriptCopied": "Transkript kopiert",
     ]
 
     private static let it: [String: String] = [
@@ -1387,6 +1399,9 @@ enum L10n {
         "rec.discard.confirm": "Scartare?",
         "row.copyonly": "Copia",
         "upload.unsupported": "Formato non supportato. Audio: m4a, mp3, wav, opus, ogg, flac… · Video: mp4, mov, mkv, webm…",
+        "toast.copied": "Copiato",
+        "toast.textCopied": "Testo copiato",
+        "toast.transcriptCopied": "Trascrizione copiata",
     ]
 
     private static let pt: [String: String] = [
@@ -1661,6 +1676,9 @@ enum L10n {
         "rec.discard.confirm": "Descartar?",
         "row.copyonly": "Copiar",
         "upload.unsupported": "Formato não suportado. Áudio: m4a, mp3, wav, opus, ogg, flac… · Vídeo: mp4, mov, mkv, webm…",
+        "toast.copied": "Copiado",
+        "toast.textCopied": "Texto copiado",
+        "toast.transcriptCopied": "Transcrição copiada",
     ]
 
     private static let zh: [String: String] = [
@@ -1935,6 +1953,9 @@ enum L10n {
         "rec.discard.confirm": "要放弃吗？",
         "row.copyonly": "复制",
         "upload.unsupported": "不支持的格式。音频：m4a、mp3、wav、opus、ogg、flac… · 视频：mp4、mov、mkv、webm…",
+        "toast.copied": "已复制",
+        "toast.textCopied": "文字已复制",
+        "toast.transcriptCopied": "转录文本已复制",
     ]
 
     private static let ja: [String: String] = [
@@ -2209,5 +2230,8 @@ enum L10n {
         "rec.discard.confirm": "破棄しますか？",
         "row.copyonly": "コピー",
         "upload.unsupported": "未対応の形式です。音声: m4a, mp3, wav, opus, ogg, flac… · 動画: mp4, mov, mkv, webm…",
+        "toast.copied": "コピーしました",
+        "toast.textCopied": "テキストをコピーしました",
+        "toast.transcriptCopied": "文字起こしをコピーしました",
     ]
 }

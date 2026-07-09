@@ -609,8 +609,8 @@ struct ItemRow: View {
         } else if isCredential {
             Button { manager.toggleCredential(item) } label: { Label(L10n.t("row.unmarkcred"), systemImage: "key.slash") }
         } else {
-            Button { manager.setClipboardText(Markdownify.toWhatsApp(item.text ?? "")) } label: { Label(L10n.t("row.whatsapp"), systemImage: "message") }
-            Button { manager.copyForEmail(item.text ?? "") } label: { Label(L10n.t("row.email"), systemImage: "envelope") }
+            Button { manager.setClipboardText(Markdownify.toWhatsApp(item.text ?? "")); ToastHUD.show(L10n.t("toast.copied")) } label: { Label(L10n.t("row.whatsapp"), systemImage: "message") }
+            Button { manager.copyForEmail(item.text ?? ""); ToastHUD.show(L10n.t("toast.copied")) } label: { Label(L10n.t("row.email"), systemImage: "envelope") }
             Button { onCopyAsCode(item) } label: { Label(L10n.t("row.code"), systemImage: "chevron.left.forwardslash.chevron.right") }
             if let u = item.linkURL {
                 Button { NSWorkspace.shared.open(u) } label: { Label(L10n.t("row.openlink"), systemImage: "arrow.up.right.square") }

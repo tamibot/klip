@@ -108,17 +108,19 @@ private final class CaptureOverlayView: NSView {
     override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
 
     override func draw(_ dirtyRect: NSRect) {
-        // Background: the frozen capture.
+        // Background: the frozen capture — kept fully legible (Shottr-style). Blacking the whole
+        // screen out made every capture feel like a modal interruption; the crosshair + hint pill
+        // already signal the mode.
         bgImage.draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
-
-        // Overall dimming.
-        NSColor.black.withAlphaComponent(0.45).setFill()
-        bounds.fill()
 
         guard currentRect.width > 0, currentRect.height > 0 else {
             drawHint()   // no selection yet: explain what to do
             return
         }
+
+        // Once a drag starts, a SOFT outside dim makes the selection pop without hiding the screen.
+        NSColor.black.withAlphaComponent(0.18).setFill()
+        bounds.fill()
 
         // "Hole": repaint the selected area without dimming.
         bgImage.draw(in: currentRect, from: pixelSourceRect(for: currentRect), operation: .copy, fraction: 1)
