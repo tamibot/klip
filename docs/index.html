@@ -45,11 +45,12 @@
   nav .spacer{flex:1}
   @media (max-width:640px){ nav .hidesm{display:none} }
   /* hero */
-  .hero{text-align:center;padding:64px 0 0}
+  .hero{text-align:center;padding:64px 0 0;background:radial-gradient(720px 380px at 50% -6%, #eef1ff 0%, rgba(238,241,255,0) 68%)}
   .hero h1{font-size:clamp(2.2rem,5.4vw,3.4rem);letter-spacing:-.025em;line-height:1.12;margin:0;font-weight:800}
   .hero h1 em{font-style:normal;color:var(--accent)}
   .hero .sub{color:var(--muted);font-size:1.08rem;max-width:560px;margin:18px auto 0}
   .dl{display:inline-block;margin-top:34px;padding:16px 52px;border-radius:999px;background:linear-gradient(180deg,var(--accent),var(--accent-deep));color:#fff;font-weight:800;letter-spacing:.14em;font-size:1rem;box-shadow:0 12px 28px -10px rgba(91,107,240,.55)}
+  .dl{transition:transform .15s ease,box-shadow .15s ease}
   .dl:hover{text-decoration:none;transform:translateY(-1px);box-shadow:0 16px 32px -10px rgba(91,107,240,.6)}
   .dl small{display:block;letter-spacing:.01em;font-weight:500;color:#e4e7ff;font-size:.78rem;margin-top:3px}
   .heroshot{display:block;width:100%;max-width:430px;margin:52px auto 0;border-radius:18px;filter:drop-shadow(0 30px 60px rgba(28,34,64,.28))}
@@ -58,6 +59,8 @@
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:44px 36px}
   @media (max-width:780px){ .grid{grid-template-columns:1fr 1fr;gap:36px 26px} }
   @media (max-width:520px){ .grid{grid-template-columns:1fr} }
+  .f{padding:6px;border-radius:14px;transition:transform .18s ease}
+  .f:hover{transform:translateY(-3px)}
   .f .art{width:130px;height:100px;margin-bottom:14px}
   .f .art svg{width:100%;height:100%;display:block}
   .f h3{margin:0 0 .3em;font-size:1.05rem;font-weight:700;letter-spacing:-.01em}
@@ -67,7 +70,8 @@
   /* tips */
   .tips{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
   @media (max-width:760px){ .tips{grid-template-columns:1fr} }
-  .tip{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .tip{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:0 1px 2px rgba(16,24,40,.04);transition:box-shadow .18s ease,border-color .18s ease}
+  .tip:hover{border-color:#d6dbf5;box-shadow:0 6px 18px -8px rgba(28,34,64,.18)}
   .tip h4{margin:0 0 .3em;font-size:.98rem;font-weight:700}
   .tip p{margin:0;color:var(--muted);font-size:.9rem}
   .tips .hidden{display:none}
@@ -95,7 +99,7 @@
 
 <div class="wrap">
   <nav>
-    <span class="logo"><svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="logo-tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b6bf0"/><stop offset="1" stop-color="#4453d6"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#logo-tile)"/><rect x="12" y="6" width="8" height="5" rx="2" fill="#ffffff"/><rect x="9" y="8.5" width="14" height="17.5" rx="3" fill="#ffffff"/><rect x="12.5" y="14.5" width="7" height="2" rx="1" fill="#e6e9fb"/><rect x="12.5" y="18.5" width="5" height="2" rx="1" fill="#e6e9fb"/></svg> Klip</span>
+    <span class="logo"><svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="klip-tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b6bf0"/><stop offset="1" stop-color="#4453d6"/></linearGradient></defs><rect width="32" height="32" rx="7.5" fill="url(#klip-tile)"/><rect x="9" y="8" width="14" height="17.5" rx="3" fill="#ffffff"/><rect x="12" y="5.5" width="8" height="5" rx="2" fill="#ffffff"/><rect x="14" y="7" width="4" height="1.8" rx="0.9" fill="#5b6bf0"/><rect x="12" y="15" width="8" height="2" rx="1" fill="#e6e9fb"/><rect x="12" y="19" width="5" height="2" rx="1" fill="#e6e9fb"/></svg> Klip</span>
     <span class="spacer"></span>
     <a href="#section-features" class="hidesm">Features</a>
     <a href="#section-tips" class="hidesm">Tips &amp; Tricks</a>
@@ -122,19 +126,513 @@
     <h2>What's inside</h2>
     <p class="lead">Everything you copy while building with AI, one keystroke away.</p>
     <div class="grid">
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" fill="none"><ellipse cx="65" cy="55" rx="50" ry="38" fill="#e6e9fb"/><rect x="24" y="22" width="13" height="2.5" rx="1.25" fill="#5b6bf0"/><rect x="19" y="30" width="18" height="2.5" rx="1.25" fill="#5b6bf0"/><rect x="26" y="38" width="10" height="2.5" rx="1.25" fill="#5b6bf0"/><circle cx="103" cy="44" r="2" fill="#ffffff"/><circle cx="30" cy="52" r="1.8" fill="#ffffff"/><rect x="44" y="50" width="42" height="32" rx="6" fill="#ffffff"/><rect x="44" y="50" width="42" height="9" rx="6" fill="#eef0f4"/><rect x="44" y="55" width="42" height="4" fill="#eef0f4"/><circle cx="49.5" cy="54.5" r="1.3" fill="#e6e9fb"/><circle cx="54" cy="54.5" r="1.3" fill="#e6e9fb"/><circle cx="58.5" cy="54.5" r="1.3" fill="#e6e9fb"/><rect x="49" y="63" width="24" height="3.5" rx="1.75" fill="#5b6bf0"/><rect x="49" y="69" width="32" height="3.5" rx="1.75" fill="#eef0f4"/><rect x="49" y="75" width="20" height="3.5" rx="1.75" fill="#eef0f4"/><path d="M95,16 C99,25 95,36 85,43 C78,47 69,46 64,44 C65,38 69,29 77,22 C84,16 91,13 95,16 Z" fill="#5b6bf0"/><path d="M92,18 C82,24 72,32 63,42 L58,47" stroke="#4453d6" stroke-width="2.2" stroke-linecap="round"/><path d="M84,19 L78,29" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/><path d="M72,30 L66,40" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/></svg></div><h3>Designed to be lightweight</h3><p>A native Swift menu-bar app. No Electron, no accounts, no background sync.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="8" width="118" height="84" rx="26" fill="#e6e9fb"/><rect x="20" y="16" width="84" height="66" rx="8" fill="#ffffff"/><path d="M20 24a8 8 0 0 1 8-8h68a8 8 0 0 1 8 8v6H20z" fill="#eef0f4"/><circle cx="27" cy="23" r="2" fill="#e6e9fb"/><circle cx="33" cy="23" r="2" fill="#e6e9fb"/><circle cx="39" cy="23" r="2" fill="#e6e9fb"/><rect x="26" y="35" width="72" height="12" rx="4" fill="#eef0f4"/><rect x="30" y="38" width="6" height="6" rx="2" fill="#e6e9fb"/><rect x="40" y="39" width="34" height="4" rx="2" fill="#e6e9fb"/><rect x="26" y="51" width="72" height="12" rx="4" fill="#5b6bf0"/><rect x="30" y="54" width="6" height="6" rx="2" fill="#ffffff"/><rect x="40" y="55" width="44" height="4" rx="2" fill="#ffffff"/><rect x="26" y="67" width="72" height="12" rx="4" fill="#eef0f4"/><rect x="30" y="70" width="6" height="6" rx="2" fill="#e6e9fb"/><rect x="40" y="71" width="24" height="4" rx="2" fill="#e6e9fb"/><circle cx="100" cy="74" r="12" fill="#ffffff" stroke="#5b6bf0" stroke-width="2.5"/><rect x="94" y="72" width="12" height="4" rx="2" fill="#5b6bf0"/><line x1="108.5" y1="82.5" x2="115.5" y2="89.5" stroke="#4453d6" stroke-width="4.5" stroke-linecap="round"/></svg></div><h3>Searchable history</h3><p>Press <kbd>⌥⇧E</kbd> and your last hundred clips are one keystroke away — instant search, type filters, full keyboard navigation.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg"><rect x="7" y="8" width="116" height="86" rx="18" fill="#e6e9fb"/><rect x="20" y="16" width="90" height="66" rx="7" fill="#ffffff"/><path d="M20 29v-6a7 7 0 0 1 7-7h76a7 7 0 0 1 7 7v6z" fill="#eef0f4"/><circle cx="26.5" cy="22.5" r="1.8" fill="#e6e9fb"/><circle cx="31.5" cy="22.5" r="1.8" fill="#e6e9fb"/><circle cx="36.5" cy="22.5" r="1.8" fill="#e6e9fb"/><rect x="26" y="34" width="48" height="5" rx="2.5" fill="#eef0f4"/><rect x="26" y="43" width="66" height="5" rx="2.5" fill="#e6e9fb"/><rect x="26" y="52" width="38" height="5" rx="2.5" fill="#eef0f4"/><rect x="26" y="61" width="56" height="5" rx="2.5" fill="#eef0f4"/><rect x="54" y="40" width="50" height="36" rx="2" fill="#e6e9fb" fill-opacity="0.5" stroke="#5b6bf0" stroke-width="2.5" stroke-dasharray="5 4"/><rect x="51.8" y="37.8" width="4.4" height="4.4" rx="1" fill="#ffffff" stroke="#5b6bf0" stroke-width="1.5"/><rect x="101.8" y="37.8" width="4.4" height="4.4" rx="1" fill="#ffffff" stroke="#5b6bf0" stroke-width="1.5"/><rect x="51.8" y="73.8" width="4.4" height="4.4" rx="1" fill="#ffffff" stroke="#5b6bf0" stroke-width="1.5"/><rect x="101.8" y="73.8" width="4.4" height="4.4" rx="1" fill="#ffffff" stroke="#5b6bf0" stroke-width="1.5"/><path d="M30 88Q52 84 68 68" fill="none" stroke="#4453d6" stroke-width="4.5" stroke-linecap="round"/><polygon points="74.4,61.6 71.2,71.2 64.8,64.8" fill="#4453d6"/><path d="M105 81h10" stroke="#1a1d26" stroke-width="2" stroke-linecap="round"/><path d="M110 76v10" stroke="#1a1d26" stroke-width="2" stroke-linecap="round"/></svg></div><h3>Capture &amp; annotate</h3><p>Press <kbd>⌥⇧D</kbd>, drag over the frozen screen and mark it up — arrows, text, highlighter, undo. Lands in history and on the clipboard.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="12" width="122" height="78" rx="26" fill="#e6e9fb"/><rect x="16" y="28" width="44" height="44" rx="8" fill="#ffffff"/><rect x="21" y="33" width="34" height="34" rx="5" fill="#eef0f4"/><circle cx="48" cy="40" r="3.5" fill="#5b6bf0"/><polygon points="23,67 36,47 49,67" fill="#5b6bf0"/><polygon points="39,67 48,54 54,67" fill="#4453d6"/><line x1="13" y1="47" x2="63" y2="47" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><path d="M11 31v-4a4 4 0 0 1 4-4h4" fill="none" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><path d="M57 23h4a4 4 0 0 1 4 4v4" fill="none" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><path d="M65 69v4a4 4 0 0 1-4 4h-4" fill="none" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><path d="M19 77h-4a4 4 0 0 1-4-4v-4" fill="none" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><rect x="70" y="32" width="42" height="6" rx="3" fill="#5b6bf0"/><rect x="70" y="44" width="46" height="6" rx="3" fill="#ffffff"/><rect x="70" y="56" width="38" height="6" rx="3" fill="#ffffff"/><rect x="70" y="68" width="28" height="6" rx="3" fill="#ffffff"/><rect x="101" y="66.5" width="2.5" height="9" rx="1.25" fill="#1a1d26"/></svg></div><h3>Text recognition (OCR)</h3><p>Came by a text that won't select? Press <kbd>⌥⇧F</kbd> and select an area — Klip parses the text and copies it, with a toast to confirm.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg"><ellipse cx="63" cy="52" rx="54" ry="40" fill="#e6e9fb"/><rect x="36" y="18" width="20" height="36" rx="10" fill="#5b6bf0"/><rect x="41" y="26" width="10" height="2.5" rx="1.25" fill="#4453d6"/><rect x="41" y="32" width="10" height="2.5" rx="1.25" fill="#4453d6"/><path d="M28 42a18 18 0 0 0 36 0" fill="none" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><path d="M46 60v10" fill="none" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><path d="M37 70h18" fill="none" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><path d="M64 26a10 10 0 0 1 0 12" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/><path d="M71 21a16 16 0 0 1 0 22" fill="none" stroke="#f5b50a" stroke-width="2.5" stroke-linecap="round"/><rect x="84" y="36" width="26" height="6" rx="3" fill="#5b6bf0"/><rect x="84" y="48" width="20" height="6" rx="3" fill="#ffffff"/></svg></div><h3>Voice → text</h3><p>Press <kbd>⌥⇧R</kbd>, dictate, press again — the transcript lands on your clipboard. Fully on-device with Whisper; nothing uploaded.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" fill="none"><rect x="8" y="8" width="114" height="84" rx="16" fill="#e6e9fb"/><rect x="24" y="14" width="82" height="46" rx="8" fill="#ffffff"/><rect x="24" y="14" width="82" height="10" rx="8" fill="#eef0f4"/><rect x="24" y="19" width="82" height="5" fill="#eef0f4"/><circle cx="30" cy="19" r="1.6" fill="#e6e9fb"/><circle cx="35" cy="19" r="1.6" fill="#e6e9fb"/><circle cx="40" cy="19" r="1.6" fill="#e6e9fb"/><rect x="30" y="28" width="70" height="27" rx="5" fill="#5b6bf0"/><circle cx="65" cy="41.5" r="8.5" fill="#ffffff"/><path d="M62.4 37.4 70 41.5l-7.6 4.1z" fill="#4453d6"/><rect x="34" y="49.5" width="26" height="2.6" rx="1.3" fill="#e6e9fb" opacity="0.7"/><rect x="34" y="49.5" width="12" height="2.6" rx="1.3" fill="#f5b50a"/><path d="M65 60v6" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><path d="M65 66l-3.2-3.2M65 66l3.2-3.2" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><g stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"><path d="M34 74v0.01"/><path d="M39 71.5v5"/><path d="M44 69.5v9"/><path d="M49 72v4"/><path d="M54 68.5v11"/><path d="M59 71v6"/><path d="M64 73v2"/></g><rect x="74" y="68" width="32" height="3.5" rx="1.75" fill="#5b6bf0"/><rect x="74" y="74.5" width="26" height="3.5" rx="1.75" fill="#c3caf7"/><rect x="74" y="81" width="30" height="3.5" rx="1.75" fill="#c3caf7"/></svg></div><h3>Video → text</h3><p>Drop a video or audio file with <kbd>⌥⇧O</kbd> — Klip extracts the audio track and transcribes it, with per-upload language.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" fill="none"><ellipse cx="65" cy="52" rx="58" ry="41" fill="#e6e9fb"/><rect x="20" y="20" width="52" height="20" rx="8" fill="#5b6bf0"/><path d="M28 40 L25 47 L36 40 Z" fill="#5b6bf0"/><rect x="27" y="26" width="30" height="3.5" rx="1.75" fill="#ffffff"/><rect x="27" y="32" width="20" height="3.5" rx="1.75" fill="#c3caf7"/><rect x="58" y="46" width="52" height="20" rx="8" fill="#ffffff"/><path d="M102 66 L105 73 L94 66 Z" fill="#ffffff"/><rect x="65" y="52" width="30" height="3.5" rx="1.75" fill="#5b6bf0"/><rect x="65" y="58" width="22" height="3.5" rx="1.75" fill="#e6e9fb"/><rect x="30" y="62" width="16" height="26" rx="8" fill="#4453d6"/><path d="M24 74a14 14 0 0 0 28 0" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><path d="M38 88v6" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/><g stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"><path d="M96 78v4"/><path d="M102 75.5v9"/><path d="M108 73v14"/><path d="M114 76v8"/><path d="M120 78.5v3"/></g><path d="M112 16 l1.7 4.2 4.2 1.7 -4.2 1.7 -1.7 4.2 -1.7 -4.2 -4.2 -1.7 4.2 -1.7 Z" fill="#f5b50a"/></svg></div><h3>Meeting notes</h3><p>Press <kbd>⌥⇧M</kbd> on a call — Klip records your mic and the system audio (no bot joins), and transcribes it on-device with Me/Them labels.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="12" width="122" height="78" rx="20" fill="#e6e9fb"/><g transform="rotate(-6 33 51)"><rect x="12" y="23" width="42" height="56" rx="7" fill="#1a1d26"/><rect x="17" y="30" width="30" height="3.5" rx="1.75" fill="#eef0f4" transform="rotate(-4 32 32)"/><rect x="18" y="38" width="22" height="3.5" rx="1.75" fill="#e6e9fb" transform="rotate(4 29 40)"/><rect x="17" y="46" width="32" height="3.5" rx="1.75" fill="#eef0f4" transform="rotate(-3 33 48)"/><rect x="19" y="54" width="18" height="3.5" rx="1.75" fill="#e6e9fb" transform="rotate(6 28 56)"/><rect x="17" y="62" width="27" height="3.5" rx="1.75" fill="#eef0f4" transform="rotate(-5 30 64)"/><path d="M18 71.5 l4 -3 4 3 4 -3 4 3" stroke="#5b6bf0" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g><path d="M57 51 h9" stroke="#5b6bf0" stroke-width="3" stroke-linecap="round"/><path d="M66 45 L74 51 L66 57 Z" fill="#5b6bf0"/><rect x="77" y="21" width="44" height="60" rx="7" fill="#ffffff"/><rect x="83" y="29" width="30" height="3.5" rx="1.75" fill="#eef0f4"/><rect x="83" y="37" width="24" height="3.5" rx="1.75" fill="#e6e9fb"/><rect x="83" y="45" width="32" height="5" rx="2.5" fill="#5b6bf0"/><rect x="83" y="54" width="28" height="3.5" rx="1.75" fill="#eef0f4"/><rect x="83" y="62" width="20" height="3.5" rx="1.75" fill="#e6e9fb"/><rect x="83" y="70" width="26" height="3.5" rx="1.75" fill="#eef0f4"/><path d="M116 8 l1.6 4.4 4.4 1.6 -4.4 1.6 -1.6 4.4 -1.6 -4.4 -4.4 -1.6 4.4 -1.6 Z" fill="#5b6bf0"/><path d="M106 14.5 l1 2.5 2.5 1 -2.5 1 -1 2.5 -1 -2.5 -2.5 -1 2.5 -1 Z" fill="#4453d6"/></svg></div><h3>Always paste clean</h3><p>A copy from a dark-themed AI chat is stored as clean text — bold, italics and emojis kept; backgrounds and fonts dropped.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="8" width="114" height="84" rx="26" fill="#e6e9fb"/><path d="M45 44 Q33 42 26 33" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/><path d="M85 44 Q97 42 104 33" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/><path d="M65 68 L65 76" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/><rect x="45" y="33" width="40" height="36" rx="7" fill="#ffffff"/><path d="M54 40 V30 a4 4 0 0 1 8 0 v13 a6.5 6.5 0 0 1 -13 0 V32" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/><rect x="66" y="40" width="13" height="4" rx="2" fill="#eef0f4"/><rect x="52" y="53" width="26" height="4" rx="2" fill="#5b6bf0"/><rect x="52" y="60" width="19" height="4" rx="2" fill="#eef0f4"/><rect x="10" y="14" width="22" height="15" rx="5" fill="#5b6bf0"/><path d="M16 28 L13 35 L23 28 Z" fill="#5b6bf0"/><rect x="15" y="19" width="12" height="2.5" rx="1.25" fill="#ffffff"/><rect x="15" y="23.5" width="8" height="2.5" rx="1.25" fill="#ffffff"/><rect x="98" y="14" width="22" height="15" rx="3" fill="#ffffff" stroke="#5b6bf0" stroke-width="2.5"/><path d="M100.5 17.5 L109 24 L117.5 17.5" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="52" y="76" width="26" height="15" rx="5" fill="#4453d6"/><text x="65" y="86.5" text-anchor="middle" font-family="SF Mono, Menlo, monospace" font-size="8" font-weight="700" fill="#ffffff">&lt;/&gt;</text></svg></div><h3>Copy for where it's going</h3><p>One click reformats a clip for WhatsApp, rich email, Markdown, or a fenced code block (<kbd>⌘↩</kbd>) for AI chats.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Encrypted credentials"><ellipse cx="64" cy="53" rx="58" ry="41" fill="#e6e9fb"/><path d="M106 13.5 L118.5 18.5 V28 C118.5 36.5 113.5 42.8 106 46.3 C98.5 42.8 93.5 36.5 93.5 28 V18.5 Z" fill="#5b6bf0"/><polyline points="100.5 27 104.5 31 111.5 22.5" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="14" y="46" width="96" height="26" rx="8" fill="#ffffff"/><rect x="21" y="53" width="12" height="12" rx="3.5" fill="#eef0f4"/><circle cx="27" cy="59" r="2.2" fill="#5b6bf0"/><circle cx="42" cy="59" r="3" fill="#1a1d26"/><circle cx="51" cy="59" r="3" fill="#1a1d26"/><circle cx="60" cy="59" r="3" fill="#1a1d26"/><circle cx="69" cy="59" r="3" fill="#1a1d26"/><path d="M80 31 V23.5 A7.5 7.5 0 0 1 95 23.5 V31 H91 V23.5 A3.5 3.5 0 0 0 84 23.5 V31 Z" fill="#4453d6"/><rect x="76" y="29.5" width="23" height="19.5" rx="5" fill="#f5b50a"/><circle cx="87.5" cy="38" r="2.7" fill="#1a1d26"/><rect x="86.3" y="39" width="2.4" height="5.5" rx="1.2" fill="#1a1d26"/><rect x="26" y="78" width="70" height="8" rx="4" fill="#ffffff"/></svg></div><h3>Encrypted credentials</h3><p>Tokens and API keys are auto-detected, shown masked, encrypted at rest (AES-256-GCM) and never auto-pasted.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" fill="none"><rect x="6" y="8" width="118" height="86" rx="26" fill="#e6e9fb"/><rect x="30" y="17" width="70" height="11" rx="5.5" fill="#ffffff" opacity="0.65"/><rect x="30" y="76" width="70" height="11" rx="5.5" fill="#ffffff" opacity="0.65"/><rect x="16" y="40" width="98" height="30" rx="8" fill="#ffffff" stroke="#5b6bf0" stroke-width="2.5"/><rect x="26" y="48.5" width="38" height="5" rx="2.5" fill="#5b6bf0"/><rect x="26" y="57.5" width="28" height="5" rx="2.5" fill="#e6e9fb"/><path d="M97 46 L99.3 51.9 L105.6 52.2 L100.7 56.2 L102.3 62.3 L97 58.9 L91.7 62.3 L93.3 56.2 L88.4 52.2 L94.7 51.9 Z" fill="#f5b50a" stroke="#f5b50a" stroke-width="2" stroke-linejoin="round"/><g transform="rotate(-6 45 36)"><path d="M28 36 L36 29.5 L57 29.5 Q62 29.5 62 34.5 L62 37.5 Q62 42.5 57 42.5 L36 42.5 Z" fill="#5b6bf0"/><circle cx="34.5" cy="36" r="1.8" fill="#ffffff"/><rect x="40" y="33.8" width="15" height="4.4" rx="2.2" fill="#ffffff"/></g><path d="M111 19.5 L112.7 23.3 L116.5 25 L112.7 26.7 L111 30.5 L109.3 26.7 L105.5 25 L109.3 23.3 Z" fill="#5b6bf0"/><circle cx="118.5" cy="33.5" r="1.8" fill="#5b6bf0"/></svg></div><h3>Favorites &amp; names</h3><p>Star the clips you reuse and name them — “Deploy script” beats guessing by first line.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" fill="none"><ellipse cx="64" cy="51" rx="60" ry="43" fill="#e6e9fb"/><g transform="rotate(-8 31 32)"><rect x="16" y="21" width="30" height="22" rx="5" fill="#ffffff"/><rect x="20.5" y="25.5" width="6" height="6" rx="2" fill="#5b6bf0"/><rect x="29.5" y="27" width="12" height="3" rx="1.5" fill="#e6e9fb"/><rect x="20.5" y="35" width="21" height="3.5" rx="1.75" fill="#eef0f4"/></g><g transform="rotate(5 35 51)"><rect x="20" y="40" width="30" height="22" rx="5" fill="#ffffff"/><rect x="24.5" y="44.5" width="6" height="6" rx="2" fill="#4453d6"/><rect x="33.5" y="46" width="12" height="3" rx="1.5" fill="#e6e9fb"/><rect x="24.5" y="54" width="21" height="3.5" rx="1.75" fill="#eef0f4"/></g><g transform="rotate(-4 29 70)"><rect x="14" y="59" width="30" height="22" rx="5" fill="#ffffff"/><rect x="18.5" y="63.5" width="6" height="6" rx="2" fill="#5b6bf0"/><rect x="27.5" y="65" width="12" height="3" rx="1.5" fill="#e6e9fb"/><rect x="18.5" y="73" width="21" height="3.5" rx="1.75" fill="#eef0f4"/></g><path d="M48 31 C58 33 62 41 65.5 46.5" stroke="#5b6bf0" stroke-width="2" stroke-linecap="round"/><path d="M52 51 H65.5" stroke="#5b6bf0" stroke-width="2" stroke-linecap="round"/><path d="M46 71 C57 70 62 59 65.5 53.5" stroke="#5b6bf0" stroke-width="2" stroke-linecap="round"/><path d="M67.5 44.5 L74.5 50 L67.5 55.5 Z" fill="#5b6bf0"/><path d="M82 22 H104 L114 32 V72 Q114 78 108 78 H82 Q76 78 76 72 V28 Q76 22 82 22 Z" fill="#ffffff"/><path d="M104 22 V32 H114 Z" fill="#e6e9fb"/><rect x="82" y="36" width="26" height="4" rx="2" fill="#e6e9fb"/><rect x="82" y="44" width="26" height="4" rx="2" fill="#eef0f4"/><rect x="82" y="52" width="18" height="4" rx="2" fill="#eef0f4"/><rect x="82" y="61" width="19" height="9" rx="3" fill="#4453d6"/><text x="91.5" y="67.7" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="5" font-weight="700" letter-spacing="0.4" fill="#ffffff">PDF</text></svg></div><h3>Bundle context</h3><p>Multi-select clips and combine them into a PDF or ZIP — a whole task's context in one upload.</p></div>
-      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg"><rect x="12" y="14" width="106" height="76" rx="18" fill="#e6e9fb"/><circle cx="58" cy="52" r="26" fill="#ffffff"/><circle cx="58" cy="52" r="26" fill="none" stroke="#5b6bf0" stroke-width="2.5"/><ellipse cx="58" cy="52" rx="12" ry="26" fill="none" stroke="#5b6bf0" stroke-width="2.5"/><line x1="32" y1="52" x2="84" y2="52" stroke="#5b6bf0" stroke-width="2.5"/><path d="M36 39 Q58 47 80 39" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/><path d="M36 65 Q58 57 80 65" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/><g><rect x="88" y="22" width="30" height="18" rx="7" fill="#5b6bf0"/><path d="M96 40 L96 46 L103 40 Z" fill="#5b6bf0"/><rect x="94" y="29" width="18" height="4" rx="2" fill="#ffffff"/></g><g><rect x="92" y="58" width="26" height="16" rx="7" fill="#ffffff" stroke="#4453d6" stroke-width="2.5"/><path d="M112 73 L112 79 L105 73.5 Z" fill="#4453d6"/><rect x="98" y="64" width="14" height="4" rx="2" fill="#e6e9fb"/></g><circle cx="24" cy="26" r="3" fill="#f5b50a"/></svg></div><h3>8 languages</h3><p>English, Spanish, French, German, Italian, Portuguese, Chinese and Japanese — OCR reads your system's languages too.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <path d="M16,56 C13,33 36,17 64,15 C93,13 117,26 119,49 C121,73 100,88 68,89 C40,90 19,79 16,56 Z" fill="#e6e9fb"/>
+  <rect x="12" y="60" width="16" height="3" rx="1.5" fill="#5b6bf0"/>
+  <rect x="8" y="67" width="21" height="3" rx="1.5" fill="#5b6bf0"/>
+  <rect x="14" y="74" width="12" height="3" rx="1.5" fill="#5b6bf0"/>
+  <rect x="39.5" y="55.5" width="44" height="32" rx="6" fill="#dfe3f8"/>
+  <rect x="36" y="52" width="44" height="32" rx="6" fill="#ffffff"/>
+  <path d="M36,58 L36,58 C36,54.7 38.7,52 42,52 L74,52 C77.3,52 80,54.7 80,58 L80,61 L36,61 Z" fill="#f0f2fc"/>
+  <circle cx="41.5" cy="56.5" r="1.3" fill="#e6e9fb"/>
+  <circle cx="46" cy="56.5" r="1.3" fill="#e6e9fb"/>
+  <circle cx="50.5" cy="56.5" r="1.3" fill="#e6e9fb"/>
+  <rect x="41" y="65" width="22" height="3.5" rx="1.75" fill="#5b6bf0"/>
+  <rect x="41" y="71" width="30" height="3.5" rx="1.75" fill="#eef0f4"/>
+  <rect x="41" y="77" width="18" height="3.5" rx="1.75" fill="#eef0f4"/>
+  <path d="M81,53.5 C79.5,40 87,24 101,16 C105,14 109,15 110,18.5 C107,31.5 97,46.5 84,56.5 C82.8,55.7 81.6,54.7 81,53.5 Z" fill="#dfe3f8"/>
+  <path d="M78,50 C76.5,37 84,21 98,13 C102,11 106,12 107,15.5 C104,28.5 94,43.5 81,53.5 C79.8,52.7 78.6,51.2 78,50 Z" fill="#5b6bf0"/>
+  <path d="M105,13.5 C93,24 85,38 79.5,51.5 L81,53.5 C94,43.5 104,28.5 107,15.5 C106.6,14.4 105.9,13.8 105,13.5 Z" fill="#4453d6"/>
+  <path d="M79,51.5 L73,60" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M87,34 L81.5,30" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <path d="M95,24 L89.5,20" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="24" cy="24" r="2" fill="#f5b50a"/>
+  <path d="M113,40 L119,40 M116,37 L116,43" stroke="#f5b50a" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="30" cy="44" r="1.5" fill="#5b6bf0"/>
+  <circle cx="98" cy="68" r="1.8" fill="#ffffff"/>
+</svg></div><h3>Designed to be lightweight</h3><p>A native Swift menu-bar app. No Electron, no accounts, no background sync.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="histRow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b6bf0"/>
+      <stop offset="1" stop-color="#4453d6"/>
+    </linearGradient>
+  </defs>
+  <!-- organic background blob, offset up-left -->
+  <path d="M62 5 C88 3 112 14 116 36 C120 58 106 76 82 84 C58 92 24 90 14 68 C6 46 14 20 34 10 C43 6 52 6 62 5 Z" fill="#e6e9fb"/>
+  <!-- flat offset shadow of the window -->
+  <rect x="24" y="20" width="80" height="64" rx="8" fill="#dfe3f8"/>
+  <!-- mac window -->
+  <rect x="20" y="16" width="80" height="64" rx="8" fill="#ffffff"/>
+  <path d="M20 24 a8 8 0 0 1 8 -8 h64 a8 8 0 0 1 8 8 v4 H20 Z" fill="#f0f2fc"/>
+  <circle cx="27" cy="22.5" r="2" fill="#e6e9fb"/>
+  <circle cx="33" cy="22.5" r="2" fill="#e6e9fb"/>
+  <circle cx="39" cy="22.5" r="2" fill="#e6e9fb"/>
+  <!-- clip rows -->
+  <rect x="26" y="33" width="68" height="11" rx="4" fill="#eef0f4"/>
+  <rect x="30" y="35.5" width="6" height="6" rx="2" fill="#dfe3f8"/>
+  <rect x="40" y="37" width="32" height="3" rx="1.5" fill="#dfe3f8"/>
+  <rect x="26" y="65" width="68" height="11" rx="4" fill="#eef0f4"/>
+  <rect x="30" y="67.5" width="6" height="6" rx="2" fill="#dfe3f8"/>
+  <rect x="40" y="69" width="22" height="3" rx="1.5" fill="#dfe3f8"/>
+  <!-- selected row: popped, two-tone (deep lip under gradient face) -->
+  <rect x="24" y="48" width="72" height="13" rx="5" fill="#4453d6"/>
+  <rect x="24" y="48" width="72" height="11.5" rx="5" fill="url(#histRow)"/>
+  <rect x="28.5" y="51" width="7" height="7" rx="2" fill="#ffffff"/>
+  <rect x="39.5" y="52.75" width="34" height="3.5" rx="1.75" fill="#ffffff"/>
+  <circle cx="88.5" cy="54.5" r="2.2" fill="#f5b50a"/>
+  <!-- magnifier flat offset shadow -->
+  <circle cx="103.5" cy="75.5" r="12.5" fill="#dfe3f8"/>
+  <line x1="112.3" y1="84.3" x2="121" y2="93" stroke="#dfe3f8" stroke-width="5" stroke-linecap="round"/>
+  <!-- magnifier -->
+  <circle cx="100" cy="72" r="12.5" fill="#5b6bf0"/>
+  <path d="M111.75 76.3 A12.5 12.5 0 0 1 94.7 83.3 L96.6 79.25 A8 8 0 0 0 107.5 74.7 Z" fill="#4453d6"/>
+  <circle cx="100" cy="72" r="8" fill="#f0f2fc"/>
+  <rect x="94.5" y="68" width="9.5" height="2.8" rx="1.4" fill="#5b6bf0"/>
+  <rect x="94.5" y="72.5" width="6.5" height="2.8" rx="1.4" fill="#5b6bf0"/>
+  <circle cx="104.6" cy="73.9" r="1.7" fill="#f5b50a"/>
+  <path d="M93.8 68.3 A7 7 0 0 1 97.8 64.9" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="108.8" y1="80.8" x2="117.5" y2="89.5" stroke="#4453d6" stroke-width="5" stroke-linecap="round"/>
+  <!-- floating accents -->
+  <path d="M115 13.5 v7 M111.5 17 h7" stroke="#f5b50a" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="13.5" cy="73" r="2" fill="#f5b50a"/>
+  <circle cx="14" cy="27" r="1.8" fill="#5b6bf0"/>
+</svg></div><h3>Searchable history</h3><p>Press <kbd>⌥⇧E</kbd> and your last hundred clips are one keystroke away — instant search, type filters, full keyboard navigation.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="snapArrow" x1="62" y1="71" x2="97" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5b6bf0"/>
+      <stop offset="1" stop-color="#4453d6"/>
+    </linearGradient>
+  </defs>
+  <path d="M19 55C15 31 39 10 69 11c29 1 50 13 50 37 0 25-20 41-52 41C41 89 22 77 19 55Z" fill="#e6e9fb"/>
+  <rect x="23.5" y="19.5" width="82" height="62" rx="7" fill="#dfe3f8"/>
+  <rect x="20" y="16" width="82" height="62" rx="7" fill="#ffffff"/>
+  <path d="M20 29v-6a7 7 0 0 1 7-7h68a7 7 0 0 1 7 7v6z" fill="#f0f2fc"/>
+  <circle cx="26.5" cy="22.5" r="1.8" fill="#dfe3f8"/>
+  <circle cx="31.5" cy="22.5" r="1.8" fill="#dfe3f8"/>
+  <circle cx="36.5" cy="22.5" r="1.8" fill="#dfe3f8"/>
+  <rect x="26" y="35" width="40" height="4.5" rx="2.25" fill="#eef0f4"/>
+  <rect x="26" y="44" width="24" height="4.5" rx="2.25" fill="#e6e9fb"/>
+  <rect x="26" y="53" width="22" height="4.5" rx="2.25" fill="#eef0f4"/>
+  <rect x="26" y="62" width="20" height="4.5" rx="2.25" fill="#eef0f4"/>
+  <rect x="54" y="38" width="54" height="38" rx="3" fill="#f0f2fc" stroke="#5b6bf0" stroke-width="2.5" stroke-dasharray="5.5 4" stroke-linecap="round"/>
+  <path d="M62 71Q76 68 90 55" fill="none" stroke="url(#snapArrow)" stroke-width="5" stroke-linecap="round"/>
+  <polygon points="97.5,48 93.6,58 87,51.9" fill="#4453d6"/>
+  <rect x="51.5" y="35.5" width="5" height="5" rx="1.2" fill="#ffffff" stroke="#5b6bf0" stroke-width="1.6"/>
+  <rect x="105.5" y="35.5" width="5" height="5" rx="1.2" fill="#ffffff" stroke="#5b6bf0" stroke-width="1.6"/>
+  <rect x="51.5" y="73.5" width="5" height="5" rx="1.2" fill="#ffffff" stroke="#5b6bf0" stroke-width="1.6"/>
+  <rect x="105.5" y="73.5" width="5" height="5" rx="1.2" fill="#ffffff" stroke="#5b6bf0" stroke-width="1.6"/>
+  <path d="M113 30h6M116 27v6" stroke="#f5b50a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M24 9l1.2 2.8L28 13l-2.8 1.2L24 17l-1.2-2.8L20 13l2.8-1.2z" fill="#f5b50a"/>
+  <circle cx="14" cy="64" r="2" fill="#5b6bf0"/>
+  <circle cx="38" cy="87" r="1.8" fill="#f5b50a"/>
+  <path d="M111 86h6M114 83v6" stroke="#1a1d26" stroke-width="2" stroke-linecap="round"/>
+</svg></div><h3>Capture &amp; annotate</h3><p>Press <kbd>⌥⇧D</kbd>, drag over the frozen screen and mark it up — arrows, text, highlighter, undo. Lands in history and on the clipboard.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ocrLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5b6bf0"/>
+      <stop offset="1" stop-color="#4453d6"/>
+    </linearGradient>
+    <clipPath id="ocrPhoto"><rect x="21" y="30" width="34" height="36" rx="5"/></clipPath>
+  </defs>
+
+  <!-- organic off-center background blob -->
+  <path d="M22 42 C28 20 52 8 80 11 C107 14 125 26 123 50 C121 73 104 89 72 89 C42 89 15 68 22 42 Z" fill="#e6e9fb"/>
+
+  <!-- flat offset shadow of the image tile -->
+  <rect x="19.5" y="28.5" width="44" height="46" rx="9" fill="#dfe3f8"/>
+
+  <!-- image tile -->
+  <rect x="16" y="25" width="44" height="46" rx="9" fill="#ffffff"/>
+  <rect x="21" y="30" width="34" height="36" rx="5" fill="#eef0f4"/>
+  <g clip-path="url(#ocrPhoto)">
+    <circle cx="48" cy="38" r="3.2" fill="#f5b50a"/>
+    <polygon points="23,66 36,46 49,66" fill="#5b6bf0"/>
+    <polygon points="40,66 48,56 56,66" fill="#4453d6"/>
+  </g>
+
+  <!-- corner scan brackets -->
+  <path d="M10 27v-4a4 4 0 0 1 4-4h4" fill="none" stroke="#2f3a8f" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M58 19h4a4 4 0 0 1 4 4v4" fill="none" stroke="#2f3a8f" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M66 69v4a4 4 0 0 1-4 4h-4" fill="none" stroke="#2f3a8f" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M18 77h-4a4 4 0 0 1-4-4v-4" fill="none" stroke="#2f3a8f" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- scan line -->
+  <line x1="11" y1="47" x2="65" y2="47" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- extracted text lines flowing right -->
+  <rect x="72" y="29" width="44" height="6.5" rx="3.25" fill="url(#ocrLine)"/>
+  <rect x="72" y="41.5" width="46" height="6.5" rx="3.25" fill="#ffffff"/>
+  <rect x="72" y="54" width="38" height="6.5" rx="3.25" fill="#ffffff"/>
+  <rect x="72" y="66.5" width="26" height="6.5" rx="3.25" fill="#ffffff"/>
+  <!-- caret -->
+  <rect x="101.5" y="64.5" width="2.5" height="10.5" rx="1.25" fill="#1a1d26"/>
+
+  <!-- floating accents -->
+  <path d="M113 16v6M110 19h6" stroke="#f5b50a" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="22" cy="92" r="2" fill="#5b6bf0"/>
+  <circle cx="9" cy="38" r="1.8" fill="#f5b50a"/>
+</svg></div><h3>Text recognition (OCR)</h3><p>Came by a text that won't select? Press <kbd>⌥⇧F</kbd> and select an area — Klip parses the text and copies it, with a toast to confirm.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="micBody"><rect x="32" y="16" width="24" height="38" rx="12"/></clipPath>
+  </defs>
+  <!-- organic background blob, off-center -->
+  <path d="M12 56 C10 32 30 13 62 12 C92 11 121 26 120 52 C119 78 98 91 64 90 C36 89 14 80 12 56 Z" fill="#e6e9fb"/>
+  <!-- flat offset shadows -->
+  <rect x="35.5" y="19.5" width="24" height="38" rx="12" fill="#dfe3f8"/>
+  <rect x="87.5" y="31.5" width="36" height="44" rx="8" fill="#dfe3f8"/>
+  <!-- mic body: indigo base + deep right facet -->
+  <rect x="32" y="16" width="24" height="38" rx="12" fill="#5b6bf0"/>
+  <rect x="48" y="16" width="8" height="38" fill="#4453d6" clip-path="url(#micBody)"/>
+  <!-- grille slits -->
+  <rect x="38" y="25" width="9" height="2.5" rx="1.25" fill="#ffffff"/>
+  <rect x="38" y="31" width="9" height="2.5" rx="1.25" fill="#ffffff"/>
+  <!-- cradle + stand -->
+  <path d="M26 42a18 18 0 0 0 36 0" fill="none" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M44 60v8" fill="none" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M36 70h16" fill="none" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- sound arcs, outer one gold -->
+  <path d="M64.5 28a7 7 0 0 1 0 12" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M70.5 22a12.5 12.5 0 0 1 0 24" fill="none" stroke="#f5b50a" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- transcription card -->
+  <rect x="84" y="28" width="36" height="44" rx="8" fill="#ffffff"/>
+  <rect x="90" y="36" width="24" height="4" rx="2" fill="#5b6bf0"/>
+  <rect x="90" y="44" width="18" height="4" rx="2" fill="#e6e9fb"/>
+  <rect x="90" y="52" width="21" height="4" rx="2" fill="#e6e9fb"/>
+  <rect x="90" y="60" width="12" height="4" rx="2" fill="#e6e9fb"/>
+  <rect x="105" y="59.5" width="3" height="5" rx="1" fill="#f5b50a"/>
+  <!-- floating accents -->
+  <circle cx="22" cy="18" r="2" fill="#f5b50a"/>
+  <path d="M112 15v6M109 18h6" stroke="#5b6bf0" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="16" cy="74" r="1.5" fill="#5b6bf0"/>
+</svg></div><h3>Voice → text</h3><p>Press <kbd>⌥⇧R</kbd>, dictate, press again — the transcript lands on your clipboard. Fully on-device with Whisper; nothing uploaded.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <defs>
+    <linearGradient id="vg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b6bf0"/>
+      <stop offset="1" stop-color="#4453d6"/>
+    </linearGradient>
+  </defs>
+  <!-- organic background blob, off-center -->
+  <ellipse cx="62" cy="48" rx="57" ry="41" transform="rotate(-6 62 48)" fill="#e6e9fb"/>
+  <!-- flat offset shadows -->
+  <rect x="23.5" y="11.5" width="74" height="44" rx="7" fill="#dfe3f8"/>
+  <rect x="39.5" y="63.5" width="74" height="28" rx="7" fill="#dfe3f8"/>
+  <!-- video window -->
+  <rect x="20" y="8" width="74" height="44" rx="7" fill="#ffffff"/>
+  <path d="M20 15a7 7 0 0 1 7-7h60a7 7 0 0 1 7 7v2H20z" fill="#f0f2fc"/>
+  <circle cx="26.5" cy="12.5" r="1.5" fill="#e6e9fb"/>
+  <circle cx="31.5" cy="12.5" r="1.5" fill="#e6e9fb"/>
+  <circle cx="36.5" cy="12.5" r="1.5" fill="#e6e9fb"/>
+  <!-- player tile -->
+  <rect x="25" y="21" width="64" height="26" rx="5" fill="url(#vg)"/>
+  <circle cx="57" cy="32" r="7.5" fill="#ffffff"/>
+  <path d="M54.6 28.4 61.2 32l-6.6 3.6z" fill="#2f3a8f"/>
+  <rect x="30" y="41.5" width="50" height="2.6" rx="1.3" fill="#2f3a8f"/>
+  <rect x="30" y="41.5" width="18" height="2.6" rx="1.3" fill="#f5b50a"/>
+  <circle cx="48" cy="42.8" r="2.2" fill="#ffffff"/>
+  <!-- pull-down chevron -->
+  <path d="M44.5 54.5 48 58l3.5-3.5" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- transcript card -->
+  <rect x="36" y="60" width="74" height="28" rx="7" fill="#ffffff"/>
+  <g stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round">
+    <path d="M43 72v4"/>
+    <path d="M47.5 69.5v9"/>
+    <path d="M52 67v14"/>
+    <path d="M56.5 70.5v7"/>
+    <path d="M61 68v12"/>
+    <path d="M65.5 71.5v5"/>
+  </g>
+  <rect x="73" y="66" width="30" height="3.4" rx="1.7" fill="#5b6bf0"/>
+  <rect x="73" y="72.4" width="24" height="3.4" rx="1.7" fill="#e6e9fb"/>
+  <rect x="73" y="78.8" width="28" height="3.4" rx="1.7" fill="#e6e9fb"/>
+  <!-- floating accents -->
+  <path d="M104 13v6M101 16h6" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="14" cy="30" r="2" fill="#f5b50a"/>
+  <circle cx="115" cy="55" r="1.8" fill="#4453d6"/>
+</svg></div><h3>Video → text</h3><p>Drop a video or audio file with <kbd>⌥⇧O</kbd> — Klip extracts the audio track and transcribes it, with per-upload language.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <defs>
+    <linearGradient id="mtgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b6bf0"/>
+      <stop offset="1" stop-color="#4453d6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- organic background blob, off-center -->
+  <path d="M14 48 C 12 24, 40 10, 70 12 C 100 14, 122 28, 121 54 C 120 78, 98 92, 68 90 C 40 88, 16 74, 14 48 Z" fill="#e6e9fb"/>
+
+  <!-- flat offset shadows (3.5px down-right, no blur) -->
+  <g transform="translate(3.5 3.5)" fill="#dfe3f8">
+    <path d="M26 13 H64 A9 9 0 0 1 73 22 V29 A9 9 0 0 1 64 38 H40 L28 47 L33 38 H26 A9 9 0 0 1 17 29 V22 A9 9 0 0 1 26 13 Z"/>
+    <path d="M67 36 H105 A9 9 0 0 1 114 45 V52 A9 9 0 0 1 105 61 H99 L106 70 L90 61 H67 A9 9 0 0 1 58 52 V45 A9 9 0 0 1 67 36 Z"/>
+    <rect x="33" y="60" width="15" height="23" rx="7.5"/>
+  </g>
+
+  <!-- mic -->
+  <rect x="33" y="60" width="15" height="23" rx="7.5" fill="#5b6bf0"/>
+  <path d="M40.5 60 A7.5 7.5 0 0 1 48 67.5 V75.5 A7.5 7.5 0 0 1 40.5 83 Z" fill="#4453d6"/>
+  <path d="M27 72 a13.5 13.5 0 0 0 27 0" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M40.5 85.5 v5.5" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M34.5 92 h12" stroke="#4453d6" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- waveform -->
+  <g stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round">
+    <path d="M90 77 v6"/>
+    <path d="M96 74 v12"/>
+    <path d="M102 71.5 v17"/>
+    <path d="M108 74.5 v11"/>
+    <path d="M114 77.5 v5"/>
+  </g>
+
+  <!-- indigo bubble: them -->
+  <path d="M26 13 H64 A9 9 0 0 1 73 22 V29 A9 9 0 0 1 64 38 H40 L28 47 L33 38 H26 A9 9 0 0 1 17 29 V22 A9 9 0 0 1 26 13 Z" fill="url(#mtgGrad)"/>
+  <rect x="26" y="19.5" width="32" height="3.5" rx="1.75" fill="#ffffff"/>
+  <rect x="26" y="26" width="22" height="3.5" rx="1.75" fill="#e6e9fb"/>
+
+  <!-- white outlined bubble: me -->
+  <path d="M67 36 H105 A9 9 0 0 1 114 45 V52 A9 9 0 0 1 105 61 H99 L106 70 L90 61 H67 A9 9 0 0 1 58 52 V45 A9 9 0 0 1 67 36 Z" fill="#ffffff" stroke="#5b6bf0" stroke-width="2.5" stroke-linejoin="round"/>
+  <rect x="67" y="42.5" width="30" height="3.5" rx="1.75" fill="#5b6bf0"/>
+  <rect x="67" y="49" width="25" height="3.5" rx="1.75" fill="#e6e9fb"/>
+
+  <!-- gold record indicator -->
+  <circle cx="110" cy="26" r="5.5" stroke="#f5b50a" stroke-width="2"/>
+  <circle cx="110" cy="26" r="2.5" fill="#f5b50a"/>
+
+  <!-- floating accents -->
+  <path d="M11 22 l1.3 3.2 3.2 1.3 -3.2 1.3 -1.3 3.2 -1.3 -3.2 -3.2 -1.3 3.2 -1.3 Z" fill="#f5b50a"/>
+  <path d="M121 48 v6 M118 51 h6" stroke="#5b6bf0" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="78" cy="8" r="1.8" fill="#4453d6"/>
+  <circle cx="60" cy="92" r="1.6" fill="#f5b50a"/>
+</svg></div><h3>Meeting notes</h3><p>Press <kbd>⌥⇧M</kbd> on a call — Klip records your mic and the system audio (no bot joins), and transcribes it on-device with Me/Them labels.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cleanArrow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5b6bf0"/>
+      <stop offset="1" stop-color="#4453d6"/>
+    </linearGradient>
+  </defs>
+  <!-- organic background blob, off-center -->
+  <path d="M22 32 C30 17 54 12 80 15 C106 18 124 30 123 52 C122 75 103 89 72 90 C42 91 13 83 11 60 C10 47 15 42 22 32 Z" fill="#e6e9fb"/>
+  <!-- messy ink-indigo card, tilted -->
+  <g transform="rotate(-7 34 53)">
+    <rect x="17.5" y="29.5" width="40" height="54" rx="7" fill="#dfe3f8"/>
+    <rect x="14" y="26" width="40" height="54" rx="7" fill="#4453d6"/>
+    <rect x="18" y="26" width="36" height="54" rx="7" fill="#2f3a8f"/>
+    <rect x="23" y="33" width="26" height="3.5" rx="1.75" fill="#eef0f4" transform="rotate(-5 36 34.75)"/>
+    <rect x="24" y="40.5" width="18" height="3.5" rx="1.75" fill="#5b6bf0" transform="rotate(6 33 42.25)"/>
+    <rect x="23" y="48" width="28" height="3.5" rx="1.75" fill="#e6e9fb" transform="rotate(-4 37 49.75)"/>
+    <rect x="25" y="55.5" width="15" height="3.5" rx="1.75" fill="#f0f2fc" transform="rotate(7 32.5 57.25)"/>
+    <rect x="23" y="63" width="24" height="3.5" rx="1.75" fill="#e6e9fb" transform="rotate(-6 35 64.75)"/>
+    <path d="M25 74 l4.5 -3.5 4.5 3.5 4.5 -3.5 4.5 3.5" stroke="#f5b50a" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <!-- transform arrow -->
+  <path d="M56.5 49 h8 v-5.5 l10 9 -10 9 v-5.5 h-8 z" fill="url(#cleanArrow)"/>
+  <!-- clean white card with flat offset shadow -->
+  <rect x="79.5" y="25.5" width="44" height="60" rx="7" fill="#dfe3f8"/>
+  <rect x="76" y="22" width="44" height="60" rx="7" fill="#f0f2fc"/>
+  <rect x="76" y="22" width="40" height="60" rx="7" fill="#ffffff"/>
+  <rect x="82" y="30" width="28" height="3.5" rx="1.75" fill="#eef0f4"/>
+  <rect x="82" y="37.5" width="22" height="3.5" rx="1.75" fill="#e6e9fb"/>
+  <rect x="82" y="45" width="30" height="5.5" rx="2.75" fill="#5b6bf0"/>
+  <rect x="82" y="54" width="26" height="3.5" rx="1.75" fill="#eef0f4"/>
+  <rect x="82" y="61.5" width="20" height="3.5" rx="1.75" fill="#e6e9fb"/>
+  <rect x="82" y="69" width="24" height="3.5" rx="1.75" fill="#eef0f4"/>
+  <!-- floating accents -->
+  <path d="M111 7 l1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8 Z" fill="#f5b50a"/>
+  <path d="M61 24 v6 M58 27 h6" stroke="#5b6bf0" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="24" cy="15" r="2" fill="#4453d6"/>
+  <circle cx="70" cy="76" r="1.6" fill="#f5b50a"/>
+</svg></div><h3>Always paste clean</h3><p>A copy from a dark-themed AI chat is stored as clean text — bold, italics and emojis kept; backgrounds and fonts dropped.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fmtClipGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b6bf0"/>
+      <stop offset="1" stop-color="#4453d6"/>
+    </linearGradient>
+  </defs>
+  <path d="M21 52 C18 26 42 11 70 13 C99 15 122 28 121 54 C120 79 98 92 66 91 C38 90 24 76 21 52 Z" fill="#e6e9fb"/>
+  <path d="M46 46 Q34 44 27.5 34.5" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M84 46 Q96 44 101.5 34" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <rect x="49.5" y="35.5" width="38" height="40" rx="7" fill="#dfe3f8"/>
+  <path d="M65 71 L65 77.5" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <rect x="46" y="32" width="38" height="40" rx="7" fill="#ffffff"/>
+  <rect x="55.5" y="26.5" width="19" height="9.5" rx="4" fill="url(#fmtClipGrad)"/>
+  <circle cx="65" cy="31" r="1.8" fill="#ffffff"/>
+  <rect x="53" y="45" width="24" height="4" rx="2" fill="#5b6bf0"/>
+  <rect x="53" y="53" width="17" height="4" rx="2" fill="#eef0f4"/>
+  <rect x="53" y="61" width="21" height="4" rx="2" fill="#eef0f4"/>
+  <rect x="13" y="15" width="22" height="15" rx="6" fill="#5b6bf0"/>
+  <path d="M19 29.5 L17 35 L26 29.5 Z" fill="#5b6bf0"/>
+  <rect x="18" y="19.5" width="12" height="2.5" rx="1.25" fill="#ffffff"/>
+  <rect x="18" y="24" width="8" height="2.5" rx="1.25" fill="#ffffff"/>
+  <rect x="97.5" y="17.5" width="24" height="16" rx="4" fill="#dfe3f8"/>
+  <rect x="95" y="15" width="24" height="16" rx="4" fill="#ffffff" stroke="#5b6bf0" stroke-width="2.5"/>
+  <path d="M98 19 L107 25.5 L116 19" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="54.5" y="79.5" width="26" height="15" rx="5" fill="#dfe3f8"/>
+  <rect x="52" y="77" width="26" height="15" rx="5" fill="#4453d6"/>
+  <path d="M60.5 81 L57 84.5 L60.5 88" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M69.5 81 L73 84.5 L69.5 88" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M66.8 80.5 L63.2 88.5" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M103.5 52 L108.5 52 M106 49.5 L106 54.5" stroke="#f5b50a" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="31" cy="70" r="2" fill="#f5b50a"/>
+  <circle cx="97" cy="76" r="1.6" fill="#5b6bf0"/>
+</svg></div><h3>Copy for where it's going</h3><p>One click reformats a clip for WhatsApp, rich email, Markdown, or a fenced code block (<kbd>⌘↩</kbd>) for AI chats.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Encrypted credentials">
+  <!-- organic background blob, off-center -->
+  <path d="M24 38 C32 17 56 9 80 10 C106 11 122 26 122 49 C122 72 103 87 70 90 C38 93 13 81 12 61 C11.5 52 18 46 24 38 Z" fill="#e6e9fb"/>
+  <!-- pale shield behind, two-tone -->
+  <path d="M83 13 L107 21.5 V32 C107 45 97.5 54.5 83 61 C68.5 54.5 59 45 59 32 V21.5 Z" fill="#ffffff"/>
+  <path d="M83 13 L107 21.5 V32 C107 45 97.5 54.5 83 61 Z" fill="#f0f2fc"/>
+  <!-- flat offset shadow: card + lock silhouettes -->
+  <g fill="#dfe3f8">
+    <rect x="17.5" y="53.5" width="92" height="26" rx="8"/>
+    <path d="M79 35.5 V28.5 a8.5 8.5 0 0 1 17 0 V35.5 h-4.5 V28.5 a4 4 0 0 0 -8 0 V35.5 Z"/>
+    <rect x="75.5" y="35.5" width="24" height="20" rx="5"/>
+  </g>
+  <!-- clip row card -->
+  <rect x="14" y="50" width="92" height="26" rx="8" fill="#ffffff"/>
+  <!-- key chip -->
+  <rect x="21" y="56.5" width="13" height="13" rx="4" fill="#5b6bf0"/>
+  <circle cx="25.5" cy="62" r="3.1" fill="#ffffff"/>
+  <circle cx="25.5" cy="62" r="1.4" fill="#5b6bf0"/>
+  <rect x="27.5" y="60.8" width="5.5" height="2.4" rx="1.2" fill="#ffffff"/>
+  <rect x="30.6" y="62.6" width="1.8" height="2.8" rx="0.9" fill="#ffffff"/>
+  <!-- masked password dots -->
+  <circle cx="42" cy="63" r="2.8" fill="#2f3a8f"/>
+  <circle cx="51" cy="63" r="2.8" fill="#2f3a8f"/>
+  <circle cx="60" cy="63" r="2.8" fill="#2f3a8f"/>
+  <circle cx="69" cy="63" r="2.8" fill="#2f3a8f"/>
+  <rect x="79" y="60.8" width="20" height="4.5" rx="2.25" fill="#eef0f4"/>
+  <!-- gold padlock sitting on the row -->
+  <path d="M75.5 32 V25 a8.5 8.5 0 0 1 17 0 V32 h-4.5 V25 a4 4 0 0 0 -8 0 V32 Z" fill="#4453d6"/>
+  <rect x="72" y="32" width="24" height="20" rx="5" fill="#f5b50a"/>
+  <circle cx="84" cy="40" r="2.8" fill="#1a1d26"/>
+  <rect x="82.8" y="41" width="2.4" height="5.6" rx="1.2" fill="#1a1d26"/>
+  <!-- floating accents -->
+  <path d="M29 28 h6 M32 25 v6" stroke="#f5b50a" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="48" cy="20" r="2.2" fill="#5b6bf0"/>
+  <circle cx="114" cy="67" r="1.8" fill="#4453d6"/>
+</svg></div><h3>Encrypted credentials</h3><p>Tokens and API keys are auto-detected, shown masked, encrypted at rest (AES-256-GCM) and never auto-pasted.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <defs>
+    <linearGradient id="favTag" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b6bf0"/>
+      <stop offset="1" stop-color="#4453d6"/>
+    </linearGradient>
+  </defs>
+  <!-- organic background blob, off-center -->
+  <path d="M18 52 C16 28 40 12 70 14 C102 16 122 32 120 56 C118 76 96 88 62 86 C34 84 20 72 18 52 Z" fill="#e6e9fb"/>
+  <!-- flat offset shadow of the clip row -->
+  <rect x="26" y="40" width="88" height="36" rx="9" fill="#dfe3f8"/>
+  <!-- clip row card -->
+  <rect x="22" y="36" width="88" height="36" rx="9" fill="#ffffff"/>
+  <rect x="32" y="46" width="30" height="5" rx="2.5" fill="#5b6bf0"/>
+  <rect x="32" y="55.5" width="20" height="5" rx="2.5" fill="#e6e9fb"/>
+  <!-- gold star with subtle burst -->
+  <path d="M92 44 L94.47 50.6 L101.51 50.91 L95.99 55.3 L97.88 62.09 L92 58.2 L86.12 62.09 L88.01 55.3 L82.49 50.91 L89.53 50.6 Z" fill="#f5b50a" stroke="#f5b50a" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M92 41 L92 38.5 M100.5 45 L102.6 42.9 M83.5 45 L81.4 42.9" stroke="#f5b50a" stroke-width="2" stroke-linecap="round"/>
+  <!-- name-tag label pinned on the row corner -->
+  <g transform="rotate(-8 42 32)">
+    <path d="M24 32 L32 25 L55 25 Q60 25 60 30 L60 34 Q60 39 55 39 L32 39 Z" fill="url(#favTag)"/>
+    <path d="M24 32 L32 25 L32 39 Z" fill="#4453d6"/>
+    <circle cx="31.5" cy="32" r="2" fill="#ffffff"/>
+    <rect x="37" y="29.8" width="15" height="4.4" rx="2.2" fill="#ffffff"/>
+  </g>
+  <!-- floating accents -->
+  <path d="M112 14 L113.6 18.4 L118 20 L113.6 21.6 L112 26 L110.4 21.6 L106 20 L110.4 18.4 Z" fill="#5b6bf0"/>
+  <circle cx="19" cy="26" r="1.8" fill="#f5b50a"/>
+  <path d="M114 74 L120 74 M117 71 L117 77" stroke="#5b6bf0" stroke-width="2" stroke-linecap="round"/>
+</svg></div><h3>Favorites &amp; names</h3><p>Star the clips you reuse and name them — “Deploy script” beats guessing by first line.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <path d="M14 54 C12 34 30 18 58 16 C88 14 118 26 120 48 C122 68 106 86 74 88 C44 90 16 76 14 54 Z" fill="#e6e9fb"/>
+
+  <!-- flat offset shadow of main document + band -->
+  <g fill="#dfe3f8" transform="translate(3.5 3.5)">
+    <path d="M83 19 H101 L115 33 V73 Q115 79 109 79 H83 Q77 79 77 73 V25 Q77 19 83 19 Z"/>
+    <rect x="71" y="56" width="34" height="13" rx="3.5"/>
+  </g>
+
+  <!-- document -->
+  <path d="M83 19 H101 L115 33 V73 Q115 79 109 79 H83 Q77 79 77 73 V25 Q77 19 83 19 Z" fill="#5b6bf0"/>
+  <path d="M109 33 H115 V73 Q115 79 109 79 Z" fill="#4453d6"/>
+  <path d="M101 19 V33 H115 Z" fill="#2f3a8f"/>
+  <rect x="83" y="37" width="20" height="3.5" rx="1.75" fill="#ffffff"/>
+  <rect x="83" y="45" width="14" height="3.5" rx="1.75" fill="#e6e9fb"/>
+
+  <!-- PDF band -->
+  <rect x="71" y="56" width="34" height="13" rx="3.5" fill="#2f3a8f"/>
+  <rect x="79.4" y="59.5" width="3.8" height="6" rx="1.4" fill="#ffffff"/>
+  <rect x="86.1" y="59.5" width="3.8" height="6" rx="1.4" fill="#ffffff"/>
+  <rect x="92.8" y="59.5" width="3.8" height="6" rx="1.4" fill="#ffffff"/>
+
+  <!-- clip cards flying in -->
+  <g transform="rotate(-9 27 27)">
+    <rect x="16" y="20" width="26" height="18" rx="5" fill="#dfe3f8"/>
+    <rect x="14" y="18" width="26" height="18" rx="5" fill="#ffffff"/>
+    <rect x="17.5" y="21.5" width="5.5" height="5.5" rx="1.8" fill="#5b6bf0"/>
+    <rect x="25.5" y="22.8" width="11" height="2.8" rx="1.4" fill="#e6e9fb"/>
+    <rect x="17.5" y="30" width="18" height="3" rx="1.5" fill="#eef0f4"/>
+  </g>
+  <g transform="rotate(4 33 51)">
+    <rect x="22" y="44" width="26" height="18" rx="5" fill="#dfe3f8"/>
+    <rect x="20" y="42" width="26" height="18" rx="5" fill="#ffffff"/>
+    <rect x="23.5" y="45.5" width="5.5" height="5.5" rx="1.8" fill="#f5b50a"/>
+    <rect x="31.5" y="46.8" width="11" height="2.8" rx="1.4" fill="#e6e9fb"/>
+    <rect x="23.5" y="54" width="18" height="3" rx="1.5" fill="#eef0f4"/>
+  </g>
+  <g transform="rotate(-5 26 75)">
+    <rect x="15" y="68" width="26" height="18" rx="5" fill="#dfe3f8"/>
+    <rect x="13" y="66" width="26" height="18" rx="5" fill="#ffffff"/>
+    <rect x="16.5" y="69.5" width="5.5" height="5.5" rx="1.8" fill="#4453d6"/>
+    <rect x="24.5" y="70.8" width="11" height="2.8" rx="1.4" fill="#e6e9fb"/>
+    <rect x="16.5" y="78" width="18" height="3" rx="1.5" fill="#eef0f4"/>
+  </g>
+
+  <!-- motion paths converging -->
+  <path d="M43 27 C55 30 63 37 69 43.5" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M49 52 C57 51.5 63 50 70 48.5" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M42 73 C55 72 63 61 69 53.5" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M70.5 43.5 L76.5 48.5 L70.5 53.5 Z" fill="#2f3a8f"/>
+
+  <!-- floating accents -->
+  <circle cx="119" cy="14" r="2" fill="#f5b50a"/>
+  <path d="M60 13.5 v5 M57.5 16 h5" stroke="#5b6bf0" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M58 83 l1.4 2.6 2.6 1.4 -2.6 1.4 -1.4 2.6 -1.4 -2.6 -2.6 -1.4 2.6 -1.4 Z" fill="#f5b50a"/>
+</svg></div><h3>Bundle context</h3><p>Multi-select clips and combine them into a PDF or ZIP — a whole task's context in one upload.</p></div>
+      <div class="f"><div class="art"><svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gLang" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b6bf0"/>
+      <stop offset="1" stop-color="#4453d6"/>
+    </linearGradient>
+  </defs>
+  <path d="M12 54 C10 28 36 8 68 12 C98 15 124 32 120 60 C117 84 88 96 56 92 C28 89 14 78 12 54 Z" fill="#e6e9fb"/>
+  <circle cx="57.5" cy="56.5" r="27" fill="#dfe3f8"/>
+  <circle cx="54" cy="53" r="27" fill="#ffffff"/>
+  <path d="M54 26 A27 27 0 0 1 54 80 A20 27 0 0 0 54 26 Z" fill="#e6e9fb"/>
+  <circle cx="54" cy="53" r="27" fill="none" stroke="#5b6bf0" stroke-width="2.5"/>
+  <ellipse cx="54" cy="53" rx="11.5" ry="27" fill="none" stroke="#5b6bf0" stroke-width="2.5"/>
+  <line x1="28.5" y1="53" x2="79.5" y2="53" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M33 41.5 Q54 49 75 41.5" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M33 64.5 Q54 57 75 64.5" fill="none" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <rect x="81" y="65" width="30" height="18" rx="7.5" fill="#dfe3f8"/>
+  <path d="M95 79 L100 87 L104 79 Z" fill="#4453d6"/>
+  <rect x="78" y="62" width="30" height="18" rx="7.5" fill="#ffffff" stroke="#4453d6" stroke-width="2.5"/>
+  <rect x="84" y="67.5" width="15" height="3.5" rx="1.75" fill="#e6e9fb"/>
+  <rect x="84" y="73" width="10" height="3.5" rx="1.75" fill="#e6e9fb"/>
+  <rect x="89" y="21" width="34" height="20" rx="8" fill="#dfe3f8"/>
+  <path d="M93 35 L91 44 L102 36.5 Z" fill="#4453d6"/>
+  <rect x="86" y="18" width="34" height="20" rx="8" fill="url(#gLang)"/>
+  <rect x="92" y="23.5" width="18" height="3.5" rx="1.75" fill="#ffffff"/>
+  <rect x="92" y="29.5" width="12" height="3.5" rx="1.75" fill="#ffffff"/>
+  <circle cx="21" cy="25" r="3" fill="#f5b50a"/>
+  <path d="M26 74 L26 82 M22 78 L30 78" stroke="#5b6bf0" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="84" cy="13" r="2" fill="#4453d6"/>
+</svg></div><h3>8 languages</h3><p>English, Spanish, French, German, Italian, Portuguese, Chinese and Japanese — OCR reads your system's languages too.</p></div>
     </div>
   </div>
 </section>
