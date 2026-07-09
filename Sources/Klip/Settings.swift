@@ -217,7 +217,7 @@ final class Settings: ObservableObject {
             K.detectRem: true,
             K.transModel: "gpt-4o-mini-transcribe",
             K.geminiModel: "gemini-flash-latest",
-            K.transLang: "es",
+            K.transLang: "",   // auto-detect: forcing a language mistranscribes any other (UI defaults to en, so "es" was wrong on fresh installs; local installs seed their own via install.sh)
             K.transVocab: "",
             K.localModel: "small",   // best accuracy/speed balance on Apple Silicon (downloads ~480 MB once)
             K.aiProv: "local",   // on-device (WhisperKit) by default; cloud is opt-in (needs an API key)

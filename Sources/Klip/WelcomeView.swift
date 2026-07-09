@@ -15,7 +15,7 @@ struct WelcomeView: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 10) {   // tightened so the per-shortcut lines fit the fixed 580pt window
             if let logo = appLogo {
                 Image(nsImage: logo).resizable().aspectRatio(contentMode: .fit)
                     .frame(width: 68, height: 68)
@@ -24,7 +24,7 @@ struct WelcomeView: View {
             Text(L10n.t("welcome.tagline"))
                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
 
-            VStack(alignment: .leading, spacing: 13) {
+            VStack(alignment: .leading, spacing: 10) {
                 row("doc.on.clipboard", L10n.t("welcome.history.title"), L10n.t("welcome.history.body"))
                 row("lock.shield", L10n.t("welcome.privacy.title"), L10n.t("welcome.privacy.body"))
                 row("keyboard", L10n.t("welcome.shortcuts.title"), shortcutsLine)
@@ -43,8 +43,13 @@ struct WelcomeView: View {
     }
 
     private var shortcutsLine: String {
-        [settings.combo, settings.voiceCombo, settings.captureCombo, settings.uploadCombo]
-            .map { $0.displayString }.joined(separator: "   ·   ")
+        // One labeled line per shortcut (same labels as the menu/guide) instead of bare chords.
+        [(settings.combo, "menu.show"),
+         (settings.voiceCombo, "rec.record"),
+         (settings.captureCombo, "capture.annotate"),
+         (settings.textCaptureCombo, "menu.captureText"),
+         (settings.uploadCombo, "act.upload")]
+            .map { "\($0.displayString)  \(L10n.t($1))" }.joined(separator: "\n")
     }
 
     private func row(_ icon: String, _ title: String, _ body: String) -> some View {

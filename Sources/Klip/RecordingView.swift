@@ -9,6 +9,22 @@ struct RecordingView: View {
     var onClose: () -> Void
     var onOpenPreferences: () -> Void
 
+    /// Armed by the first Cancel/Esc on a long recording: the button reads "Discard?" until it auto-resets.
+    @State private var confirmDiscard = false
+
+    /// Long recordings (>10 s) need a second Cancel/Esc within ~3 s — one stray Esc shouldn't
+    /// destroy minutes of audio. Short recordings keep the instant cancel. The Cancel buttons carry
+    /// .cancelAction, so the click and the Esc key both land here.
+    private func requestCancel() {
+        if recorder.duration > 10, !confirmDiscard {
+            confirmDiscard = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { confirmDiscard = false }
+        } else {
+            confirmDiscard = false
+            onCancel()
+        }
+    }
+
     var body: some View {
         VStack(spacing: 16) { content }
             .frame(width: 360, height: 320)
@@ -29,7 +45,10 @@ struct RecordingView: View {
                     Button(L10n.t("rec.continue.recording")) { recorder.continueRecording() }
                         .keyboardShortcut(.defaultAction)
                     HStack(spacing: 12) {
-                        Button(L10n.t("common.cancel"), action: onCancel).keyboardShortcut(.cancelAction)
+                        Button(confirmDiscard ? L10n.t("rec.discard.confirm") : L10n.t("common.cancel"),
+                               action: requestCancel)
+                            .keyboardShortcut(.cancelAction)
+                            .tint(confirmDiscard ? .red : nil)
                         Button(L10n.t("rec.stop"), action: onStop)
                     }
                 }.padding()
@@ -45,8 +64,12 @@ struct RecordingView: View {
                         .monospacedDigit()
                     levelBars
                     HStack(spacing: 12) {
-                        Button(action: onCancel) { Label(L10n.t("common.cancel"), systemImage: "xmark") }
-                            .keyboardShortcut(.cancelAction)
+                        Button(action: requestCancel) {
+                            Label(confirmDiscard ? L10n.t("rec.discard.confirm") : L10n.t("common.cancel"),
+                                  systemImage: confirmDiscard ? "trash" : "xmark")
+                        }
+                        .keyboardShortcut(.cancelAction)
+                        .tint(confirmDiscard ? .red : nil)
                         Button(action: onStop) {
                             Label(L10n.t("rec.stop"), systemImage: "stop.fill")
                         }

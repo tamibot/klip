@@ -56,7 +56,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     private func buildPanel() {
-        recorder.onVoiceNoteStarted = { [weak self] fn, dur in self?.manager.beginVoiceNote(audioFileName: fn, duration: dur) }
+        recorder.onVoiceNoteStarted = { [weak self] fn, dur, autoCopy in self?.manager.beginVoiceNote(audioFileName: fn, duration: dur, allowAutoCopy: autoCopy) }
         recorder.onVoiceNoteTranscribed = { [weak self] id, text in self?.manager.finishVoiceNote(id: id, text: text) }
         recorder.onVoiceNoteDuration = { [weak self] id, dur in self?.manager.setVoiceNoteDuration(id: id, duration: dur) }
         recorder.onVoiceNoteFailed = { [weak self] id in self?.manager.failVoiceNote(id: id) }
@@ -77,6 +77,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             onVoiceRecord: { [weak self] in self?.toggleVoiceRecording() },
             onShowGuide: { [weak self] in self?.showGuide() },
             onRename: { [weak self] item in self?.renameItem(item) },
+            onDelete: { [weak self] item in self?.confirmDelete(item) },
             onRetryTranscription: { [weak self] item in self?.retryTranscription(item) },
             onSaveAsFile: { [weak self] item in self?.saveTextAsFile(item) },
             onCopyAsCode: { [weak self] item in self?.copyAsCode(of: item) },
@@ -191,9 +192,19 @@ final class PanelController: NSObject, NSWindowDelegate {
             if recorder.finishing {
                 return nil   // a stop is finalizing: let it finish — don't cancel (that would delete the note)
             } else if recorder.state == .recording {
+                // Long recordings are real work: route Esc to the popup's own confirm instead of nuking
+                // >10s of dictation from a different surface (the popup shows the Discard? guard).
+                if MainActor.assumeIsolated({ recorder.duration }) > 10 { return nil }
                 MainActor.assumeIsolated { recorder.cancel() }   // aborts the recording, doesn't close
-            } else if !recorder.isRecording {
-                hide(restoreFocus: true)                         // don't close while transcribing
+            } else if !recorder.isRecording {                    // don't close while transcribing
+                // Layered back-out: exit multi-select first, then clear the search, then close.
+                if selection.selecting {
+                    selection.selecting = false      // HistoryView observes this and drops the batch
+                } else if selection.searchHasText {
+                    selection.clearSearchToken &+= 1 // HistoryView clears the search field
+                } else {
+                    hide(restoreFocus: true)
+                }
             }
             return nil
         }
@@ -209,6 +220,18 @@ final class PanelController: NSObject, NSWindowDelegate {
            let id = selection.selectedID, let item = manager.items.first(where: { $0.id == id }),
            item.kind == .text, item.isCredential != true, !(item.text?.isEmpty ?? true) {   // never auto-paste a secret
             copyAsCode(of: item); return nil
+        }
+        // ⌘⌫ → delete the selected item (confirming first if it has media, like the row's menu).
+        // Deferred: don't start a modal alert loop inside the event-monitor callback.
+        if flags == .command, event.keyCode == 51,
+           let id = selection.selectedID, let item = manager.items.first(where: { $0.id == id }) {
+            DispatchQueue.main.async { [weak self] in self?.confirmDelete(item) }
+            return nil
+        }
+        // ⌘⇧F → toggle favorite (star) on the selected item.
+        if flags == [.command, .shift], event.keyCode == 3,
+           let id = selection.selectedID, let item = manager.items.first(where: { $0.id == id }) {
+            manager.togglePin(item); return nil
         }
         if flags.contains(.command) { return event }   // don't break ⌘A/⌘C/⌘V in the search field
 
@@ -378,7 +401,7 @@ final class PanelController: NSObject, NSWindowDelegate {
                 DispatchQueue.main.async {
                     self.manager.resumeMonitoring()
                     self.exportInFlight = false
-                    if let err { self.showAlert(L10n.t("export.empty.title"), err.localizedDescription) }   // don't fail silently
+                    if let err { self.showAlert(L10n.t("export.fail.title"), err.localizedDescription) }   // don't fail silently
                 }
             }
         }
@@ -435,7 +458,15 @@ final class PanelController: NSObject, NSWindowDelegate {
                 onStop: { [weak self] in MainActor.assumeIsolated { self?.recorder.stop() } },
                 onCancel: { [weak self] in MainActor.assumeIsolated { self?.recorder.cancel() } },
                 onClose: { [weak self] in self?.closeRecordingPopup() },
-                onOpenPreferences: { [weak self] in self?.onOpenPreferences?() }
+                onOpenPreferences: { [weak self] in
+                    guard let self else { return }
+                    // The popup closes right after this (recorder.reset → onClose) and would hand focus
+                    // back to the previous app, leaving Preferences BEHIND it. Drop the restore target
+                    // and activate ourselves so Preferences lands in front.
+                    self.previousApp = nil
+                    self.onOpenPreferences?()
+                    NSApp.activate(ignoringOtherApps: true)
+                }
             )
             let p = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 320),
                                  styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -571,6 +602,28 @@ final class PanelController: NSObject, NSWindowDelegate {
         guard manager.items.first(where: { $0.id == item.id })?.transcribing != true else { return }
         guard AIProvider.hasKey else { onOpenPreferences?(); return }   // no key: offer to set it up
         MainActor.assumeIsolated { recorder.retry(itemID: item.id, audioFileName: af) }
+    }
+
+    /// Deletes an item. Clips with an image/audio file ask for confirmation first (the file on disk
+    /// is removed permanently); plain text clips are deleted immediately.
+    private func confirmDelete(_ item: ClipboardItem) {
+        guard item.imageFileName != nil || item.audioFileName != nil else { manager.delete(item); return }
+        let alert = NSAlert()
+        alert.messageText = L10n.t("delete.confirm.title")
+        alert.informativeText = L10n.t("delete.confirm.info")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L10n.t("common.delete")).hasDestructiveAction = true
+        let cancel = alert.addButton(withTitle: L10n.t("common.cancel"))
+        cancel.keyEquivalent = "\u{1b}"   // Esc cancels (not assigned automatically for a localized title)
+        isRenaming = true   // same modal guard as renameItem: don't auto-close the panel behind the alert
+        NSApp.activate(ignoringOtherApps: true)
+        let resp = alert.runModal()
+        isRenaming = false
+        if resp == .alertFirstButtonReturn { manager.delete(item) }
+        if panel.isVisible {
+            panel.makeKeyAndOrderFront(nil)
+            selection.focusToken &+= 1   // restore focus to the search field (without clearing search/filter)
+        }
     }
 
     /// Dialog to set (or change) any item's name. Searchable afterwards.

@@ -27,6 +27,13 @@ final class RecorderNSView: NSView {
     var current = KeyCombo.defaultCombo { didSet { needsDisplay = true } }
     private var recording = false { didSet { needsDisplay = true } }
 
+    // Losing focus (clicking another control / another recorder taking first responder) must exit
+    // the "type shortcut…" state — otherwise the field looks armed while keys go nowhere.
+    override func resignFirstResponder() -> Bool {
+        recording = false
+        return super.resignFirstResponder()
+    }
+
     override var acceptsFirstResponder: Bool { true }
 
     override func mouseDown(with event: NSEvent) {

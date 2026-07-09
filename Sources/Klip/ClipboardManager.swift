@@ -266,12 +266,14 @@ final class ClipboardManager: ObservableObject {
 
     /// Creates the voice-note item with its audio ("Transcribing…" placeholder) and returns its id.
     @discardableResult
-    func beginVoiceNote(audioFileName: String?, duration: Double?) -> UUID {
+    func beginVoiceNote(audioFileName: String?, duration: Double?, allowAutoCopy: Bool = true) -> UUID {
         let item = ClipboardItem(kind: .text, preview: Self.voiceTranscribing,
                                  isVoiceNote: true, transcribing: true,
                                  audioFileName: audioFileName, audioDuration: duration)
         items.insert(item, at: 0)
-        voicePasteGuards[item.id] = NSPasteboard.general.changeCount
+        // No guard registered → finishVoiceNote won't auto-copy (multi-file uploads: each finished file
+        // would silently rewrite the clipboard).
+        if allowAutoCopy { voicePasteGuards[item.id] = NSPasteboard.general.changeCount }
         trimAndSave()
         return item.id
     }
@@ -337,6 +339,9 @@ final class ClipboardManager: ObservableObject {
         if !clean.isEmpty, !isCred, canPaste {   // never auto-paste a detected secret
             copyToPasteboard(item)     // only if nothing changed the pasteboard
             rebaselineVoiceGuards()    // OUR own paste is not a user clobber: keep sibling notes auto-pasteable
+            // The popup closed on stop and the user is waiting in another app: a soft cue says
+            // "the transcript is on your clipboard now" without any window.
+            NSSound(named: "Pop")?.play()
         }
     }
 
@@ -352,6 +357,7 @@ final class ClipboardManager: ObservableObject {
     /// silently deleting it, so the user knows what happened and can recover or remove it.
     func failVoiceNote(id: UUID) {
         voicePasteGuards.removeValue(forKey: id)
+        NSSound.beep()   // the popup is long gone: without a cue the user pastes stale clipboard content
         guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
         items[idx].text = nil
         items[idx].transcribing = false

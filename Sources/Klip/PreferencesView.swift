@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 import UniformTypeIdentifiers
 
 /// ObservableObject bridge for an API key (OpenAI or Gemini), stored in a local 0600 file.
@@ -57,6 +58,9 @@ struct PreferencesView: View {
     var onCaptureHotKeyChange: (KeyCombo) -> Void
     var onUploadHotKeyChange: (KeyCombo) -> Void
     var onTextCaptureHotKeyChange: (KeyCombo) -> Void
+    // Kept for the AppDelegate wiring but intentionally never called: trimming on every
+    // Stepper click deleted history (and media) per click. History self-trims on the next
+    // capture via trimAndSave, so the new limit applies as new items arrive.
     var onMaxItemsChange: () -> Void
 
     @StateObject private var apiKey = APIKeyModel(.openai)
@@ -93,6 +97,11 @@ struct PreferencesView: View {
         .onAppear {
             apiKey.refresh(); geminiKey.refresh()
             launchAtLogin = LoginItem.shared.isEnabledOrPending
+            accessibilityGranted = Paster.hasAccessibilityPermission
+        }
+        // Granting Accessibility happens in System Settings, which doesn't notify us; re-check
+        // when the user comes back and our window becomes key so the warning clears itself.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             accessibilityGranted = Paster.hasAccessibilityPermission
         }
     }
@@ -144,20 +153,21 @@ struct PreferencesView: View {
                 }
                 Stepper(String(format: L10n.t("prefs.maxItems"), settings.maxItems),
                         value: $settings.maxItems, in: 20...1000, step: 10)
-                    .onChange(of: settings.maxItems) { _, _ in onMaxItemsChange() }
+                Text(L10n.t("prefs.maxItems.info"))
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section(L10n.t("prefs.shortcuts")) {
                 HStack { Text(L10n.t("prefs.sc.show")); Spacer()
-                    HotKeyField(combo: $settings.combo, onChange: onHotKeyChange) }
+                    FilteredHotKeyField(combo: $settings.combo, onChange: onHotKeyChange) }
                 HStack { Text(L10n.t("prefs.sc.voice")); Spacer()
-                    HotKeyField(combo: $settings.voiceCombo, onChange: onVoiceHotKeyChange) }
+                    FilteredHotKeyField(combo: $settings.voiceCombo, onChange: onVoiceHotKeyChange) }
                 HStack { Text(L10n.t("prefs.sc.capture")); Spacer()
-                    HotKeyField(combo: $settings.captureCombo, onChange: onCaptureHotKeyChange) }
+                    FilteredHotKeyField(combo: $settings.captureCombo, onChange: onCaptureHotKeyChange) }
                 HStack { Text(L10n.t("prefs.sc.captureText")); Spacer()
-                    HotKeyField(combo: $settings.textCaptureCombo, onChange: onTextCaptureHotKeyChange) }
+                    FilteredHotKeyField(combo: $settings.textCaptureCombo, onChange: onTextCaptureHotKeyChange) }
                 HStack { Text(L10n.t("prefs.sc.upload")); Spacer()
-                    HotKeyField(combo: $settings.uploadCombo, onChange: onUploadHotKeyChange) }
+                    FilteredHotKeyField(combo: $settings.uploadCombo, onChange: onUploadHotKeyChange) }
                 Text(L10n.t("prefs.sc.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -251,6 +261,20 @@ struct PreferencesView: View {
             }
             }
 
+            // Switching provider hides the other provider's key section; keep its stored
+            // key visible (and deletable) so it isn't stranded on disk with no UI.
+            if (settings.aiProvider != "openai" && apiKey.isConfigured)
+                || (settings.aiProvider != "gemini" && geminiKey.isConfigured) {
+                Section {
+                    if settings.aiProvider != "openai" && apiKey.isConfigured {
+                        storedKeyRow("OpenAI", apiKey)
+                    }
+                    if settings.aiProvider != "gemini" && geminiKey.isConfigured {
+                        storedKeyRow("Gemini", geminiKey)
+                    }
+                }
+            }
+
             Section(L10n.t("prefs.privacy.section")) {
                 Toggle(L10n.t("prefs.privacy.toggle"), isOn: $settings.ignoreSensitive)
                 Text(L10n.t("prefs.privacy.info"))
@@ -301,6 +325,17 @@ struct PreferencesView: View {
         }
     }
 
+    /// Compact "<provider> key stored · Delete" row for a provider whose section is hidden.
+    private func storedKeyRow(_ name: String, _ model: APIKeyModel) -> some View {
+        HStack {
+            Text(String(format: L10n.t("prefs.key.stored"), name))
+                .font(.caption).foregroundStyle(.secondary)
+            Spacer()
+            Button(L10n.t("common.delete"), role: .destructive) { model.delete() }
+                .font(.caption)
+        }
+    }
+
     @ViewBuilder
     private func keyStatus(_ model: APIKeyModel) -> some View {
         HStack(spacing: 6) {
@@ -337,6 +372,40 @@ struct PreferencesView: View {
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let url = panel.url, let id = Bundle(url: url)?.bundleIdentifier {
             settings.addExcludedApp(id)
+        }
+    }
+}
+
+/// HotKeyField variant whose suggestions menu hides combos already used by Klip's other
+/// shortcuts — picking one of those was a beep dead-end (the recorder can't register a
+/// duplicate). Lives here because only Preferences knows all five current combos;
+/// HotKeyField in KeyRecorderView.swift stays generic (and is now unused).
+private struct FilteredHotKeyField: View {
+    @Binding var combo: KeyCombo
+    var onChange: (KeyCombo) -> Void
+
+    /// Combos held by the OTHER shortcuts (this field's own value is filtered out).
+    private var taken: [KeyCombo] {
+        let s = Settings.shared
+        return [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo]
+            .filter { $0 != combo }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            KeyRecorderView(combo: $combo, onChange: onChange)
+                .frame(width: 150, height: 28)
+            Menu {
+                ForEach(Array(KeyCombo.suggestions.filter { !taken.contains($0) }.enumerated()),
+                        id: \.offset) { _, c in
+                    Button(c.displayString) { combo = c; onChange(c) }
+                }
+            } label: {
+                Image(systemName: "chevron.down.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 28)
+            .help(L10n.t("hotkey.suggestions"))
         }
     }
 }

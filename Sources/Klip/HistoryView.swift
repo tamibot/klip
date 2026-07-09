@@ -35,6 +35,7 @@ struct HistoryView: View {
     var onVoiceRecord: () -> Void
     var onShowGuide: () -> Void
     var onRename: (ClipboardItem) -> Void
+    var onDelete: (ClipboardItem) -> Void
     var onRetryTranscription: (ClipboardItem) -> Void
     var onSaveAsFile: (ClipboardItem) -> Void
     var onCopyAsCode: (ClipboardItem) -> Void
@@ -109,7 +110,7 @@ struct HistoryView: View {
         .frame(minWidth: 420, minHeight: 460)
         .background(Color.clear)
         .onAppear { syncVisible(); searchFocused = true }
-        .onChange(of: search) { _, _ in syncVisible() }
+        .onChange(of: search) { _, newValue in selection.searchHasText = !newValue.isEmpty; syncVisible() }
         .onChange(of: filter) { _, _ in syncVisible() }
         .onChange(of: collectionFilter) { _, _ in syncVisible() }
         .onChange(of: manager.items) { _, _ in
@@ -128,6 +129,12 @@ struct HistoryView: View {
             syncVisible()
         }
         .onChange(of: selecting) { _, newValue in selection.selecting = newValue }
+        // Esc in multi-select: the controller flips selection.selecting off; drop the batch here.
+        .onChange(of: selection.selecting) { _, newValue in
+            if !newValue && selecting { selecting = false; selectedBatch = [] }
+        }
+        // Esc with text in the search field: clear it (second back-out layer, before closing).
+        .onChange(of: selection.clearSearchToken) { _, _ in search = ""; searchFocused = true }
         .onChange(of: selection.openToken) { _, _ in
             search = ""; filter = .all; collectionFilter = nil
             selecting = false; selectedBatch = []
@@ -287,7 +294,8 @@ struct HistoryView: View {
                                 manager: manager,
                                 onPick: onPick, onSaveImage: onSaveImage,
                                 onCopyMarkdown: onCopyMarkdown, onOCR: { runOCR(item) },
-                                onRename: onRename, onRetryTranscription: onRetryTranscription,
+                                onRename: onRename, onDelete: onDelete,
+                                onRetryTranscription: onRetryTranscription,
                                 onSaveAsFile: onSaveAsFile, onCopyAsCode: onCopyAsCode,
                                 searchTerm: search,
                                 selecting: selecting, isChecked: selectedBatch.contains(item.id),
@@ -384,6 +392,7 @@ struct ItemRow: View {
     var onCopyMarkdown: (ClipboardItem) -> Void
     var onOCR: () -> Void
     var onRename: (ClipboardItem) -> Void
+    var onDelete: (ClipboardItem) -> Void
     var onRetryTranscription: (ClipboardItem) -> Void
     var onSaveAsFile: (ClipboardItem) -> Void
     var onCopyAsCode: (ClipboardItem) -> Void
@@ -394,6 +403,7 @@ struct ItemRow: View {
 
     @State private var hovering = false
     @State private var revealed = false
+    @State private var justCopied = false
 
     private var isCredential: Bool { item.isCredential == true }
     private var hasText: Bool { !(item.text?.isEmpty ?? true) }
@@ -569,12 +579,12 @@ struct ItemRow: View {
                     if hasText { VoicePlayButton(fileName: af, large: false) }
                     else if !isTranscribing { iconButton("arrow.clockwise", L10n.t("voice.retry")) { onRetryTranscription(item) } }
                 }
-                if hasText { iconButton("doc.on.doc", L10n.t("row.copy")) { onPick(item) } }
+                if hasText { copyButton }
             } else if isCredential {
                 iconButton(revealed ? "eye.slash" : "eye", L10n.t("row.reveal")) { revealed.toggle() }
-                iconButton("doc.on.doc", L10n.t("row.copy")) { onPick(item) }
+                copyButton
             } else {
-                iconButton("doc.on.doc", L10n.t("row.copy")) { onPick(item) }
+                copyButton
             }
             // Star: a filterable mark — it does NOT float the item to the top.
             iconButton(item.pinned ? "star.fill" : "star", L10n.t(item.pinned ? "row.unpin" : "row.pin")) { manager.togglePin(item) }
@@ -611,7 +621,17 @@ struct ItemRow: View {
         }
         Divider()
         Button { onRename(item) } label: { Label(L10n.t("row.rename"), systemImage: "tag") }
-        Button(role: .destructive) { manager.delete(item) } label: { Label(L10n.t("row.delete"), systemImage: "trash") }
+        Button(role: .destructive) { onDelete(item) } label: { Label(L10n.t("row.delete"), systemImage: "trash") }
+    }
+
+    /// Copy WITHOUT pasting or closing (unlike the row click / Return): the panel stays open and
+    /// the icon flashes a checkmark as feedback.
+    private var copyButton: some View {
+        iconButton(justCopied ? "checkmark" : "doc.on.doc", L10n.t("row.copyonly")) {
+            manager.copyToPasteboard(item)
+            justCopied = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { justCopied = false }
+        }
     }
 
     private func iconButton(_ symbol: String, _ help: String, _ action: @escaping () -> Void) -> some View {

@@ -277,7 +277,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // even the default combo), tell the user instead of leaving a silently-inert shortcut (deferred so it
         // doesn't block launch).
         if hotKey == nil || voiceHotKey == nil {
-            Task { @MainActor in NSSound.beep(); self.showAlert(L10n.t("act.prefs"), L10n.t("hotkey.inuse")) }
+            // Here the combo is owned by ANOTHER app, not by a Klip shortcut → dedicated wording.
+            Task { @MainActor in NSSound.beep(); self.showAlert(L10n.t("hotkey.dead.title"), L10n.t("hotkey.dead.info")) }
         }
         // The suggestion-recovery loops above can land one shortcut on a sibling's combo (they don't all
         // exclude every sibling). Run dedup once more — now it re-registers what it moves — so no two
@@ -423,6 +424,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         manager.copyToPasteboard(item)   // lands on the pasteboard, ready to paste
+        // Auto-paste like the panel does. No target: the menu closing already restored focus to the
+        // previous app, so just send ⌘V. Never auto-paste credentials — same policy as PanelController.pick.
+        if item.isCredential != true, Settings.shared.autoPaste, Paster.hasAccessibilityPermission {
+            Paster.paste(into: nil)
+        }
     }
 
     @objc private func showPanel() { panelController.show() }
@@ -461,6 +467,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func enableAutoPaste() {
         if Paster.ensureAccessibilityPermission(prompt: true) {
+            Settings.shared.autoPaste = true   // make the "enabled" claim true even if the pref was off
             showAlert(L10n.t("autopaste.enabled.title"), L10n.t("autopaste.enabled.info"))
         } else {
             // Not granted yet: the system dialog opened asynchronously. Tell the user what to do, instead

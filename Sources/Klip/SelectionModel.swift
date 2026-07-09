@@ -12,6 +12,11 @@ final class SelectionModel: ObservableObject {
     @Published var openToken: Int = 0
     /// Incremented to return focus to the search field WITHOUT clearing search/filter (e.g. after renaming).
     @Published var focusToken: Int = 0
+    /// Incremented by the controller (Esc) to clear the search field without closing the panel.
+    @Published var clearSearchToken: Int = 0
+    /// Mirror of "the search field has text", synced by HistoryView — lets the Esc handler
+    /// decide between clearing the search and hiding the panel. Not @Published: no view observes it.
+    var searchHasText: Bool = false
     /// true while the panel is in batch multi-selection mode: the keyboard (Return / ⌘1-9) must NOT
     /// paste or close the panel (it would break the batch the user is assembling). Synced by HistoryView.
     @Published var selecting: Bool = false

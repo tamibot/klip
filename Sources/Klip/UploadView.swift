@@ -13,6 +13,8 @@ struct UploadView: View {
     var onCopy: (String) -> Void
 
     @State private var hovering = false
+    /// true after a drop with no accepted file: shows the "unsupported format" caption under the drop zone.
+    @State private var dropRejected = false
     /// nil = follow the global/platform language (stays reactive); set = override for this upload session.
     @State private var languageOverride: String?
     private var effectiveLanguage: String { languageOverride ?? settings.transcriptionLanguage }
@@ -39,6 +41,10 @@ struct UploadView: View {
             default:
                 Text(L10n.t("upload.title")).font(.headline)
                 dropZone
+                if dropRejected {
+                    Text(L10n.t("upload.unsupported"))
+                        .font(.caption).foregroundStyle(.orange).multilineTextAlignment(.center)
+                }
                 languagePicker
                 Text(L10n.t("upload.info"))
                     .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -89,6 +95,13 @@ struct UploadView: View {
                 if r.text == nil && !r.failed {
                     ProgressView().controlSize(.small)
                 } else if r.failed {
+                    // Retryable rows: audio kept in the store, or a real video whose source is still readable.
+                    if r.audioFileName != nil || r.sourceURL != nil {
+                        Button { recorder.retryUpload(r) } label: {
+                            Image(systemName: "arrow.clockwise").font(.system(size: 11))
+                        }
+                        .buttonStyle(.borderless).help(L10n.t("voice.retry"))
+                    }
                     Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundStyle(.orange)
                 } else {
                     Button { copyText(r.text ?? "") } label: {
@@ -134,7 +147,7 @@ struct UploadView: View {
                 .foregroundStyle(hovering ? Color.accentColor : .secondary)
             Text(L10n.t("upload.drop")).font(.system(size: 14, weight: .medium))
             Text(L10n.t("upload.or")).font(.caption).foregroundStyle(.secondary)
-            Button(L10n.t("upload.choose")) { onChoose(effectiveLanguage) }
+            Button(L10n.t("upload.choose")) { dropRejected = false; onChoose(effectiveLanguage) }
         }
         .frame(maxWidth: .infinity).frame(height: 150)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(hovering ? 0.12 : 0.05)))
@@ -166,7 +179,14 @@ struct UploadView: View {
             // Accept audio (exts) and video (MediaAudioExtractor is the single source of truth for video, so the
             // drop filter and the file picker admit the same set); a video's audio is extracted before transcribing.
             let media = urls.filter { exts.contains($0.pathExtension.lowercased()) || MediaAudioExtractor.isVideo($0) }
-            if !media.isEmpty { onFiles(media, effectiveLanguage) }
+            if !media.isEmpty {
+                dropRejected = false
+                onFiles(media, effectiveLanguage)
+            } else if !urls.isEmpty {
+                // Everything dropped was unsupported: don't swallow it silently.
+                NSSound.beep()
+                dropRejected = true
+            }
         }
     }
 }

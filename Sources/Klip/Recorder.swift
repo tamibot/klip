@@ -19,6 +19,8 @@ struct UploadTranscription: Identifiable, Equatable {
     var text: String?       // filled in when the transcription finishes
     var failed: Bool = false
     var errorKey: String? = nil   // L10n key for a SPECIFIC failure (no audio track / DRM / too large); nil → generic
+    var audioFileName: String? = nil   // set when the note kept its audio (upload copy or audio-only container) → retryable
+    var sourceURL: URL? = nil          // original video URL (videos aren't stored) → a failed row can re-extract from it
 }
 
 /// Records a voice note to .m4a and transcribes it with OpenAI (not live: the whole note at once).
@@ -45,7 +47,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
     /// The audio is already saved: creates the voice note item (placeholder) and returns its id.
     /// `audioFileName` may be nil if the file could not be saved (the transcription is stored anyway).
-    var onVoiceNoteStarted: ((String?, Double?) -> UUID?)?
+    var onVoiceNoteStarted: ((String?, Double?, Bool) -> UUID?)?   // (audioFileName, duration, allowAutoCopy)
     /// Fills in the transcription on the already-created item.
     var onVoiceNoteTranscribed: ((UUID, String) -> Void)?
     /// Fills in the audio duration once read off the main thread (keeps the UI from freezing on bulk uploads).
@@ -260,7 +262,8 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
             let stored = isVideo ? nil : storage.importAudio(from: url)        // copies to audio/ (nil on failure)
             let transcribeURL = stored.map { storage.audioURL(for: $0) } ?? url
             enqueueTranscription(audioFileName: stored, transcribeURL: transcribeURL,
-                                 uploadName: url.lastPathComponent, language: language)
+                                 uploadName: url.lastPathComponent, language: language,
+                                 allowAutoCopy: urls.count == 1)   // a batch would rewrite the clipboard once per file
         }
     }
 
@@ -287,8 +290,8 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     /// Kicks off a background transcription: creates the placeholder item and fills it in when done.
     /// Doesn't touch `state` (only the counter), so it doesn't interfere with a new recording in progress.
     @MainActor
-    private func enqueueTranscription(audioFileName: String?, transcribeURL: URL, uploadName: String? = nil, language: String? = nil) {
-        let id = onVoiceNoteStarted?(audioFileName, nil)
+    private func enqueueTranscription(audioFileName: String?, transcribeURL: URL, uploadName: String? = nil, language: String? = nil, allowAutoCopy: Bool = true) {
+        let id = onVoiceNoteStarted?(audioFileName, nil, allowAutoCopy)
         // Reading the duration builds an AVAudioPlayer (parses the file) — do it off the main actor so
         // a bulk upload doesn't freeze the UI, then fill it in. The imminent transcription save persists it.
         if let id {
@@ -299,7 +302,9 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
             }
         }
         if let uploadName, let id {   // show this file's progress + result in the Upload window
-            uploadResults.insert(UploadTranscription(id: id, name: uploadName), at: 0)
+            // No stored audio means a real video: keep its source URL so a failed row can retry (re-extract).
+            uploadResults.insert(UploadTranscription(id: id, name: uploadName, audioFileName: audioFileName,
+                                                     sourceURL: audioFileName == nil ? transcribeURL : nil), at: 0)
             // List cap: prefer evicting a COMPLETED/failed entry (never an in-flight one — that
             // would orphan its fillUploadResult). If ALL are still in flight, a hard cap drops the
             // oldest so the list doesn't grow unbounded.
@@ -316,6 +321,23 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     func retry(itemID: UUID, audioFileName: String) {
         onVoiceNoteRetrying?(itemID)
         transcribeInBackground(id: itemID, url: storage.audioURL(for: audioFileName))
+    }
+
+    /// Retries a failed Upload-window row in place: stored audio goes through the normal retry path;
+    /// a real video (deliberately not stored) is re-enqueued from its source URL, extracting the audio again.
+    /// fillUploadResult (called by transcribeInBackground) updates the same row when it finishes.
+    @MainActor
+    func retryUpload(_ r: UploadTranscription) {
+        guard let i = uploadResults.firstIndex(where: { $0.id == r.id }), uploadResults[i].failed else { return }
+        let row = uploadResults[i]
+        if let af = row.audioFileName, storage.audioExists(fileName: af) {
+            uploadResults[i].failed = false; uploadResults[i].errorKey = nil   // row shows the spinner again
+            retry(itemID: row.id, audioFileName: af)
+        } else if let src = row.sourceURL, FileManager.default.fileExists(atPath: src.path) {
+            uploadResults[i].failed = false; uploadResults[i].errorKey = nil
+            onVoiceNoteRetrying?(row.id)
+            transcribeInBackground(id: row.id, url: src)   // video: demuxes the audio track again
+        }
     }
 
     /// Core of the background transcription (shared by record, upload and retry). Doesn't touch `state`.
@@ -366,6 +388,8 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
                        (try? await AVURLAsset(url: url).loadTracks(withMediaType: .audio))?.isEmpty == false,
                        let stored = storage.importAudio(from: url) {
                         onVoiceNoteAudioStored?(id, stored)
+                        // Also remember it on the upload row so a failed row retries from the stored audio.
+                        if let j = uploadResults.firstIndex(where: { $0.id == id }) { uploadResults[j].audioFileName = stored }
                     }
                 } else {
                     mediaURL = url
