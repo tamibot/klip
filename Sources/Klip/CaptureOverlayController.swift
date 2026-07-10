@@ -39,9 +39,19 @@ final class CaptureOverlayController {
         }
         win.contentView = view
         win.setFrame(frame, display: true)
+        // Ease the overlay in instead of snapping the frozen frame onto the screen.
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        win.alphaValue = reduceMotion ? 1 : 0
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         win.makeFirstResponder(view)
+        if !reduceMotion {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.12
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                win.animator().alphaValue = 1
+            }
+        }
         self.window = win
 
         // Esc backup (keyCode 53) for when the contentView isn't first responder but Klip is still active.
@@ -78,8 +88,18 @@ final class CaptureOverlayController {
         guard !resolved else { return }
         resolved = true
         if let m = escMonitor { NSEvent.removeMonitor(m); escMonitor = nil }
-        window?.orderOut(nil)
+        let win = window
         window = nil
+        // A capture should feel instant (the flash already confirmed it): close immediately.
+        // A cancel eases out so the frozen frame doesn't just blink away.
+        if image == nil, let win, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.12
+                win.animator().alphaValue = 0
+            }, completionHandler: { win.orderOut(nil) })
+        } else {
+            win?.orderOut(nil)
+        }
         onComplete(image)
     }
 }
@@ -96,6 +116,14 @@ private final class CaptureOverlayView: NSView {
     private var shiftHeld = false               // Shift = constrain selection to a square
     private var spaceHeld = false               // Space = move the in-progress selection
     private let bgImage: NSImage
+    /// Marching-ants phase: advanced by a timer while a selection exists (skipped under Reduce Motion).
+    private var antsPhase: CGFloat = 0
+    private var antsTimer: Timer?
+    /// Mouse position while roaming (before the drag): drives the x,y crosshair badge.
+    private var hoverPoint: NSPoint?
+    /// 1 → 0 white flash over the selection right after mouse-up, confirming the capture.
+    private var flashAlpha: CGFloat = 0
+    private let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
 
     init(shot: DisplayShot, onSelect: @escaping (NSRect) -> Void, onCancel: @escaping () -> Void) {
         self.shot = shot
@@ -110,6 +138,41 @@ private final class CaptureOverlayView: NSView {
     override var acceptsFirstResponder: Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseMoved, .activeAlways, .mouseEnteredAndExited],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        hoverPoint = convert(event.locationInWindow, from: nil)
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hoverPoint = nil
+        needsDisplay = true
+    }
+
+    /// The classic animated dashed border. Runs only while a selection exists.
+    private func setAnts(running: Bool) {
+        if running, antsTimer == nil, !reduceMotion {
+            let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.antsPhase += 0.6
+                    self.needsDisplay = true
+                }
+            }
+            RunLoop.main.add(t, forMode: .common)
+            antsTimer = t
+        } else if !running {
+            antsTimer?.invalidate(); antsTimer = nil
+        }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         // Background: the frozen capture — kept fully legible (Shottr-style). Blacking the whole
         // screen out made every capture feel like a modal interruption; the crosshair + hint pill
@@ -117,7 +180,8 @@ private final class CaptureOverlayView: NSView {
         bgImage.draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
 
         guard currentRect.width > 0, currentRect.height > 0 else {
-            drawHint()   // no selection yet: explain what to do
+            drawHint()               // no selection yet: explain what to do
+            drawCursorCoordinates()  // …and show where the crosshair sits, in real pixels
             return
         }
 
@@ -128,11 +192,24 @@ private final class CaptureOverlayView: NSView {
         // "Hole": repaint the selected area without dimming.
         bgImage.draw(in: currentRect, from: pixelSourceRect(for: currentRect), operation: .copy, fraction: 1)
 
-        // Selection border.
+        // Selection border: a solid hairline underneath + animated marching ants on top,
+        // so the marquee reads on any background and feels alive (Shottr-style).
+        let borderRect = currentRect.insetBy(dx: -0.5, dy: -0.5)
+        NSColor.white.withAlphaComponent(0.9).setStroke()
+        let base = NSBezierPath(rect: borderRect)
+        base.lineWidth = 1.5
+        base.stroke()
         NSColor.controlAccentColor.setStroke()
-        let border = NSBezierPath(rect: currentRect.insetBy(dx: -0.5, dy: -0.5))
-        border.lineWidth = 1.5
-        border.stroke()
+        let ants = NSBezierPath(rect: borderRect)
+        ants.lineWidth = 1.5
+        ants.setLineDash([6, 4], count: 2, phase: antsPhase)
+        ants.stroke()
+
+        // Capture-confirm flash: a brief white pulse over the region right after mouse-up.
+        if flashAlpha > 0 {
+            NSColor.white.withAlphaComponent(0.28 * flashAlpha).setFill()
+            currentRect.fill(using: .sourceOver)
+        }
 
         drawDimensionBadge(for: currentRect)
     }
@@ -155,6 +232,25 @@ private final class CaptureOverlayView: NSView {
         NSColor.black.withAlphaComponent(0.7).setFill()
         NSBezierPath(roundedRect: pill, xRadius: 11, yRadius: 11).fill()
         (text as NSString).draw(at: NSPoint(x: pill.minX + padX, y: pill.minY + padY), withAttributes: attrs)
+    }
+
+    /// Small "x, y" pixel readout that follows the crosshair before any drag starts.
+    private func drawCursorCoordinates() {
+        guard let p = hoverPoint else { return }
+        let label = "\(Int(p.x * shot.scale)), \(Int((bounds.height - p.y) * shot.scale))"
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: NSColor.white
+        ]
+        let textSize = (label as NSString).size(withAttributes: attrs)
+        let pad: CGFloat = 5
+        var badge = NSRect(x: p.x + 14, y: p.y - textSize.height - 12,
+                           width: textSize.width + pad * 2, height: textSize.height + pad)
+        badge.origin.x = min(badge.origin.x, bounds.maxX - badge.width - 4)
+        badge.origin.y = max(badge.origin.y, bounds.minY + 4)
+        NSColor.black.withAlphaComponent(0.7).setFill()
+        NSBezierPath(roundedRect: badge, xRadius: 4, yRadius: 4).fill()
+        (label as NSString).draw(at: NSPoint(x: badge.minX + pad, y: badge.minY + pad / 2), withAttributes: attrs)
     }
 
     private func drawDimensionBadge(for rect: NSRect) {
@@ -186,6 +282,8 @@ private final class CaptureOverlayView: NSView {
         lastDragPoint = startPoint
         shiftHeld = event.modifierFlags.contains(.shift)
         currentRect = .zero
+        hoverPoint = nil
+        setAnts(running: true)
         needsDisplay = true
     }
 
@@ -226,7 +324,23 @@ private final class CaptureOverlayView: NSView {
         let rect = currentRect
         startPoint = nil
         lastDragPoint = nil
-        if rect.width >= 4, rect.height >= 4 { onSelect(rect) } else { onCancel() }
+        setAnts(running: false)
+        guard rect.width >= 4, rect.height >= 4 else { onCancel(); return }
+        guard !reduceMotion else { onSelect(rect); return }
+        // Confirm visually before handing off: a ~120ms white pulse over the captured region.
+        flashAlpha = 1
+        needsDisplay = true
+        let start = CACurrentMediaTime()
+        let t = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { timer.invalidate(); return }
+                let progress = (CACurrentMediaTime() - start) / 0.12
+                self.flashAlpha = max(0, 1 - CGFloat(progress))
+                self.needsDisplay = true
+                if progress >= 1 { timer.invalidate(); self.onSelect(rect) }
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
     }
 
     override func flagsChanged(with event: NSEvent) {
