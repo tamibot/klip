@@ -1,5 +1,28 @@
 import AppKit
 
+/// Borderless toolbar tool button with a subtle rounded hover wash. The controller marks the
+/// active tool via `isSelectedTool` (accent fill + white glyph); hover only shows when not selected.
+private final class HoverToolButton: NSButton {
+    var isSelectedTool = false { didSet { refreshBackground() } }
+    private var hovering = false
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeInKeyWindow],
+                                       owner: self, userInfo: nil))
+    }
+    override func mouseEntered(with event: NSEvent) { hovering = true; refreshBackground() }
+    override func mouseExited(with event: NSEvent) { hovering = false; refreshBackground() }
+
+    private func refreshBackground() {
+        let color: NSColor = isSelectedTool ? .controlAccentColor
+            : hovering ? .labelColor.withAlphaComponent(0.08) : .clear
+        layer?.backgroundColor = color.cgColor
+    }
+}
+
 /// Snapshot editor window: tool toolbar + canvas. On copy/save it returns the annotated image;
 /// on close without saving it returns nil.
 final class SnapEditorController: NSObject, NSWindowDelegate {
@@ -64,9 +87,16 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         content.addSubview(toolbar)
 
         win.contentView = content
+        win.alphaValue = 0
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         win.makeFirstResponder(canvas)
+        // Quick fade-in, same curve as the main HUD panel.
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.13
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            win.animator().alphaValue = 1
+        }
         canvas.currentLineWidth = 4   // thicker default stroke (more visible)
         selectTool(.arrow)
         // When selecting/deselecting a text, reflect its color in the toolbar palette.
@@ -116,7 +146,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
             leading.addArrangedSubview(b)
         }
 
-        leading.addArrangedSubview(separator())
+        addSeparator(to: leading)
 
         // Colors: 4 presets (they switch to highlighter tones with the marker) + "more" for the rest.
         for i in 0..<4 {
@@ -131,7 +161,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         more.widthAnchor.constraint(equalToConstant: 30).isActive = true
         leading.addArrangedSubview(more)
 
-        leading.addArrangedSubview(separator())
+        addSeparator(to: leading)
 
         // Thickness: only two levels (thin / thick), thicker and more visible than before.
         let widths = NSSegmentedControl(images: [lineImage(4), lineImage(10)],
@@ -142,7 +172,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         widths.toolTip = L10n.t("editor.strokewidth")
         leading.addArrangedSubview(widths)
 
-        leading.addArrangedSubview(separator())
+        addSeparator(to: leading)
 
         // Text size (affects the selected text or the next one you type).
         let smaller = makeActionButton(symbol: "textformat.size.smaller", tip: L10n.t("editor.textsmaller"), action: #selector(textSmaller))
@@ -228,7 +258,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         canvas.currentTool = tool
         for (t, b) in toolButtons {
             let on = (t == tool)
-            b.layer?.backgroundColor = on ? NSColor.controlAccentColor.cgColor : NSColor.clear.cgColor
+            (b as? HoverToolButton)?.isSelectedTool = on   // accent fill lives in the button
             b.contentTintColor = on ? .white : .labelColor   // clearly highlights the active tool
         }
         refreshColorSwatches()                                // the marker shows highlighter tones
@@ -292,7 +322,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     // MARK: - Control builders
 
     private func makeToolButton(_ tool: SnapTool) -> NSButton {
-        let b = NSButton(title: "", target: self, action: #selector(toolTapped(_:)))
+        let b = HoverToolButton(title: "", target: self, action: #selector(toolTapped(_:)))
         b.isBordered = false
         b.wantsLayer = true
         b.layer?.cornerRadius = 7
@@ -316,13 +346,17 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         return b
     }
 
-    private func separator() -> NSView {
+    /// Adds a hairline separator with even 8pt breathing room on both sides
+    /// (the stack's default 4pt reads cramped next to a 1px line).
+    private func addSeparator(to stack: NSStackView) {
+        if let last = stack.arrangedSubviews.last { stack.setCustomSpacing(8, after: last) }
         let box = NSBox()
         box.boxType = .separator
         box.translatesAutoresizingMaskIntoConstraints = false
         box.widthAnchor.constraint(equalToConstant: 1).isActive = true
         box.heightAnchor.constraint(equalToConstant: 24).isActive = true
-        return box
+        stack.addArrangedSubview(box)
+        stack.setCustomSpacing(8, after: box)
     }
 
     private static func swatchImage(_ color: NSColor) -> NSImage {

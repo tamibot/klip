@@ -136,13 +136,17 @@ final class PanelController: NSObject, NSWindowDelegate {
         self.panel = panel
     }
 
+    /// True while the close fade-out runs (the panel is still technically visible but going away).
+    private var fadingOut = false
+
     func toggle() {
         if isModalActive { return }   // don't open/close the panel while a save/export sheet is open behind it
-        panel.isVisible ? hide() : show()
+        (panel.isVisible && !fadingOut) ? hide() : show()   // mid fade-out counts as closed
     }
 
     func show() {
-        guard !panel.isVisible else { return }   // idempotent: avoids reinstalling the monitors
+        guard !panel.isVisible || fadingOut else { return }   // idempotent: avoids reinstalling the monitors
+        fadingOut = false   // reopened mid fade-out: the pending completion must not order us out
         previousApp = NSWorkspace.shared.frontmostApplication
         positionPanel()
 
@@ -167,8 +171,32 @@ final class PanelController: NSObject, NSWindowDelegate {
     func hide(restoreFocus: Bool = true) {
         removeMonitors()
         AudioPlayer.shared.stop()   // don't leave audio playing when the panel closes
-        panel.orderOut(nil)
-        if restoreFocus { previousApp?.activate() }
+        if restoreFocus { previousApp?.activate() }   // restore focus first; the fade is purely visual
+        guard panel.isVisible, !fadingOut else { return }
+        fadingOut = true
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.12
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self, self.fadingOut else { return }   // reopened mid-fade: leave it on screen
+            self.fadingOut = false
+            self.panel.orderOut(nil)
+        })
+    }
+
+    /// Orders a window front via `orderFront` and fades it in when it's newly appearing
+    /// (same 0.13s easeOut the history panel uses). Already-visible windows are left alone.
+    private func fadeInPresenting(_ window: NSWindow, orderFront: () -> Void) {
+        let appearing = !window.isVisible
+        if appearing { window.alphaValue = 0 }
+        orderFront()
+        guard appearing else { return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.13
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().alphaValue = 1
+        }
     }
 
     // MARK: - Monitors (keyboard + outside click)
@@ -512,8 +540,9 @@ final class PanelController: NSObject, NSWindowDelegate {
             }
         }
         NSApp.activate(ignoringOtherApps: true)
-        recordingPanel?.makeKeyAndOrderFront(nil)
-        recordingPanel?.orderFrontRegardless()
+        if let p = recordingPanel {
+            fadeInPresenting(p) { p.makeKeyAndOrderFront(nil); p.orderFrontRegardless() }
+        }
     }
 
     private func closeRecordingPopup() {
@@ -537,8 +566,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
         Settings.shared.hasSeenWelcome = true   // shown once: doesn't reappear even if closed with the red button
         NSApp.activate(ignoringOtherApps: true)
-        welcomeWindow?.orderFrontRegardless()
-        welcomeWindow?.makeKeyAndOrderFront(nil)
+        if let w = welcomeWindow {
+            fadeInPresenting(w) { w.orderFrontRegardless(); w.makeKeyAndOrderFront(nil) }
+        }
     }
 
     func showGuide() {
@@ -552,7 +582,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             guideWindow = w
         }
         NSApp.activate(ignoringOtherApps: true)
-        guideWindow?.makeKeyAndOrderFront(nil)
+        if let w = guideWindow { fadeInPresenting(w) { w.makeKeyAndOrderFront(nil) } }
     }
 
     /// Opens the "Upload audio to transcribe" window. Shared entry point for the history panel
@@ -586,7 +616,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             uploadWindow = w
         }
         NSApp.activate(ignoringOtherApps: true)
-        uploadWindow?.makeKeyAndOrderFront(nil)
+        if let w = uploadWindow { fadeInPresenting(w) { w.makeKeyAndOrderFront(nil) } }
     }
 
     private func chooseAudioFiles(language: String) {

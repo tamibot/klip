@@ -29,25 +29,26 @@ struct UploadView: View {
             switch recorder.state {
             case .missingAPIKey:
                 Image(systemName: "key.slash").font(.system(size: 34)).foregroundStyle(.orange)
-                Text(L10n.t("rec.nokey.title")).font(.headline)
+                Text(L10n.t("rec.nokey.title")).font(.system(size: 13, weight: .semibold))
                 HStack {
                     Button(L10n.t("common.close")) { onClose() }
                     Button(L10n.t("rec.openprefs")) { onOpenPreferences(); onClose() }.buttonStyle(.borderedProminent)
                 }
             case .error(let m):
                 Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 34)).foregroundStyle(.orange)
-                Text(m).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Text(m).font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Button(L10n.t("common.close")) { recorder.reset(); onClose() }
             default:
-                Text(L10n.t("upload.title")).font(.headline)
+                Text(L10n.t("upload.title")).font(.system(size: 13, weight: .semibold))
                 dropZone
                 if dropRejected {
                     Text(L10n.t("upload.unsupported"))
-                        .font(.caption).foregroundStyle(.orange).multilineTextAlignment(.center)
+                        .font(.system(size: 11)).foregroundStyle(.orange).multilineTextAlignment(.center)
+                        .transition(.opacity)
                 }
                 languagePicker
                 Text(L10n.t("upload.info"))
-                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    .font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 if recorder.transcribingCount > 0 {
                     HStack(spacing: 7) {
                         ProgressView().controlSize(.small)
@@ -67,6 +68,10 @@ struct UploadView: View {
         }
         .frame(minWidth: 400, maxWidth: .infinity, minHeight: 360, maxHeight: .infinity, alignment: .top)
         .padding()
+        // Fade in the rejected-drop caption and the transcribing pill; slide result rows in as they land.
+        .animation(.easeOut(duration: 0.13), value: dropRejected)
+        .animation(.easeOut(duration: 0.13), value: recorder.transcribingCount)
+        .animation(.easeOut(duration: 0.2), value: recorder.uploadResults)
         // Each fresh upload session (results cleared by uploadAudio) starts back at the global language.
         .onChange(of: recorder.uploadResults.isEmpty) { _, empty in if empty { languageOverride = nil } }
     }
@@ -115,11 +120,13 @@ struct UploadView: View {
                     .frame(maxWidth: .infinity, alignment: .leading).lineLimit(8)
             } else if r.failed {
                 Text(L10n.t(r.errorKey ?? "upload.failed")).font(.system(size: 11)).foregroundStyle(.orange)
+                    .transition(.opacity)
             }
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
+        .transition(.opacity)
     }
 
     private func copyText(_ text: String) {
@@ -146,7 +153,7 @@ struct UploadView: View {
             Image(systemName: "arrow.down.doc.fill").font(.system(size: 38))
                 .foregroundStyle(hovering ? Color.accentColor : .secondary)
             Text(L10n.t("upload.drop")).font(.system(size: 14, weight: .medium))
-            Text(L10n.t("upload.or")).font(.caption).foregroundStyle(.secondary)
+            Text(L10n.t("upload.or")).font(.system(size: 11)).foregroundStyle(.secondary)
             Button(L10n.t("upload.choose")) { dropRejected = false; onChoose(effectiveLanguage) }
         }
         .frame(maxWidth: .infinity).frame(height: 150)
@@ -154,6 +161,8 @@ struct UploadView: View {
         .overlay(RoundedRectangle(cornerRadius: 12)
             .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
             .foregroundStyle(hovering ? Color.accentColor : Color.secondary.opacity(0.5)))
+        // Ease the highlight in/out instead of the instant color swap.
+        .animation(.easeOut(duration: 0.15), value: hovering)
         .onDrop(of: [UTType.fileURL], isTargeted: $hovering) { providers in
             handleDrop(providers); return true
         }

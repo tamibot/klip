@@ -146,10 +146,13 @@ struct PreferencesView: View {
                 Toggle(L10n.t("prefs.cleanpaste"), isOn: $settings.cleanCapture)
                 Toggle(L10n.t("prefs.autopaste"), isOn: $settings.autoPaste)
                 if settings.autoPaste && !accessibilityGranted {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                        Text(L10n.t("prefs.needAccessibility")).font(.caption)
-                        Button(L10n.t("prefs.grant")) { Paster.ensureAccessibilityPermission(prompt: true) }.font(.caption)
+                    // Calm info row: caption-sized icon + secondary text instead of a shouting warning.
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption).foregroundStyle(.orange)
+                        Text(L10n.t("prefs.needAccessibility")).font(.caption).foregroundStyle(.secondary)
+                        Button(L10n.t("prefs.grant")) { Paster.ensureAccessibilityPermission(prompt: true) }
+                            .font(.caption).buttonStyle(.link)
                     }
                 }
                 Picker(L10n.t("prefs.captureDest"), selection: $settings.captureDestination) {
@@ -163,18 +166,12 @@ struct PreferencesView: View {
             }
 
             Section(L10n.t("prefs.shortcuts")) {
-                HStack { Text(L10n.t("prefs.sc.show")); Spacer()
-                    FilteredHotKeyField(combo: $settings.combo, onChange: onHotKeyChange) }
-                HStack { Text(L10n.t("prefs.sc.voice")); Spacer()
-                    FilteredHotKeyField(combo: $settings.voiceCombo, onChange: onVoiceHotKeyChange) }
-                HStack { Text(L10n.t("prefs.sc.capture")); Spacer()
-                    FilteredHotKeyField(combo: $settings.captureCombo, onChange: onCaptureHotKeyChange) }
-                HStack { Text(L10n.t("prefs.sc.captureText")); Spacer()
-                    FilteredHotKeyField(combo: $settings.textCaptureCombo, onChange: onTextCaptureHotKeyChange) }
-                HStack { Text(L10n.t("prefs.sc.upload")); Spacer()
-                    FilteredHotKeyField(combo: $settings.uploadCombo, onChange: onUploadHotKeyChange) }
-                HStack { Text(L10n.t("prefs.sc.meeting")); Spacer()
-                    FilteredHotKeyField(combo: $settings.meetingCombo, onChange: onMeetingHotKeyChange) }
+                shortcutRow(L10n.t("prefs.sc.show"), $settings.combo, onHotKeyChange)
+                shortcutRow(L10n.t("prefs.sc.voice"), $settings.voiceCombo, onVoiceHotKeyChange)
+                shortcutRow(L10n.t("prefs.sc.capture"), $settings.captureCombo, onCaptureHotKeyChange)
+                shortcutRow(L10n.t("prefs.sc.captureText"), $settings.textCaptureCombo, onTextCaptureHotKeyChange)
+                shortcutRow(L10n.t("prefs.sc.upload"), $settings.uploadCombo, onUploadHotKeyChange)
+                shortcutRow(L10n.t("prefs.sc.meeting"), $settings.meetingCombo, onMeetingHotKeyChange)
                 Text(L10n.t("prefs.sc.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -304,6 +301,20 @@ struct PreferencesView: View {
             }
         }
         .formStyle(.grouped)
+        // Provider-dependent sections (model picker, key sections) fade/slide in place
+        // instead of snapping when the segmented picker changes.
+        .animation(.easeOut(duration: 0.15), value: settings.aiProvider)
+    }
+
+    /// One shortcut row with a uniform height so all six rows line up in the grouped Form.
+    private func shortcutRow(_ label: String, _ combo: Binding<KeyCombo>,
+                             _ onChange: @escaping (KeyCombo) -> Void) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            FilteredHotKeyField(combo: combo, onChange: onChange)
+        }
+        .frame(height: 28)
     }
 
     /// Forces the focused field to commit its edit BEFORE reading the binding.
@@ -334,7 +345,8 @@ struct PreferencesView: View {
 
     /// Compact "<provider> key stored · Delete" row for a provider whose section is hidden.
     private func storedKeyRow(_ name: String, _ model: APIKeyModel) -> some View {
-        HStack {
+        HStack(spacing: 6) {
+            Image(systemName: "key.fill").font(.caption).foregroundStyle(.secondary)
             Text(String(format: L10n.t("prefs.key.stored"), name))
                 .font(.caption).foregroundStyle(.secondary)
             Spacer()

@@ -148,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let cfg = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
         button.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Copied")?
             .withSymbolConfiguration(cfg)
+        button.contentTintColor = nil   // flash reads the same in every state; updateStatusIcon restores the red record tint
         iconFlashWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.updateStatusIcon() }   // restores the meeting-recording icon too
@@ -625,11 +626,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let f = screen.visibleFrame
             panel.setFrameTopLeftPoint(NSPoint(x: f.maxX - panel.frame.width - 16, y: f.maxY - 12))
         }
+        let appearing = !panel.isVisible
+        hudFadingOut = false   // cancel a close fade in flight: its completion must not order us out
+        if appearing { panel.alphaValue = 0 }
         panel.orderFrontRegardless()
+        if panel.alphaValue < 1 {   // newly appearing OR caught mid fade-out: fade up to full
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.13
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 1
+            }
+        }
     }
 
+    /// True while the HUD's close fade-out runs (still visible but going away).
+    private var hudFadingOut = false
     private func closeMeetingHUD() {
-        meetingHUD?.orderOut(nil)
+        guard let hud = meetingHUD, hud.isVisible, !hudFadingOut else { return }
+        hudFadingOut = true
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.12
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            hud.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self, self.hudFadingOut else { return }   // re-shown mid-fade: leave it up
+            self.hudFadingOut = false
+            hud.orderOut(nil)
+            hud.alphaValue = 1   // ready for the next appearance
+        })
     }
 
     @objc private func showPanel() { panelController.show() }

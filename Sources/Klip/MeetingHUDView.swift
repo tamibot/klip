@@ -24,6 +24,7 @@ struct MeetingHUDView: View {
                     Text(L10n.t("meeting.finishing")).font(.system(size: 12, weight: .medium))
                 }
                 .padding(.vertical, 6)
+                .transition(.opacity)
             } else {
                 HStack(spacing: 8) {
                     Circle().fill(.red).frame(width: 9, height: 9)
@@ -63,6 +64,8 @@ struct MeetingHUDView: View {
         }
         .padding(14)
         .frame(width: 264)
+        // Cross-fade into the finishing state instead of jumping.
+        .animation(.easeOut(duration: 0.13), value: recorder.finishing)
         .onAppear { pulse = true; lastSystemSignal = Date() }
         .onChange(of: recorder.systemLevel) { _, lvl in
             if lvl > 0.06 { lastSystemSignal = Date() }
@@ -78,6 +81,8 @@ struct MeetingHUDView: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.primary.opacity(0.08))
+                        // Subtle rounded track highlight: gives the empty track a defined edge.
+                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
                     Capsule().fill(tint)
                         .frame(width: max(3, geo.size.width * CGFloat(min(1, level))))
                         .animation(.linear(duration: 0.1), value: level)

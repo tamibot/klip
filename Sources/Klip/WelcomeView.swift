@@ -8,6 +8,9 @@ struct WelcomeView: View {
     @ObservedObject var settings = Settings.shared   // re-localize live + show the current shortcuts
     var onStart: () -> Void
 
+    /// Drives the staggered fade-in of the feature rows on first appear (visual only).
+    @State private var rowsVisible = false
+
     private var appLogo: NSImage? {
         if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
            let img = NSImage(contentsOf: url) { return img }
@@ -25,10 +28,10 @@ struct WelcomeView: View {
                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
 
             VStack(alignment: .leading, spacing: 10) {
-                row("doc.on.clipboard", L10n.t("welcome.history.title"), L10n.t("welcome.history.body"))
-                row("lock.shield", L10n.t("welcome.privacy.title"), L10n.t("welcome.privacy.body"))
-                row("keyboard", L10n.t("welcome.shortcuts.title"), shortcutsLine)
-                row("mic", L10n.t("welcome.voice.title"), L10n.t("welcome.voice.body"))
+                row(0, "doc.on.clipboard", L10n.t("welcome.history.title"), L10n.t("welcome.history.body"))
+                row(1, "lock.shield", L10n.t("welcome.privacy.title"), L10n.t("welcome.privacy.body"))
+                row(2, "keyboard", L10n.t("welcome.shortcuts.title"), shortcutsLine)
+                row(3, "mic", L10n.t("welcome.voice.title"), L10n.t("welcome.voice.body"))
             }
             .padding(.top, 4)
 
@@ -40,6 +43,7 @@ struct WelcomeView: View {
         }
         .padding(24)
         .frame(width: 440, height: 580)
+        .onAppear { rowsVisible = true }
     }
 
     private var shortcutsLine: String {
@@ -52,7 +56,7 @@ struct WelcomeView: View {
             .map { "\($0.displayString)  \(L10n.t($1))" }.joined(separator: "\n")
     }
 
-    private func row(_ icon: String, _ title: String, _ body: String) -> some View {
+    private func row(_ index: Int, _ icon: String, _ title: String, _ body: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon).font(.system(size: 18)).foregroundStyle(.tint)
                 .frame(width: 26, alignment: .center)
@@ -63,5 +67,9 @@ struct WelcomeView: View {
             }
             Spacer(minLength: 0)
         }
+        // Staggered fade-in: 0.05s per row, everything settled by ~0.3s.
+        .opacity(rowsVisible ? 1 : 0)
+        .offset(y: rowsVisible ? 0 : 6)
+        .animation(.easeOut(duration: 0.15).delay(Double(index) * 0.05), value: rowsVisible)
     }
 }

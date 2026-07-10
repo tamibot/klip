@@ -37,12 +37,12 @@ struct GuideView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
 
-                section("⌨️ " + L10n.t("guide.section.klip"), klipShortcuts)
-                section("📸 " + L10n.t("guide.section.mac"), macShortcuts,
+                section(L10n.t("guide.section.klip"), icon: "keyboard", klipShortcuts)
+                section(L10n.t("guide.section.mac"), icon: "camera.viewfinder", macShortcuts,
                         footer: L10n.t("guide.mac.footer"))
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("💡 " + L10n.t("guide.howto.title")).font(.headline)
+                    Label(L10n.t("guide.howto.title"), systemImage: "lightbulb").font(.headline)
                     bullet(L10n.t("guide.howto.copy"))
                     bullet(String(format: L10n.t("guide.howto.paste"), settings.combo.displayString))
                     bullet(L10n.t("guide.howto.creds"))
@@ -66,16 +66,19 @@ struct GuideView: View {
         }
     }
 
-    private func section(_ title: String, _ rows: [Row], footer: String? = nil) -> some View {
+    private func section(_ title: String, icon: String, _ rows: [Row], footer: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
+            Label(title, systemImage: icon).font(.headline)
             ForEach(rows) { r in
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    // kbd-style chip: fixed width keeps the two columns aligned.
                     Text(r.keys)
-                        .font(.system(.body, design: .monospaced)).bold()
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .frame(width: 90, alignment: .leading)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.08)))
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.06)))
+                        .overlay(RoundedRectangle(cornerRadius: 5)
+                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
                     Text(r.what).font(.system(size: 13)).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }

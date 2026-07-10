@@ -61,7 +61,7 @@ enum ToastHUD {
         fx.material = .hudWindow
         fx.state = .active
         fx.wantsLayer = true
-        fx.layer?.cornerRadius = 10
+        fx.layer?.cornerRadius = 12   // matches the main HUD panel (PanelController)
         fx.layer?.masksToBounds = true
         fx.translatesAutoresizingMaskIntoConstraints = false
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -81,7 +81,9 @@ enum ToastHUD {
         let frame = NSRect(x: vis.maxX - width - 16, y: vis.maxY - size.height - 14,
                            width: width, height: size.height)
 
-        let p = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
+        // Slide down from the screen edge + fade (banner-style); slide is dropped under Reduce Motion.
+        let slide: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 8
+        let p = NSPanel(contentRect: frame.offsetBy(dx: 0, dy: slide), styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
@@ -98,13 +100,17 @@ enum ToastHUD {
 
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             p.animator().alphaValue = 1
+            p.animator().setFrame(frame, display: true)
         }
         let work = DispatchWorkItem { [weak p] in
             guard let p else { return }
             NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.3
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 p.animator().alphaValue = 0
+                p.animator().setFrame(p.frame.offsetBy(dx: 0, dy: slide), display: true)
             }, completionHandler: { p.orderOut(nil); if panel === p { panel = nil } })
         }
         hideWork = work

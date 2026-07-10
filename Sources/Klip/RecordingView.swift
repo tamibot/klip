@@ -11,6 +11,8 @@ struct RecordingView: View {
 
     /// Armed by the first Cancel/Esc on a long recording: the button reads "Discard?" until it auto-resets.
     @State private var confirmDiscard = false
+    /// Drives the record-dot pulse, same rhythm as MeetingHUDView's.
+    @State private var pulse = false
 
     /// Long recordings (>10 s) need a second Cancel/Esc within ~3 s — one stray Esc shouldn't
     /// destroy minutes of audio. Short recordings keep the instant cancel. The Cancel buttons carry
@@ -28,6 +30,9 @@ struct RecordingView: View {
     var body: some View {
         VStack(spacing: 16) { content }
             .frame(width: 360, height: 320)
+            // Cross-fade between states (recording ↔ silence warning ↔ errors) instead of jumping.
+            .animation(.easeOut(duration: 0.13), value: recorder.state)
+            .animation(.easeOut(duration: 0.13), value: recorder.silenceWarning)
             .onChange(of: recorder.state) { _, s in
                 if case .idle = s { onClose() }
             }
@@ -39,11 +44,12 @@ struct RecordingView: View {
             if recorder.silenceWarning {
                 VStack(spacing: 12) {
                     Image(systemName: "moon.zzz.fill").font(.system(size: 34)).foregroundStyle(.orange)
-                    Text(L10n.t("rec.stillthere")).font(.headline)
+                    Text(L10n.t("rec.stillthere")).font(.system(size: 13, weight: .semibold))
                     Text(L10n.t("rec.silence.info"))
-                        .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Button(L10n.t("rec.continue.recording")) { recorder.continueRecording() }
                         .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
                     HStack(spacing: 12) {
                         Button(confirmDiscard ? L10n.t("rec.discard.confirm") : L10n.t("common.cancel"),
                                action: requestCancel)
@@ -55,14 +61,15 @@ struct RecordingView: View {
             } else {
                 VStack(spacing: 14) {
                     HStack(spacing: 8) {
-                        Circle().fill(.red).frame(width: 11, height: 11)
-                            .opacity(recorder.level > 0.12 ? 1 : 0.5)
-                        Text(L10n.t("rec.recording")).font(.headline)
+                        Circle().fill(.red).frame(width: 9, height: 9)
+                            .opacity(pulse ? 0.35 : 1)
+                            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+                        Text(L10n.t("rec.recording")).font(.system(size: 13, weight: .semibold))
                     }
                     Text(timeString(recorder.duration))
                         .font(.system(size: 32, weight: .semibold, design: .monospaced))
                         .monospacedDigit()
-                    levelBars
+                    levelMeter
                     HStack(spacing: 12) {
                         Button(action: requestCancel) {
                             Label(confirmDiscard ? L10n.t("rec.discard.confirm") : L10n.t("common.cancel"),
@@ -76,15 +83,19 @@ struct RecordingView: View {
                         .keyboardShortcut(.defaultAction)
                         .buttonStyle(.borderedProminent)
                     }
-                }.padding()
+                }
+                .padding()
+                // Restart the pulse whenever this branch (re)appears, e.g. back from the silence warning.
+                .onAppear { pulse = true }
+                .onDisappear { pulse = false }
             }
 
         case .missingAPIKey:
             VStack(spacing: 12) {
                 Image(systemName: "key.slash").font(.system(size: 34)).foregroundStyle(.orange)
-                Text(L10n.t("rec.nokey.title")).font(.headline)
+                Text(L10n.t("rec.nokey.title")).font(.system(size: 13, weight: .semibold))
                 Text(L10n.t("rec.nokey.info"))
-                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    .font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 HStack {
                     Button(L10n.t("common.close")) { recorder.reset() }
                     Button(L10n.t("rec.openprefs")) { onOpenPreferences(); recorder.reset() }
@@ -95,9 +106,9 @@ struct RecordingView: View {
         case .micDenied:
             VStack(spacing: 12) {
                 Image(systemName: "mic.slash.fill").font(.system(size: 34)).foregroundStyle(.orange)
-                Text(L10n.t("perm.mic.title")).font(.headline)
+                Text(L10n.t("perm.mic.title")).font(.system(size: 13, weight: .semibold))
                 Text(L10n.t("perm.mic.info"))
-                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    .font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 HStack {
                     Button(L10n.t("common.close")) { recorder.reset() }
                     Button(L10n.t("perm.screen.open")) {
@@ -112,8 +123,8 @@ struct RecordingView: View {
         case .error(let m):
             VStack(spacing: 12) {
                 Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 34)).foregroundStyle(.orange)
-                Text(L10n.t("common.error")).font(.headline)
-                Text(m).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).lineLimit(3)
+                Text(L10n.t("common.error")).font(.system(size: 13, weight: .semibold))
+                Text(m).font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center).lineLimit(3)
                 Button(L10n.t("common.close")) { recorder.reset() }.buttonStyle(.borderedProminent)
             }.padding()
 
@@ -122,17 +133,24 @@ struct RecordingView: View {
         }
     }
 
-    private var levelBars: some View {
-        let active = Int((recorder.level * 18).rounded())
-        return HStack(spacing: 3) {
-            ForEach(0..<18, id: \.self) { i in
-                Capsule()
-                    .fill(i < active ? Color.accentColor : Color.primary.opacity(0.15))
-                    .frame(width: 4, height: i < active ? 10 + CGFloat((i % 4) * 6) : 6)
+    /// Horizontal capsule meter — same geometry, track, and motion as MeetingHUDView's meters,
+    /// so the voice popup and the meeting HUD read as one family.
+    private var levelMeter: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "mic.fill").font(.system(size: 10)).foregroundStyle(.secondary)
+                .frame(width: 14)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.08))
+                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+                    Capsule().fill(Color.accentColor)
+                        .frame(width: max(3, geo.size.width * CGFloat(min(1, recorder.level))))
+                        .animation(.linear(duration: 0.1), value: recorder.level)
+                }
             }
+            .frame(height: 6)
         }
-        .frame(height: 34)
-        .animation(.linear(duration: 0.1), value: recorder.level)
+        .frame(maxWidth: 220)
     }
 
     private func timeString(_ t: TimeInterval) -> String {

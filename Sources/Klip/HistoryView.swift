@@ -107,6 +107,9 @@ struct HistoryView: View {
             if filtered.isEmpty { emptyState } else { list }
             if selecting { batchBar }
         }
+        // Gentle fades for list<->empty swap and the batch bar slide; scoped by value so nothing else animates.
+        .animation(.easeOut(duration: 0.13), value: filtered.isEmpty)
+        .animation(.easeOut(duration: 0.15), value: selecting)
         .frame(minWidth: 420, minHeight: 460)
         .background(Color.clear)
         .onAppear { syncVisible(); searchFocused = true }
@@ -163,6 +166,8 @@ struct HistoryView: View {
                         ProgressView().controlSize(.small)
                         Text("\(recorder.transcribingCount)").font(.system(size: 11)).foregroundStyle(.secondary)
                     }
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Capsule().fill(Color.primary.opacity(0.08)))   // same pill as the item counter
                     .help(L10n.t("rec.transcribing"))
                     .padding(.trailing, 2)
                 }
@@ -242,6 +247,7 @@ struct HistoryView: View {
             .padding(.horizontal, 9).padding(.vertical, 4)
             .background(Capsule().fill(selected ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.06)))
             .overlay(Capsule().stroke(selected ? Color.accentColor.opacity(0.5) : .clear, lineWidth: 1))
+            .animation(.easeOut(duration: 0.15), value: selected)   // soften the selected-chip swap
         }
         .buttonStyle(.plain)
     }
@@ -273,6 +279,7 @@ struct HistoryView: View {
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(.ultraThinMaterial)
         .overlay(Divider(), alignment: .top)
+        .transition(.move(edge: .bottom).combined(with: .opacity))   // slides in via the container's animation on `selecting`
     }
 
     private func batchButton(_ icon: String, _ label: String, _ action: @escaping () -> Void) -> some View {
@@ -305,6 +312,10 @@ struct HistoryView: View {
                     }
                 }
                 .padding(8)
+                // Keyed on ids (not items) so new/removed clips fade+move, but in-place content
+                // updates (e.g. a transcription finishing) don't trigger a layout animation.
+                .animation(.easeOut(duration: 0.2), value: filtered.map(\.id))
+                .animation(.easeOut(duration: 0.13), value: ocrResultID)
             }
             .onChange(of: selection.selectedID) { _, newID in
                 guard let newID else { return }
@@ -338,6 +349,7 @@ struct HistoryView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity).padding(40)
+        .transition(.opacity)   // fades in via the container's animation on `filtered.isEmpty`
     }
 
     private func kbdHint(_ keys: String, _ label: String) -> some View {
@@ -361,8 +373,9 @@ struct HistoryView: View {
             }
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.12)))
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.12)))
         .padding(.horizontal, 8).padding(.bottom, 4)
+        .transition(.opacity)   // fades in via the list's animation on `ocrResultID`
     }
 
     private func runOCR(_ item: ClipboardItem) {
@@ -483,7 +496,8 @@ struct ItemRow: View {
             Divider()
             moreMenu
         }
-        .onHover { hovering = $0 }
+        // Animated so the hover highlight and the inline actions fade instead of popping in.
+        .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hovering = h } }
         .onTapGesture { if selecting { onToggleCheck() } else { onPick(item) } }
         .onChange(of: resetToken) { _, _ in revealed = false }   // re-mask when reopening the panel
         .onChange(of: hovering) { _, h in if !h { revealed = false } }   // re-mask once the pointer leaves the row (covers search/filter/scroll)
@@ -600,6 +614,7 @@ struct ItemRow: View {
             Menu { moreMenu } label: { Image(systemName: "ellipsis.circle").font(.system(size: 12)) }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help(L10n.t("act.more"))
         }
+        .transition(.opacity)   // fade with the row's hover animation
     }
 
     /// The ⋯ menu: every secondary action, with text labels so it's clear (unlike the bare icons).
@@ -644,8 +659,13 @@ struct ItemRow: View {
     }
 
     private func iconButton(_ symbol: String, _ help: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).font(.system(size: 12)) }
-            .buttonStyle(.borderless).help(help)
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 12))
+                // Smooth symbol swap (copy→checkmark flash, eye/star toggles) instead of a hard pop.
+                .contentTransition(.symbolEffect(.replace))
+                .animation(.easeOut(duration: 0.12), value: symbol)
+        }
+        .buttonStyle(.borderless).help(help)
     }
 
     /// Human-readable date label: "Hoy · 10:43", "Ayer · 10:43" or "martes 04 de julio · 10:43".
