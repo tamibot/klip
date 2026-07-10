@@ -319,6 +319,11 @@ enum L10n {
         "tool.counter": "Contador",
         "tool.select": "Seleccionar",
         "tool.spotlight": "Foco",
+        "meeting.autostop.tip": "Se detiene sola tras 15 minutos de silencio",
+        "meeting.saved.action": "Ver",
+        "meeting.saved.detail": "Transcribiendo en segundo plano — la verás en el historial (⌥⇧E).",
+        "meeting.saved.title": "Nota de reunión guardada",
+        "meeting.sources.hint": "Yo = tu micrófono · Ellos = el audio de la reunión",
     ]
 
     private static let en: [String: String] = [
@@ -621,6 +626,11 @@ enum L10n {
         "tool.counter": "Counter",
         "tool.select": "Select",
         "tool.spotlight": "Spotlight",
+        "meeting.autostop.tip": "Stops automatically after 15 minutes of silence",
+        "meeting.saved.action": "View",
+        "meeting.saved.detail": "Transcribing in the background — find it in your history (⌥⇧E).",
+        "meeting.saved.title": "Meeting note saved",
+        "meeting.sources.hint": "Me = your mic · Them = the meeting audio",
     ]
 
     // The translations below (fr/de/it/pt/zh/ja) are filled in by the translation workflow; any
@@ -926,6 +936,11 @@ enum L10n {
         "tool.counter": "Compteur",
         "tool.select": "Sélectionner",
         "tool.spotlight": "Projecteur",
+        "meeting.autostop.tip": "S'arrête automatiquement après 15 minutes de silence",
+        "meeting.saved.action": "Voir",
+        "meeting.saved.detail": "Transcription en arrière-plan — retrouvez-la dans l'historique (⌥⇧E).",
+        "meeting.saved.title": "Note de réunion enregistrée",
+        "meeting.sources.hint": "Moi = votre micro · Eux = le son de la réunion",
     ]
 
     private static let de: [String: String] = [
@@ -1229,6 +1244,11 @@ enum L10n {
         "tool.counter": "Zähler",
         "tool.select": "Auswählen",
         "tool.spotlight": "Spotlight",
+        "meeting.autostop.tip": "Stoppt automatisch nach 15 Minuten Stille",
+        "meeting.saved.action": "Anzeigen",
+        "meeting.saved.detail": "Wird im Hintergrund transkribiert — zu finden im Verlauf (⌥⇧E).",
+        "meeting.saved.title": "Meeting-Notiz gesichert",
+        "meeting.sources.hint": "Ich = dein Mikrofon · Andere = der Meeting-Ton",
     ]
 
     private static let it: [String: String] = [
@@ -1532,6 +1552,11 @@ enum L10n {
         "tool.counter": "Contatore",
         "tool.select": "Seleziona",
         "tool.spotlight": "Riflettore",
+        "meeting.autostop.tip": "Si ferma automaticamente dopo 15 minuti di silenzio",
+        "meeting.saved.action": "Vedi",
+        "meeting.saved.detail": "Trascrizione in background — la trovi nella cronologia (⌥⇧E).",
+        "meeting.saved.title": "Nota della riunione salvata",
+        "meeting.sources.hint": "Io = il tuo microfono · Loro = l'audio della riunione",
     ]
 
     private static let pt: [String: String] = [
@@ -1835,6 +1860,11 @@ enum L10n {
         "tool.counter": "Contador",
         "tool.select": "Selecionar",
         "tool.spotlight": "Destaque",
+        "meeting.autostop.tip": "Para automaticamente após 15 minutos de silêncio",
+        "meeting.saved.action": "Ver",
+        "meeting.saved.detail": "A transcrever em segundo plano — encontra-a no histórico (⌥⇧E).",
+        "meeting.saved.title": "Nota da reunião guardada",
+        "meeting.sources.hint": "Eu = o teu microfone · Eles = o áudio da reunião",
     ]
 
     private static let zh: [String: String] = [
@@ -2138,6 +2168,11 @@ enum L10n {
         "tool.counter": "计数",
         "tool.select": "选择",
         "tool.spotlight": "聚光",
+        "meeting.autostop.tip": "静音 15 分钟后自动停止",
+        "meeting.saved.action": "查看",
+        "meeting.saved.detail": "正在后台转写——可在历史记录中查看（⌥⇧E）。",
+        "meeting.saved.title": "会议笔记已保存",
+        "meeting.sources.hint": "我 = 你的麦克风 · 对方 = 会议音频",
     ]
 
     private static let ja: [String: String] = [
@@ -2441,5 +2476,10 @@ enum L10n {
         "tool.counter": "カウンター",
         "tool.select": "選択",
         "tool.spotlight": "スポットライト",
+        "meeting.autostop.tip": "15分間無音が続くと自動停止します",
+        "meeting.saved.action": "表示",
+        "meeting.saved.detail": "バックグラウンドで文字起こし中 — 履歴（⌥⇧E）で確認できます。",
+        "meeting.saved.title": "会議ノートを保存しました",
+        "meeting.sources.hint": "自分 = あなたのマイク · 相手 = 会議の音声",
     ]
 }

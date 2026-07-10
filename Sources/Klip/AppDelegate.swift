@@ -60,6 +60,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let item = self.manager.items.first(where: { $0.id == id }) {
                 self.manager.rename(item, to: "\(L10n.t("meeting.name")) — \(Self.meetingDF.string(from: Date()))")
             }
+            // Tell the user WHERE the note went (the HUD is about to close; without this the flow
+            // just vanishes): toast with a one-tap way into the history.
+            ToastHUD.show(L10n.t("meeting.saved.title"),
+                          detail: L10n.t("meeting.saved.detail"),
+                          actionTitle: L10n.t("meeting.saved.action")) { [weak self] in
+                self?.panelController.show()
+            }
             return id
         }
         meetingRecorder.onTranscribe = { [weak self] id, fileName, micURL, systemURL in

@@ -34,10 +34,16 @@ struct MeetingHUDView: View {
                     Spacer(minLength: 8)
                     Text(mmss).font(.system(size: 13, weight: .medium).monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .help(L10n.t("meeting.autostop.tip"))
                 }
 
                 meter(label: L10n.t("meeting.me"), icon: "mic.fill", level: recorder.micLevel, tint: .accentColor)
                 meter(label: L10n.t("meeting.them"), icon: "speaker.wave.2.fill", level: recorder.systemLevel, tint: .teal)
+
+                // One-line legend: first-time users shouldn't have to guess what the two bars are.
+                Text(L10n.t("meeting.sources.hint"))
+                    .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 // The system side heard nothing for a while: surface it — this is exactly the doubt
                 // ("is it capturing them at all?") this HUD exists to answer.
