@@ -313,6 +313,12 @@ enum L10n {
         "prefs.captureDest.clipboard": "Portapapeles",
         "prefs.captureDest.editor": "Editor de anotaciones",
         "toast.removeLineBreaks": "Quitar saltos de línea",
+        "editor.imagesize": "Tamaño de la imagen en píxeles",
+        "editor.zoom.reset": "Zoom — clic para volver al 100%",
+        "tool.blur": "Difuminar",
+        "tool.counter": "Contador",
+        "tool.select": "Seleccionar",
+        "tool.spotlight": "Foco",
     ]
 
     private static let en: [String: String] = [
@@ -609,6 +615,12 @@ enum L10n {
         "prefs.captureDest.clipboard": "Clipboard",
         "prefs.captureDest.editor": "Annotation editor",
         "toast.removeLineBreaks": "Remove line breaks",
+        "editor.imagesize": "Image size in pixels",
+        "editor.zoom.reset": "Zoom — click to reset to 100%",
+        "tool.blur": "Blur",
+        "tool.counter": "Counter",
+        "tool.select": "Select",
+        "tool.spotlight": "Spotlight",
     ]
 
     // The translations below (fr/de/it/pt/zh/ja) are filled in by the translation workflow; any
@@ -908,6 +920,12 @@ enum L10n {
         "prefs.captureDest.clipboard": "Presse-papiers",
         "prefs.captureDest.editor": "Éditeur d'annotations",
         "toast.removeLineBreaks": "Supprimer les sauts de ligne",
+        "editor.imagesize": "Taille de l'image en pixels",
+        "editor.zoom.reset": "Zoom — cliquez pour revenir à 100 %",
+        "tool.blur": "Flouter",
+        "tool.counter": "Compteur",
+        "tool.select": "Sélectionner",
+        "tool.spotlight": "Projecteur",
     ]
 
     private static let de: [String: String] = [
@@ -1205,6 +1223,12 @@ enum L10n {
         "prefs.captureDest.clipboard": "Zwischenablage",
         "prefs.captureDest.editor": "Anmerkungseditor",
         "toast.removeLineBreaks": "Zeilenumbrüche entfernen",
+        "editor.imagesize": "Bildgröße in Pixeln",
+        "editor.zoom.reset": "Zoom — Klick setzt auf 100 % zurück",
+        "tool.blur": "Weichzeichnen",
+        "tool.counter": "Zähler",
+        "tool.select": "Auswählen",
+        "tool.spotlight": "Spotlight",
     ]
 
     private static let it: [String: String] = [
@@ -1502,6 +1526,12 @@ enum L10n {
         "prefs.captureDest.clipboard": "Appunti",
         "prefs.captureDest.editor": "Editor di annotazioni",
         "toast.removeLineBreaks": "Rimuovi interruzioni di riga",
+        "editor.imagesize": "Dimensioni dell'immagine in pixel",
+        "editor.zoom.reset": "Zoom — clic per tornare al 100%",
+        "tool.blur": "Sfoca",
+        "tool.counter": "Contatore",
+        "tool.select": "Seleziona",
+        "tool.spotlight": "Riflettore",
     ]
 
     private static let pt: [String: String] = [
@@ -1799,6 +1829,12 @@ enum L10n {
         "prefs.captureDest.clipboard": "Área de transferência",
         "prefs.captureDest.editor": "Editor de anotações",
         "toast.removeLineBreaks": "Remover quebras de linha",
+        "editor.imagesize": "Tamanho da imagem em píxeis",
+        "editor.zoom.reset": "Zoom — clique para voltar a 100%",
+        "tool.blur": "Desfocar",
+        "tool.counter": "Contador",
+        "tool.select": "Selecionar",
+        "tool.spotlight": "Destaque",
     ]
 
     private static let zh: [String: String] = [
@@ -2096,6 +2132,12 @@ enum L10n {
         "prefs.captureDest.clipboard": "剪贴板",
         "prefs.captureDest.editor": "标注编辑器",
         "toast.removeLineBreaks": "移除换行符",
+        "editor.imagesize": "图像像素尺寸",
+        "editor.zoom.reset": "缩放 — 点按恢复 100%",
+        "tool.blur": "模糊",
+        "tool.counter": "计数",
+        "tool.select": "选择",
+        "tool.spotlight": "聚光",
     ]
 
     private static let ja: [String: String] = [
@@ -2393,5 +2435,11 @@ enum L10n {
         "prefs.captureDest.clipboard": "クリップボード",
         "prefs.captureDest.editor": "注釈エディタ",
         "toast.removeLineBreaks": "改行を削除",
+        "editor.imagesize": "画像サイズ（ピクセル）",
+        "editor.zoom.reset": "ズーム — クリックで100%に戻す",
+        "tool.blur": "ぼかし",
+        "tool.counter": "カウンター",
+        "tool.select": "選択",
+        "tool.spotlight": "スポットライト",
     ]
 }

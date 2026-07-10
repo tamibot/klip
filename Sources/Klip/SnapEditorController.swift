@@ -41,17 +41,23 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     private let markerColors: [NSColor] = [.systemYellow, .systemGreen, .systemPink, .systemOrange]
     private var palette: [NSColor] { canvas.currentTool == .marker ? markerColors : normalColors }
     private var finished = false
+    private weak var scrollView: NSScrollView?
+    private weak var zoomButton: NSButton?
+    /// REAL pixel size of the capture for the toolbar readout (canvas points × backing scale would lie
+    /// on retina — reuses the same pixelDimensions logic as the history dimension badge).
+    private let imagePixelSize: NSSize
 
     init(image: NSImage, onFinish: @escaping (NSImage?) -> Void) {
         self.canvas = AnnotationCanvasView(image: image)
         self.onFinish = onFinish
+        self.imagePixelSize = image.pixelDimensions
         super.init()
     }
 
     func present() {
         let imgSize = canvas.bounds.size
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
-        let minBarWidth: CGFloat = 780   // minimum width so the toolbar doesn't overlap itself
+        let minBarWidth: CGFloat = 1220  // minimum width so the toolbar doesn't overlap itself (11 tools + info cluster)
         let maxW = screen.width * 0.9, maxH = screen.height * 0.85 - 52
         let scale = min(1, min(maxW / imgSize.width, maxH / imgSize.height))
         let contentW = max(minBarWidth, imgSize.width * scale)
@@ -73,12 +79,18 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
         scroll.documentView = canvas
-        scroll.backgroundColor = .underPageBackgroundColor
+        // Classic transparency checkerboard so the image "floats" on the surround, Shottr-style.
+        scroll.backgroundColor = NSColor(patternImage: Self.checkerPattern)
         // Large captures: allow zooming and open fitted so the WHOLE image is visible (1x if it fits).
         scroll.allowsMagnification = true
         scroll.minMagnification = 0.2
         scroll.maxMagnification = 4
         if scale < 1 { scroll.magnify(toFit: canvas.frame) }
+        self.scrollView = scroll
+        // Live zoom readout: pinch magnification ends → refresh the toolbar's percentage label.
+        NotificationCenter.default.addObserver(self, selector: #selector(liveMagnifyEnded),
+                                               name: NSScrollView.didEndLiveMagnifyNotification,
+                                               object: scroll)
         content.addSubview(scroll)
 
         let toolbar = buildToolbar(width: contentW)
@@ -133,7 +145,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
 
         for tool in SnapTool.allCases {
             let b = makeToolButton(tool)
-            b.widthAnchor.constraint(equalToConstant: 36).isActive = true
+            b.widthAnchor.constraint(equalToConstant: 32).isActive = true   // 32pt: 11 tools now, 36 overflowed
             b.heightAnchor.constraint(equalToConstant: 32).isActive = true
             // Shottr-style single-letter shortcut: a bare letter selects the tool. Registered in
             // keyEquivControls so the letters return to the field while typing in-place text.
@@ -197,12 +209,31 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         leading.addArrangedSubview(redo)
         keyEquivControls.append((redo, "Z", [.command, .shift]))
 
-        // Right group: copy + save + close.
+        // Right group: info cluster (pixel size + zoom) + copy + save + close.
         let trailing = NSStackView()
         trailing.orientation = .horizontal
         trailing.spacing = 6
         trailing.alignment = .centerY
         trailing.translatesAutoresizingMaskIntoConstraints = false
+
+        // Shottr-style readout: the capture's REAL pixel size and the live zoom (click resets to 100%).
+        let sizeLabel = NSTextField(labelWithString:
+            "\(Int(imagePixelSize.width)) × \(Int(imagePixelSize.height)) px")
+        sizeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        sizeLabel.textColor = .secondaryLabelColor
+        sizeLabel.toolTip = L10n.t("editor.imagesize")
+        trailing.addArrangedSubview(sizeLabel)
+
+        let zoom = NSButton(title: "100%", target: self, action: #selector(zoomResetTapped))
+        zoom.isBordered = false
+        zoom.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        zoom.contentTintColor = .secondaryLabelColor
+        zoom.toolTip = L10n.t("editor.zoom.reset")
+        zoomButton = zoom
+        updateZoomLabel()   // reflect the initial magnify(toFit:) done in present()
+        trailing.addArrangedSubview(zoom)
+
+        addSeparator(to: trailing)
 
         let copy = makeTextButton(title: L10n.t("editor.copy"), tip: L10n.t("editor.copy.tip"), action: #selector(copyTapped))
         copy.keyEquivalent = "c"; copy.keyEquivalentModifierMask = [.command]
@@ -398,10 +429,12 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     @objc private func undoTapped() { canvas.undo() }
     @objc private func redoTapped() { canvas.redo() }
 
-    /// Bare-letter tool shortcuts (Shottr parity): A arrow, P pencil, L line, R rectangle,
-    /// O ellipse, H highlighter, T text.
+    /// Bare-letter tool shortcuts (Shottr parity): V select, A arrow, P pencil, L line, R rectangle,
+    /// O ellipse, H highlighter, T text, B blur, S spotlight, C counter. Bare letters never clash with
+    /// the ⌘-modified equivalents (⌘S save, ⌘C copy) — the modifier mask disambiguates.
     private static func toolKey(_ tool: SnapTool) -> String {
         switch tool {
+        case .select:    return "v"
         case .pencil:    return "p"
         case .line:      return "l"
         case .arrow:     return "a"
@@ -409,8 +442,40 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         case .ellipse:   return "o"
         case .marker:    return "h"
         case .text:      return "t"
+        case .blur:      return "b"
+        case .spotlight: return "s"
+        case .counter:   return "c"
         }
     }
+
+    // MARK: - Zoom readout
+
+    @objc private func zoomResetTapped() {
+        scrollView?.magnification = 1
+        updateZoomLabel()
+    }
+
+    @objc private func liveMagnifyEnded(_ note: Notification) { updateZoomLabel() }
+
+    private func updateZoomLabel() {
+        guard let scroll = scrollView else { return }
+        zoomButton?.title = "\(Int(round(scroll.magnification * 100)))%"
+    }
+
+    /// Classic transparency checkerboard tile for the canvas surround.
+    /// ponytail: fixed mid-grays readable in both themes — NSColor(patternImage:) can't adapt live.
+    private static let checkerPattern: NSImage = {
+        let square: CGFloat = 8
+        let img = NSImage(size: NSSize(width: square * 2, height: square * 2))
+        img.lockFocus()
+        NSColor(white: 0.53, alpha: 1).setFill()
+        NSRect(x: 0, y: 0, width: square * 2, height: square * 2).fill()
+        NSColor(white: 0.60, alpha: 1).setFill()
+        NSRect(x: 0, y: square, width: square, height: square).fill()
+        NSRect(x: square, y: 0, width: square, height: square).fill()
+        img.unlockFocus()
+        return img
+    }()
 
     @objc private func copyTapped() {
         let image = canvas.flattened()

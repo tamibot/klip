@@ -1,10 +1,13 @@
 import AppKit
 
 /// Editor canvas: draws the base capture and the annotations on top. Handles live drawing,
-/// in-place text (a temporary NSTextField — supports accents), and for text: selecting, moving,
-/// re-editing, and resizing. Flattens everything to a full-resolution image.
+/// in-place text (a temporary NSTextField — supports accents), universal select/move/delete of
+/// any annotation (.select tool), blur/spotlight/counter rendering, and for text: re-editing
+/// and resizing. Flattens everything to a full-resolution image.
 final class AnnotationCanvasView: NSView {
     private let baseImage: NSImage
+    /// Base capture as CGImage, resolved once: the blur tool pixelates regions of it.
+    private lazy var baseCG: CGImage? = baseImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
     private(set) var annotations: [Annotation] = []
     private var draft: Annotation?
 
@@ -13,9 +16,9 @@ final class AnnotationCanvasView: NSView {
     private var editingID: UUID?              // text annotation currently being re-edited
     private var editFontSize: CGFloat = 20
     private var editColor: NSColor = .systemRed
-    private(set) var selectedTextID: UUID?    // selected text (highlighted box)
-    private var movingTextID: UUID?           // text currently being dragged
-    private var moveOffset = CGSize.zero
+    private(set) var selectedID: UUID?        // selected annotation (dashed outline); any type via .select
+    private var movingID: UUID?               // annotation currently being dragged
+    private var lastDragPoint = CGPoint.zero  // previous drag location (moves translate by delta)
     private var movedDuringDrag = false
     /// Full-state undo snapshots: add / move / edit / recolor / resize / delete are all reversible.
     private var undoStack: [[Annotation]] = []
@@ -44,17 +47,52 @@ final class AnnotationCanvasView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         baseImage.draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
-        // The text being re-edited is hidden from the canvas (the NSTextField on top shows it);
-        // that way an Undo/cancel during re-editing restores the original instead of losing it.
-        for a in annotations where a.id != editingID { a.draw() }
-        draft?.draw()
+        drawAnnotationLayers(forCanvas: true)
+        draft?.draw(base: baseCG, canvasSize: bounds.size)
         drawSelectionHighlight()
     }
 
+    /// Annotation pass shared by the canvas and both flatten paths, so the export renders exactly
+    /// what the canvas shows: the spotlight dim layer first (ONE layer with a clear hole per
+    /// spotlight), then every annotation in array order. Counter numbers are derived here from
+    /// each counter's ordinal among counters, so deleting/undoing one renumbers the rest.
+    /// The text being re-edited is hidden from the canvas (the NSTextField on top shows it);
+    /// that way an Undo/cancel during re-editing restores the original instead of losing it.
+    private func drawAnnotationLayers(forCanvas: Bool) {
+        drawSpotlightDim(includeDraft: forCanvas)
+        var counterNumber = 0
+        for a in annotations {
+            if forCanvas, a.id == editingID { continue }
+            if a.tool == .counter { counterNumber += 1 }
+            a.draw(base: baseCG, canvasSize: bounds.size, number: counterNumber)
+        }
+    }
+
+    /// Dims everything outside the spotlight rects: black wash over the whole image, then the
+    /// base region re-drawn inside each rect. Re-drawing the base "punches" the holes, which makes
+    /// overlapping spotlights union cleanly (an even-odd path would invert where rects overlap).
+    private func drawSpotlightDim(includeDraft: Bool) {
+        var rects = annotations
+            .filter { $0.tool == .spotlight }
+            .map { $0.dragRect }
+        if includeDraft, let d = draft, d.tool == .spotlight, d.points.count > 1 {
+            rects.append(d.dragRect)   // live preview while dragging a new spotlight
+        }
+        guard !rects.isEmpty else { return }
+        NSColor.black.withAlphaComponent(0.5).setFill()
+        bounds.fill(using: .sourceOver)
+        for r in rects {
+            let hole = r.intersection(bounds)
+            guard !hole.isEmpty else { continue }
+            // baseImage.size == bounds.size, so the view rect doubles as the source rect.
+            baseImage.draw(in: hole, from: hole, operation: .copy, fraction: 1)
+        }
+    }
+
     private func drawSelectionHighlight() {
-        guard let id = selectedTextID,
+        guard let id = selectedID,
               let ann = annotations.first(where: { $0.id == id }),
-              let box = ann.textBounds()?.insetBy(dx: -4, dy: -4) else { return }
+              let box = ann.selectionBounds()?.insetBy(dx: -4, dy: -4) else { return }
         NSColor.controlAccentColor.setStroke()
         let path = NSBezierPath(rect: box)
         path.lineWidth = 1
@@ -67,6 +105,37 @@ final class AnnotationCanvasView: NSView {
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
 
+        if currentTool == .select {
+            // Universal select & move: hit-test ALL annotations, topmost first. Never creates
+            // a draft — this tool only selects, drags, and (via ⌫) deletes existing annotations.
+            commitActiveText()
+            if let ann = annotations.last(where: { $0.hitTest(p) }) {
+                selectedID = ann.id
+                movingID = ann.id
+                lastDragPoint = p
+                preMoveSnapshot = annotations   // snapshot in case the drag moves it (undoable)
+                movedDuringDrag = false
+            } else {
+                selectedID = nil
+            }
+            onSelectionChange?()
+            needsDisplay = true
+            return
+        }
+
+        if currentTool == .counter {
+            // Click stamps a numbered badge — no drag, no draft. The displayed number is derived
+            // from array order at draw time, so undo/delete renumbers the remaining counters.
+            selectedID = nil
+            onSelectionChange?()
+            commitActiveText()
+            pushUndo()
+            annotations.append(Annotation(tool: .counter, color: currentColor,
+                                          lineWidth: currentLineWidth, points: [p], text: nil))
+            needsDisplay = true
+            return
+        }
+
         if currentTool == .text {
             commitActiveText()
             // Click on an existing text? (top to bottom)
@@ -78,13 +147,13 @@ final class AnnotationCanvasView: NSView {
                     // Double click → re-edit. It is NOT removed from the array: it's hidden via
                     // editingID while editing (draw skips it), so an Undo/cancel restores the original text.
                     editingID = ann.id
-                    selectedTextID = nil
+                    selectedID = nil
                     beginTextEditing(at: ann.start, existing: ann)
                 } else {
                     // Single click → select and prepare to drag.
-                    selectedTextID = ann.id
-                    movingTextID = ann.id
-                    moveOffset = CGSize(width: p.x - ann.start.x, height: p.y - ann.start.y)
+                    selectedID = ann.id
+                    movingID = ann.id
+                    lastDragPoint = p
                     preMoveSnapshot = annotations   // snapshot in case the drag moves it (undoable)
                     movedDuringDrag = false
                     onSelectionChange?()
@@ -93,15 +162,15 @@ final class AnnotationCanvasView: NSView {
                 return
             }
             // Empty space → new text.
-            selectedTextID = nil
+            selectedID = nil
             onSelectionChange?()   // with no text selected, the toolbar reflects the current color/size
             beginTextEditing(at: p, existing: nil)
             needsDisplay = true
             return
         }
 
-        // Drawing tools.
-        selectedTextID = nil
+        // Drawing tools (including blur/spotlight: drag rects, normalized in Annotation.dragRect).
+        selectedID = nil
         onSelectionChange?()
         commitActiveText()
         draft = Annotation(tool: currentTool, color: currentColor,
@@ -111,9 +180,14 @@ final class AnnotationCanvasView: NSView {
     override func mouseDragged(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
 
-        // Move a selected text.
-        if let movingID = movingTextID, let idx = annotations.firstIndex(where: { $0.id == movingID }) {
-            annotations[idx].points = [CGPoint(x: p.x - moveOffset.width, y: p.y - moveOffset.height)]
+        // Move the grabbed annotation: translate ALL its points by the drag delta (works for
+        // single-point text/counters and multi-point strokes alike).
+        if let movingID, let idx = annotations.firstIndex(where: { $0.id == movingID }) {
+            let dx = p.x - lastDragPoint.x, dy = p.y - lastDragPoint.y
+            annotations[idx].points = annotations[idx].points.map {
+                CGPoint(x: $0.x + dx, y: $0.y + dy)
+            }
+            lastDragPoint = p
             movedDuringDrag = true
             needsDisplay = true
             return
@@ -130,9 +204,9 @@ final class AnnotationCanvasView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if movingTextID != nil {
-            if movedDuringDrag, let snap = preMoveSnapshot { pushUndo(snap) }   // record the move for undo
-            movingTextID = nil; preMoveSnapshot = nil; movedDuringDrag = false
+        if movingID != nil {
+            if movedDuringDrag, let snap = preMoveSnapshot { pushUndo(snap) }   // ONE undo per completed drag
+            movingID = nil; preMoveSnapshot = nil; movedDuringDrag = false
             return
         }
         guard let d = draft else { return }
@@ -201,7 +275,7 @@ final class AnnotationCanvasView: NSView {
                              points: [origin], text: text, fontSize: editFontSize)
         if let id { ann.id = id }   // preserves identity when re-editing
         annotations.append(ann)
-        selectedTextID = ann.id
+        selectedID = ann.id
         onSelectionChange?()
         needsDisplay = true
     }
@@ -209,14 +283,16 @@ final class AnnotationCanvasView: NSView {
     // MARK: - Font size
 
     /// Effective size to show in the toolbar: that of the selected text, or the current one.
+    /// (Only text has a font size; a selected shape doesn't override the toolbar value.)
     var effectiveFontSize: CGFloat {
-        if let id = selectedTextID, let a = annotations.first(where: { $0.id == id }) { return a.fontSize }
+        if let id = selectedID, let a = annotations.first(where: { $0.id == id }),
+           a.tool == .text { return a.fontSize }
         return currentFontSize
     }
 
-    /// Effective color to reflect in the toolbar: that of the selected text, or the current one.
+    /// Effective color to reflect in the toolbar: that of the selected annotation, or the current one.
     var effectiveColor: NSColor {
-        if let id = selectedTextID, let a = annotations.first(where: { $0.id == id }) { return a.color }
+        if let id = selectedID, let a = annotations.first(where: { $0.id == id }) { return a.color }
         return currentColor
     }
 
@@ -228,7 +304,8 @@ final class AnnotationCanvasView: NSView {
             field.font = NSFont.systemFont(ofSize: clamped, weight: .semibold)
             editFontSize = clamped
         }
-        if let id = selectedTextID, let idx = annotations.firstIndex(where: { $0.id == id }) {
+        if let id = selectedID, let idx = annotations.firstIndex(where: { $0.id == id }),
+           annotations[idx].tool == .text {   // font size only means something for text
             pushUndo()
             annotations[idx].fontSize = clamped
         }
@@ -237,12 +314,12 @@ final class AnnotationCanvasView: NSView {
 
     func bumpFontSize(_ delta: CGFloat) { setFontSize(effectiveFontSize + delta) }
 
-    /// Sets the current color and, if there is selected or being-edited text, recolors it.
-    /// Use for explicit user color actions (tapping a swatch / the color panel).
+    /// Sets the current color and, if there is a selected annotation or text being edited,
+    /// recolors it. Use for explicit user color actions (tapping a swatch / the color panel).
     func setColor(_ color: NSColor) {
         currentColor = color
         if let field = activeTextField { field.textColor = color; editColor = color }
-        if let id = selectedTextID, let idx = annotations.firstIndex(where: { $0.id == id }) {
+        if let id = selectedID, let idx = annotations.firstIndex(where: { $0.id == id }) {
             pushUndo()
             annotations[idx].color = color
         }
@@ -258,11 +335,11 @@ final class AnnotationCanvasView: NSView {
     func setColorCoalesced(_ color: NSColor) {
         if colorCoalescingArmed {
             colorCoalescingArmed = false
-            if selectedTextID != nil { pushUndo() }   // one snapshot for the whole drag
+            if selectedID != nil { pushUndo() }   // one snapshot for the whole drag
         }
         currentColor = color
         if let field = activeTextField { field.textColor = color; editColor = color }
-        if let id = selectedTextID, let idx = annotations.firstIndex(where: { $0.id == id }) {
+        if let id = selectedID, let idx = annotations.firstIndex(where: { $0.id == id }) {
             annotations[idx].color = color   // no pushUndo: already snapshotted at drag start
         }
         needsDisplay = true
@@ -298,7 +375,7 @@ final class AnnotationCanvasView: NSView {
         guard let prev = undoStack.popLast() else { return }
         redoStack.append(annotations)   // so ⇧⌘Z can bring it back
         annotations = prev
-        selectedTextID = nil
+        selectedID = nil
         onSelectionChange?()
         needsDisplay = true
     }
@@ -309,19 +386,19 @@ final class AnnotationCanvasView: NSView {
         undoStack.append(annotations)   // direct append: pushUndo would wipe the redo history
         if undoStack.count > 50 { undoStack.removeFirst() }
         annotations = next
-        selectedTextID = nil
+        selectedID = nil
         onSelectionChange?()
         needsDisplay = true
     }
 
-    /// Deletes the currently selected text annotation (Delete / Backspace), undoably.
+    /// Deletes the currently selected annotation (Delete / Backspace), undoably.
     override func keyDown(with event: NSEvent) {
         let isDelete = event.keyCode == 51 || event.keyCode == 117   // Backspace / Forward-Delete
-        if isDelete, activeTextField == nil, let id = selectedTextID,
+        if isDelete, activeTextField == nil, let id = selectedID,
            annotations.contains(where: { $0.id == id }) {
             pushUndo()
             annotations.removeAll { $0.id == id }
-            selectedTextID = nil
+            selectedID = nil
             onSelectionChange?()
             needsDisplay = true
             return
@@ -332,16 +409,15 @@ final class AnnotationCanvasView: NSView {
     /// Flattens base + annotations into an NSImage at full pixel resolution (Retina).
     func flattened() -> NSImage {
         commitActiveText()
-        let savedSelection = selectedTextID
-        selectedTextID = nil   // don't rasterize the selection box
-        defer { selectedTextID = savedSelection }
+        let savedSelection = selectedID
+        selectedID = nil   // don't rasterize the selection box
+        defer { selectedID = savedSelection }
 
         let pxW = baseImage.representations.first?.pixelsWide ?? Int(bounds.width)
         let pxH = baseImage.representations.first?.pixelsHigh ?? Int(bounds.height)
         // Rasterize in the base image's OWN color space. Using a generic `.deviceRGB` bitmap rep would
         // strip a Display P3 (wide-gamut) profile and produce a washed-out PNG on capable displays; a
         // CGContext in `baseCG.colorSpace` preserves the colors the user actually saw.
-        let baseCG = baseImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
         let colorSpace = baseCG?.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)
         if pxW > 0, pxH > 0, bounds.width > 0, bounds.height > 0, let colorSpace,
            let ctx = CGContext(data: nil, width: pxW, height: pxH, bitsPerComponent: 8,
@@ -351,7 +427,7 @@ final class AnnotationCanvasView: NSView {
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
             baseImage.draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
-            for a in annotations { a.draw() }
+            drawAnnotationLayers(forCanvas: false)
             NSGraphicsContext.restoreGraphicsState()
             if let outCG = ctx.makeImage() {
                 let rep = NSBitmapImageRep(cgImage: outCG)
@@ -367,7 +443,7 @@ final class AnnotationCanvasView: NSView {
         let out = NSImage(size: bounds.size)
         out.lockFocus()
         baseImage.draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
-        for a in annotations { a.draw() }
+        drawAnnotationLayers(forCanvas: false)
         out.unlockFocus()
         return out
     }
