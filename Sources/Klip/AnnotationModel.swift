@@ -8,16 +8,16 @@ enum SnapTool: String, CaseIterable {
     var symbol: String {
         switch self {
         case .select:    return "cursorarrow"
-        case .pencil:    return "pencil.tip"
+        case .pencil:    return "pencil"                // "pencil.tip" reads as a nib, not a pencil
         case .line:      return "line.diagonal"
         case .arrow:     return "arrow.up.right"
         case .rectangle: return "rectangle"
         case .ellipse:   return "circle"
         case .marker:    return "highlighter"
         case .text:      return "textformat"
-        case .blur:      return "mosaic"
-        case .spotlight: return "camera.metering.spot"
-        case .counter:   return "number.circle"
+        case .blur:      return "drop"                  // Shottr's blur metaphor; "mosaic" reads as a table
+        case .spotlight: return "flashlight.on.fill"    // "camera.metering.spot" is cryptic
+        case .counter:   return "1.circle"              // shows an actual number, like the badges it stamps
         }
     }
 
@@ -48,6 +48,7 @@ struct Annotation {
     var points: [CGPoint]
     var text: String?
     var fontSize: CGFloat = 20   // only for .text
+    var blurLevel: CGFloat = 12  // only for .blur: pixel-block divisor; higher = coarser blocks
 
     var start: CGPoint { points.first ?? .zero }
     var end: CGPoint { points.last ?? .zero }
@@ -152,9 +153,9 @@ struct Annotation {
 
     // MARK: - Tool renderers
 
-    /// Blur/pixelate: crop the covered region from the base CGImage, downscale to ~1/12, and
-    /// draw it back up with no interpolation. Purely derived from the base pixels, so the canvas
-    /// and the flattened export render identical blocks.
+    /// Blur/pixelate: crop the covered region from the base CGImage, downscale to ~1/blurLevel,
+    /// and draw it back up with no interpolation. Purely derived from the base pixels, so the
+    /// canvas and the flattened export render identical blocks.
     private func drawPixelated(base: CGImage?, canvasSize: CGSize) {
         guard let base, canvasSize.width > 0, canvasSize.height > 0 else { return }
         let r = dragRect
@@ -167,7 +168,7 @@ struct Annotation {
                           width: r.width * sx,
                           height: r.height * sy).integral
         guard let cropped = base.cropping(to: crop) else { return }
-        let tw = max(1, Int(crop.width / 12)), th = max(1, Int(crop.height / 12))
+        let tw = max(1, Int(crop.width / blurLevel)), th = max(1, Int(crop.height / blurLevel))
         // ponytail: re-pixelated on every draw; cache the tiny image per annotation if profiling
         // ever shows large blur rects lagging the canvas.
         guard let small = CGContext(data: nil, width: tw, height: th, bitsPerComponent: 8,

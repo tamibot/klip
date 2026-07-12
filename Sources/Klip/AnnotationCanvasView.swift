@@ -32,6 +32,7 @@ final class AnnotationCanvasView: NSView {
     var currentColor: NSColor = .systemRed
     var currentLineWidth: CGFloat = 3
     var currentFontSize: CGFloat = 20
+    var currentBlurLevel: CGFloat = 12   // pixel-block divisor for NEW blurs; higher = coarser
 
     /// Notifies selection changes (so the toolbar reflects the size of the selected text).
     var onSelectionChange: (() -> Void)?
@@ -174,7 +175,8 @@ final class AnnotationCanvasView: NSView {
         onSelectionChange?()
         commitActiveText()
         draft = Annotation(tool: currentTool, color: currentColor,
-                           lineWidth: currentLineWidth, points: [p], text: nil)
+                           lineWidth: currentLineWidth, points: [p], text: nil,
+                           blurLevel: currentBlurLevel)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -296,6 +298,19 @@ final class AnnotationCanvasView: NSView {
         return currentColor
     }
 
+    /// Tool of the selected annotation (nil if none) — lets the toolbar show contextual controls.
+    var selectedAnnotationTool: SnapTool? {
+        guard let id = selectedID else { return nil }
+        return annotations.first(where: { $0.id == id })?.tool
+    }
+
+    /// Effective blur level to show in the slider: that of the selected blur, or the current one.
+    var effectiveBlurLevel: CGFloat {
+        if let id = selectedID, let a = annotations.first(where: { $0.id == id }),
+           a.tool == .blur { return a.blurLevel }
+        return currentBlurLevel
+    }
+
     /// Applies a new size: to the selected text (if any) and as the default size for the next one.
     func setFontSize(_ size: CGFloat) {
         let clamped = max(10, min(120, size))
@@ -341,6 +356,26 @@ final class AnnotationCanvasView: NSView {
         if let field = activeTextField { field.textColor = color; editColor = color }
         if let id = selectedID, let idx = annotations.firstIndex(where: { $0.id == id }) {
             annotations[idx].color = color   // no pushUndo: already snapshotted at drag start
+        }
+        needsDisplay = true
+    }
+
+    /// Blur-intensity slider drags fire continuously too — same coalescing pattern as the color
+    /// panel: arm once at slide start, the FIRST change snapshots, the rest update in place.
+    private var blurCoalescingArmed = false
+    func armBlurCoalescing() { blurCoalescingArmed = true }
+
+    /// Sets the blur level for FUTURE blurs and, if a blur annotation is selected, re-pixelates
+    /// it live (one undo step per slide, via armBlurCoalescing).
+    func setBlurLevelCoalesced(_ level: CGFloat) {
+        if blurCoalescingArmed {
+            blurCoalescingArmed = false
+            if selectedAnnotationTool == .blur { pushUndo() }   // one snapshot for the whole slide
+        }
+        currentBlurLevel = level
+        if let id = selectedID, let idx = annotations.firstIndex(where: { $0.id == id }),
+           annotations[idx].tool == .blur {
+            annotations[idx].blurLevel = level   // no pushUndo: already snapshotted at slide start
         }
         needsDisplay = true
     }

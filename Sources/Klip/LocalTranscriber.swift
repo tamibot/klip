@@ -109,6 +109,8 @@ actor LocalTranscriber {
             if !ids.isEmpty {
                 opts.promptTokens = Array(ids.suffix(200))
                 opts.usePrefillPrompt = true
+                // Once per transcription, so the context-words feature is verifiable in Console.app.
+                NSLog("Klip LocalTranscriber: biasing decode with %d context-word prompt tokens", opts.promptTokens?.count ?? 0)
             }
         }
         return try await wk.transcribe(audioPath: audioURL.path, decodeOptions: opts)

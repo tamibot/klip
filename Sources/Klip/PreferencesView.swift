@@ -82,6 +82,13 @@ struct PreferencesView: View {
     // Dictation/audio languages passed to the transcription provider (endonyms). "" = auto-detect.
     private let dictationLanguages = DictationLanguage.all
 
+    /// Comma-separated entries in the context-words field ("Klip, GitHub" → 2).
+    private var vocabWordCount: Int {
+        settings.transcriptionVocabulary.split(separator: ",")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .count
+    }
+
     private var appLogo: NSImage? {
         if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
            let img = NSImage(contentsOf: url) { return img }
@@ -205,12 +212,26 @@ struct PreferencesView: View {
                     Text(L10n.t("lang.auto")).tag("")
                     ForEach(dictationLanguages, id: \.code) { Text($0.name).tag($0.code) }
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.t("prefs.vocab.label")).font(.subheadline)
-                    TextField(L10n.t("prefs.vocab.placeholder"), text: $settings.transcriptionVocabulary, axis: .vertical)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.t("prefs.vocab.label")).font(.subheadline.weight(.semibold))
+                    // Empty title + labelsHidden: with a non-empty title the grouped Form renders it as a
+                    // leading label and squeezes the field into a cramped trailing column.
+                    TextField("", text: $settings.transcriptionVocabulary,
+                              prompt: Text(L10n.t("prefs.vocab.placeholder")), axis: .vertical)
                         .lineLimit(2...4)
                         .textFieldStyle(.roundedBorder)
-                    Text(L10n.t("prefs.vocab.info")).font(.caption).foregroundStyle(.secondary)
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity)
+                    HStack(alignment: .top) {
+                        Text(L10n.t("prefs.vocab.info")).font(.caption).foregroundStyle(.secondary)
+                        Spacer(minLength: 12)
+                        if vocabWordCount > 0 {
+                            // Live count: immediate feedback that the words are registered.
+                            Text(String(format: L10n.t("prefs.vocab.count"), vocabWordCount))
+                                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                                .fixedSize()
+                        }
+                    }
                 }
             }
 

@@ -45,6 +45,14 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     private var finished = false
     private weak var scrollView: NSScrollView?
     private weak var zoomButton: NSButton?
+    // Contextual controls (Shottr-style: only the options that apply to the active tool/selection
+    // are visible). Each group hides together with the separator that precedes it.
+    private weak var strokeControl: NSSegmentedControl?
+    private weak var strokeSeparator: NSView?
+    private weak var blurSlider: NSSlider?
+    private weak var blurSeparator: NSView?
+    private var textSizeButtons: [NSButton] = []
+    private weak var textSizeSeparator: NSView?
     /// REAL pixel size of the capture for the toolbar readout (canvas points × backing scale would lie
     /// on retina — reuses the same pixelDimensions logic as the history dimension badge).
     private let imagePixelSize: NSSize
@@ -113,8 +121,12 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         }
         canvas.currentLineWidth = 3   // default stroke: visible but not heavy
         selectTool(.arrow)
-        // When selecting/deselecting a text, reflect its color in the toolbar palette.
-        canvas.onSelectionChange = { [weak self] in self?.syncColorSelectionFromCanvas() }
+        // When the selection changes, reflect its color in the palette and swap the contextual
+        // controls (blur slider / text size) to match what is selected.
+        canvas.onSelectionChange = { [weak self] in
+            self?.syncColorSelectionFromCanvas()
+            self?.refreshContextualControls()
+        }
         // While typing into the in-place text field, release the toolbar's ⌘C/⌘Z/⌘S/Esc so they edit the
         // text (copy/undo/cancel) instead of firing the toolbar actions.
         canvas.onTextEditingChanged = { [weak self] editing in self?.setKeyEquivalents(enabled: !editing) }
@@ -158,6 +170,8 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
             keyEquivControls.append((b, key, []))
             toolButtons[tool] = b
             leading.addArrangedSubview(b)
+            // Shottr-style grouping: [select] | [draw tools + text] | [blur spotlight counter].
+            if tool == .select || tool == .text { addSeparator(to: leading) }
         }
 
         addSeparator(to: leading)
@@ -175,20 +189,35 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         more.widthAnchor.constraint(equalToConstant: 30).isActive = true
         leading.addArrangedSubview(more)
 
-        addSeparator(to: leading)
+        strokeSeparator = addSeparator(to: leading)
 
-        // Thickness: only two levels (thin / thick), thicker and more visible than before.
+        // Thickness: only two levels (thin / thick). Contextual — visible for drawing tools only.
         let widths = NSSegmentedControl(images: [lineImage(3), lineImage(6)],
                                         trackingMode: .selectOne,
                                         target: self, action: #selector(widthChanged(_:)))
         widths.setWidth(40, forSegment: 0); widths.setWidth(40, forSegment: 1)
         widths.selectedSegment = 0
         widths.toolTip = L10n.t("editor.strokewidth")
+        strokeControl = widths
         leading.addArrangedSubview(widths)
 
-        addSeparator(to: leading)
+        blurSeparator = addSeparator(to: leading)
 
-        // Text size (affects the selected text or the next one you type).
+        // Blur intensity (block coarseness). Contextual — visible while the blur tool is active
+        // or a blur annotation is selected; updates the selection live (one undo per slide).
+        let blur = NSSlider(value: 12, minValue: 6, maxValue: 28,
+                            target: self, action: #selector(blurLevelChanged(_:)))
+        blur.isContinuous = true
+        blur.controlSize = .small
+        blur.toolTip = L10n.t("editor.blurIntensity")
+        blur.translatesAutoresizingMaskIntoConstraints = false
+        blur.widthAnchor.constraint(equalToConstant: 96).isActive = true
+        blurSlider = blur
+        leading.addArrangedSubview(blur)
+
+        textSizeSeparator = addSeparator(to: leading)
+
+        // Text size (affects the selected text or the next one you type). Contextual — text only.
         let smaller = makeActionButton(symbol: "textformat.size.smaller", tip: L10n.t("editor.textsmaller"), action: #selector(textSmaller))
         let larger = makeActionButton(symbol: "textformat.size.larger", tip: L10n.t("editor.textlarger"), action: #selector(textLarger))
         for b in [smaller, larger] {
@@ -196,6 +225,9 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
             b.widthAnchor.constraint(equalToConstant: size).isActive = true
             leading.addArrangedSubview(b)
         }
+        textSizeButtons = [smaller, larger]
+
+        addSeparator(to: leading)
 
         let undo = makeActionButton(symbol: "arrow.uturn.backward", tip: L10n.t("editor.undo"), action: #selector(undoTapped))
         undo.keyEquivalent = "z"; undo.keyEquivalentModifierMask = [.command]
@@ -311,10 +343,40 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
             canvas.setDefaultColor(palette[min(colorIndex, palette.count - 1)])
         }
         lastToolWasMarker = isMarker
+        refreshContextualControls()
     }
 
     @objc private func widthChanged(_ sender: NSSegmentedControl) {
         canvas.currentLineWidth = sender.selectedSegment == 1 ? 6 : 3   // thick / thin
+    }
+
+    @objc private func blurLevelChanged(_ sender: NSSlider) {
+        // A slide starts with a mouse-down (or a single arrow-key press): re-arm the coalescing
+        // there so the whole continuous drag collapses into ONE undo step (color-panel pattern).
+        let type = NSApp.currentEvent?.type
+        if type == .leftMouseDown || type == .keyDown { canvas.armBlurCoalescing() }
+        canvas.setBlurLevelCoalesced(CGFloat(sender.doubleValue))
+    }
+
+    /// Shows only the options that apply to the active tool / selection (Shottr-style contextual
+    /// bar): stroke width for drawing tools, intensity for blur, size buttons for text.
+    private func refreshContextualControls() {
+        let tool = canvas.currentTool
+        let selected = canvas.selectedAnnotationTool
+        let showStroke: Bool
+        switch tool {
+        case .pencil, .line, .arrow, .rectangle, .ellipse, .marker: showStroke = true
+        default: showStroke = false
+        }
+        let showBlur = tool == .blur || selected == .blur
+        let showText = tool == .text || selected == .text
+        strokeControl?.isHidden = !showStroke
+        strokeSeparator?.isHidden = !showStroke
+        blurSlider?.isHidden = !showBlur
+        blurSeparator?.isHidden = !showBlur
+        textSizeButtons.forEach { $0.isHidden = !showText }
+        textSizeSeparator?.isHidden = !showText
+        if showBlur { blurSlider?.doubleValue = Double(canvas.effectiveBlurLevel) }
     }
 
     // MARK: - Color
@@ -387,7 +449,9 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
 
     /// Adds a hairline separator with even 8pt breathing room on both sides
     /// (the stack's default 4pt reads cramped next to a 1px line).
-    private func addSeparator(to stack: NSStackView) {
+    /// Returns the separator so contextual groups can hide it along with their controls.
+    @discardableResult
+    private func addSeparator(to stack: NSStackView) -> NSView {
         if let last = stack.arrangedSubviews.last { stack.setCustomSpacing(8, after: last) }
         let box = NSBox()
         box.boxType = .separator
@@ -396,6 +460,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         box.heightAnchor.constraint(equalToConstant: 24).isActive = true
         stack.addArrangedSubview(box)
         stack.setCustomSpacing(8, after: box)
+        return box
     }
 
     private static func swatchImage(_ color: NSColor) -> NSImage {
