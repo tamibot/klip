@@ -5,8 +5,8 @@
     <key>CFBundleName</key><string>Klip</string>
     <key>CFBundleDisplayName</key><string>Klip</string>
     <key>CFBundleIdentifier</key><string>com.proper.klip</string>
-    <key>CFBundleVersion</key><string>0.4</string>
-    <key>CFBundleShortVersionString</key><string>0.4</string>
+    <key>CFBundleVersion</key><string>0.6</string>
+    <key>CFBundleShortVersionString</key><string>0.6</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleExecutable</key><string>Klip</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>

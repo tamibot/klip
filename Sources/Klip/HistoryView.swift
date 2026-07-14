@@ -244,12 +244,17 @@ struct HistoryView: View {
     private func chip(_ text: String, icon: String, selected: Bool, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 10))
-                Text(text).font(.system(size: 11))
+                Image(systemName: icon).font(.system(size: 10, weight: .semibold))
+                Text(text).font(.system(size: 11, weight: selected ? .semibold : .regular))
             }
-            .padding(.horizontal, 9).padding(.vertical, 4)
-            .background(Capsule().fill(selected ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.06)))
-            .overlay(Capsule().stroke(selected ? Color.accentColor.opacity(0.5) : .clear, lineWidth: 1))
+            // Native segmented-selection feel: the active chip is a solid accent capsule with white
+            // content; the rest are a faint, borderless material pill.
+            .foregroundStyle(selected ? Color.white : Color.primary)
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(
+                Capsule().fill(selected ? AnyShapeStyle(Color.accentColor)
+                                        : AnyShapeStyle(.quaternary))
+            )
             .animation(.easeOut(duration: 0.15), value: selected)   // soften the selected-chip swap
         }
         .buttonStyle(.plain)
