@@ -161,7 +161,7 @@ struct HistoryView: View {
                 if let logo = Self.appLogo {
                     Image(nsImage: logo).resizable().frame(width: 22, height: 22)
                 }
-                Text("Klip").font(.title2.bold())
+                Text("Klip").font(.title2.bold()).tracking(-0.3)   // tighten large display text (Apple type)
                 Spacer(minLength: 8)
                 if recorder.transcribingCount > 0 {
                     HStack(spacing: 4) {
@@ -255,9 +255,9 @@ struct HistoryView: View {
                 Capsule().fill(selected ? AnyShapeStyle(Color.accentColor)
                                         : AnyShapeStyle(.quaternary))
             )
-            .animation(.easeOut(duration: 0.15), value: selected)   // soften the selected-chip swap
+            .animation(.snappy(duration: 0.2, extraBounce: 0), value: selected)   // critically-damped selection swap
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle())   // press-down feedback (Apple: respond on press)
     }
 
     // MARK: - Batch selection (vibe coders)
@@ -694,7 +694,7 @@ struct ItemRow: View {
                 .contentTransition(.symbolEffect(.replace))
                 .animation(.easeOut(duration: 0.12), value: symbol)
         }
-        .buttonStyle(.borderless).help(help)
+        .buttonStyle(PressableButtonStyle()).help(help)   // press-down feedback (Apple: respond on press)
     }
 
     /// Human-readable date label: "Hoy · 10:43", "Ayer · 10:43" or "martes 04 de julio · 10:43".

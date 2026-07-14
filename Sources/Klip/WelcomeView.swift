@@ -30,7 +30,7 @@ struct WelcomeView: View {
                 Image(nsImage: logo).resizable().aspectRatio(contentMode: .fit)
                     .frame(width: 52, height: 52)
             }
-            Text(L10n.t("welcome.title")).font(.title2).bold()
+            Text(L10n.t("welcome.title")).font(.title2).bold().tracking(-0.3)
             Text(L10n.t("welcome.tagline"))
                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
 

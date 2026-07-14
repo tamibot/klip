@@ -1,6 +1,19 @@
 import AppKit
 import SwiftUI
 
+/// Press feedback for custom (`.plain`/`.borderless`) buttons that don't get AppKit's native
+/// press dip. Apple's first fluid-interface principle: respond on press-DOWN, instantly. The dip
+/// rides a critically-damped spring (no overshoot) so it feels physical, not scripted. Respects
+/// Reduce Motion (the spring degrades to an instant state change there automatically).
+struct PressableButtonStyle: ButtonStyle {
+    var scale: CGFloat = 0.96
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .animation(.snappy(duration: 0.18, extraBounce: 0), value: configuration.isPressed)
+    }
+}
+
 /// Native macOS "glass" chrome for auxiliary windows (Welcome, Guide, Upload, Preferences):
 /// a behind-window translucent material running edge to edge under a transparent titlebar,
 /// so they match the history panel / HUD look instead of a flat opaque window.

@@ -122,7 +122,7 @@ struct PreferencesView: View {
             VStack(alignment: .leading, spacing: 8) {
                 // Title + version read as a single unit, so they stay tight; the links get the 8pt gap.
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Klip").font(.title2.bold())
+                    Text("Klip").font(.title2.bold()).tracking(-0.3)
                     Text("v\(AppInfo.version) · \(L10n.t("app.tagline"))")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -255,7 +255,7 @@ struct PreferencesView: View {
                             .onSubmit { saveOpenAI() }
                     }
                     Button { showKey.toggle() } label: { Image(systemName: showKey ? "eye.slash" : "eye") }
-                        .buttonStyle(.borderless).foregroundStyle(.secondary)
+                        .buttonStyle(PressableButtonStyle()).foregroundStyle(.secondary)
                 }
                 HStack {
                     Button(L10n.t("common.save")) { saveOpenAI() }
@@ -282,7 +282,7 @@ struct PreferencesView: View {
                             .onSubmit { saveGemini() }
                     }
                     Button { showGeminiKey.toggle() } label: { Image(systemName: showGeminiKey ? "eye.slash" : "eye") }
-                        .buttonStyle(.borderless).foregroundStyle(.secondary)
+                        .buttonStyle(PressableButtonStyle()).foregroundStyle(.secondary)
                 }
                 HStack {
                     Button(L10n.t("common.save")) { saveGemini() }

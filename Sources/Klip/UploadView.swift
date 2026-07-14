@@ -43,7 +43,7 @@ struct UploadView: View {
                 Text(m).font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Button(L10n.t("common.close")) { recorder.reset(); onClose() }
             default:
-                Text(L10n.t("upload.title")).font(.title2.bold())
+                Text(L10n.t("upload.title")).font(.title2.bold()).tracking(-0.3)
                 dropZone
                 if dropRejected {
                     Text(L10n.t("upload.unsupported"))
@@ -109,7 +109,7 @@ struct UploadView: View {
                         Button { recorder.retryUpload(r) } label: {
                             Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .semibold))
                         }
-                        .buttonStyle(.borderless).help(L10n.t("voice.retry"))
+                        .buttonStyle(PressableButtonStyle()).help(L10n.t("voice.retry"))
                     }
                     Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11))
                         .symbolRenderingMode(.hierarchical).foregroundStyle(.orange)
@@ -117,7 +117,7 @@ struct UploadView: View {
                     Button { copyText(r.text ?? "") } label: {
                         Image(systemName: "doc.on.doc").font(.system(size: 11, weight: .semibold))
                     }
-                    .buttonStyle(.borderless).help(L10n.t("row.copy"))
+                    .buttonStyle(PressableButtonStyle()).help(L10n.t("row.copy"))
                 }
             }
             if let t = r.text {

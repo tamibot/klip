@@ -60,7 +60,7 @@ struct GuideView: View {
                 Image(nsImage: logo).resizable().frame(width: 48, height: 48)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(L10n.t("win.guide")).font(.title2).bold()
+                Text(L10n.t("win.guide")).font(.title2).bold().tracking(-0.3)
                 Text("v\(AppInfo.version)")
                     .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
             }
