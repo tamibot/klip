@@ -154,10 +154,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         previousApp = NSWorkspace.shared.frontmostApplication
         positionPanel()
 
-        // Fade + a small upward settle (banner-style, same as ToastHUD); slide dropped under Reduce Motion.
-        let target = panel.frame
-        let slide: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 6
-        panel.setFrameOrigin(NSPoint(x: target.origin.x, y: target.origin.y - slide))
+        // Plain fade-in — no positional slide (the text must not move as the panel appears).
         panel.alphaValue = 0
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
@@ -171,7 +168,6 @@ final class PanelController: NSObject, NSWindowDelegate {
             ctx.duration = 0.13
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
-            panel.animator().setFrame(target, display: true)
         }
 
         installMonitors()
