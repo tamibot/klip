@@ -451,8 +451,8 @@ private struct FilteredHotKeyField: View {
             KeyRecorderView(combo: $combo, onChange: onChange)
                 .frame(width: 150, height: 28)
             Menu {
-                ForEach(Array(KeyCombo.suggestions.filter { !taken.contains($0) }.enumerated()),
-                        id: \.offset) { _, c in
+                ForEach(KeyCombo.suggestions.filter { !taken.contains($0) },
+                        id: \.displayString) { c in
                     Button(c.displayString) { combo = c; onChange(c) }
                 }
             } label: {

@@ -5,7 +5,9 @@ import AppKit
 struct GuideView: View {
     @ObservedObject var settings = Settings.shared
 
-    private struct Row: Identifiable { let id = UUID(); let keys: String; let what: String }
+    // id derived from `what` (stable across body passes + shortcut rebinds) — a fresh UUID() would
+    // give every row a new identity each render, so ForEach would discard and rebuild the whole list.
+    private struct Row: Identifiable { let keys: String; let what: String; var id: String { what } }
 
     private var klipShortcuts: [Row] {
         [
