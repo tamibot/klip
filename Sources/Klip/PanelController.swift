@@ -548,6 +548,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             let p = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 320),
                                  styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = true
+            p.appearance = NSAppearance(named: .darkAqua)   // dark HUD glass → light-on-dark content (matches the panel)
             p.level = .floating; p.isReleasedWhenClosed = false
             p.isMovableByWindowBackground = true   // draggable from the background (borderless panel with no title bar)
             p.hidesOnDeactivate = false   // don't hide when focus returns to the user's app

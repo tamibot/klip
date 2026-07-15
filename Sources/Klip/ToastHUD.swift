@@ -102,6 +102,7 @@ enum ToastHUD {
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
+        p.appearance = NSAppearance(named: .darkAqua)   // dark HUD glass → light content (like macOS system HUDs)
         p.level = .statusBar
         // Purely informative toasts let clicks pass through; with an action button the panel must
         // accept the click (the .nonactivatingPanel style keeps it from ever stealing focus).
