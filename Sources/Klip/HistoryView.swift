@@ -113,9 +113,15 @@ struct HistoryView: View {
         // list (e.g. the scroll on a new clip), which reads as the text sliding. The user wants zero
         // text movement, so the batch bar / empty-state just swap instantly.
         .frame(minWidth: 420, minHeight: 460)
-        // Command-palette legibility: a dark scrim over the HUD glass so white text always reads,
-        // even when bright/colorful content shows through the blur (the Raycast/Spotlight approach).
-        .background(Color.black.opacity(0.32))
+        // Glossy light glass (Dock-like): a faint overall brightening + a white top sheen over the
+        // frosted material, so it reads as bright luminous glass. Dark text stays fully legible.
+        .background {
+            ZStack(alignment: .top) {
+                Color.white.opacity(0.10)
+                LinearGradient(colors: [Color.white.opacity(0.28), .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 90)
+            }
+        }
         .onAppear { syncVisible(); searchFocused = true }
         .onChange(of: search) { _, newValue in selection.searchHasText = !newValue.isEmpty; syncVisible() }
         .onChange(of: filter) { _, _ in syncVisible() }
@@ -522,10 +528,10 @@ struct ItemRow: View {
             }
         }
         // Single, clean selection: one rounded accent-tint fill — no border, no rail. Tuned for the
-        // panel's dark glass (the accent and hover washes need a touch more weight to read on it).
+        // panel's light glass.
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill((selecting && isChecked) || (!selecting && isSelected) ? Color.accentColor.opacity(0.32)
-                  : (hovering ? Color.white.opacity(0.08) : Color.clear)))
+            .fill((selecting && isChecked) || (!selecting && isSelected) ? Color.accentColor.opacity(0.20)
+                  : (hovering ? Color.primary.opacity(0.06) : Color.clear)))
         .contentShape(Rectangle())
         .contextMenu {
             // Right-click mirrors the hover actions: copy + star, then everything the ⋯ menu offers.

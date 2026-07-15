@@ -118,25 +118,21 @@ final class PanelController: NSObject, NSWindowDelegate {
         // full-screen app (e.g. an IDE) has focus triggers the action but the panel opens in another Space —
         // it looks like "nothing happened". fullScreenAuxiliary lets it overlay the full-screen Space.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
-        // Command-palette look (Raycast/Spotlight-dark): the panel is always dark-frosted glass,
-        // regardless of the system light/dark setting. Forcing the appearance flips the hosted
-        // SwiftUI content to light-on-dark (labels, secondary text) so it stays legible on the glass.
-        panel.appearance = NSAppearance(named: .darkAqua)
         panel.delegate = self
 
         let fx = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 480, height: 640))
-        // .hudWindow under the forced dark appearance = the dark frosted glass of a command palette
-        // (Spotlight/Raycast): strong blur, content bleeds through, unmistakably glass on any backdrop.
-        fx.material = .hudWindow
+        // Bright, light, glossy frosted glass — like the macOS Dock: .popover is the light translucent
+        // material; the backdrop (wallpaper/content) bleeds through the blur. Legible dark text on top.
+        fx.material = .popover
         fx.blendingMode = .behindWindow
         fx.state = .active
         fx.wantsLayer = true
         fx.layer?.cornerRadius = cornerRadius
         fx.layer?.cornerCurve = .continuous
         fx.layer?.masksToBounds = true
-        // Bright hairline edge — light catching the glass rim (the depth cue Apple panels have).
+        // Bright glossy rim — light catching the top edge of the glass (Dock/Apple panel depth cue).
         fx.layer?.borderWidth = 0.5
-        fx.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        fx.layer?.borderColor = NSColor.white.withAlphaComponent(0.5).cgColor
         fx.autoresizingMask = [.width, .height]
         self.effectView = fx
 
@@ -548,14 +544,13 @@ final class PanelController: NSObject, NSWindowDelegate {
             let p = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 320),
                                  styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = true
-            p.appearance = NSAppearance(named: .darkAqua)   // dark HUD glass → light-on-dark content (matches the panel)
             p.level = .floating; p.isReleasedWhenClosed = false
             p.isMovableByWindowBackground = true   // draggable from the background (borderless panel with no title bar)
             p.hidesOnDeactivate = false   // don't hide when focus returns to the user's app
             p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]   // also show over full-screen apps
             let fx = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 360, height: 320))
-            fx.material = .hudWindow; fx.blendingMode = .behindWindow; fx.state = .active
-            fx.wantsLayer = true; fx.layer?.cornerRadius = cornerRadius; fx.layer?.cornerCurve = .continuous; fx.layer?.masksToBounds = true   // shared HUD radius
+            fx.material = .popover; fx.blendingMode = .behindWindow; fx.state = .active
+            fx.wantsLayer = true; fx.layer?.cornerRadius = cornerRadius; fx.layer?.cornerCurve = .continuous; fx.layer?.masksToBounds = true   // shared glass radius
             fx.autoresizingMask = [.width, .height]
             let host = NSHostingView(rootView: view)
             host.frame = fx.bounds; host.autoresizingMask = [.width, .height]; fx.addSubview(host)

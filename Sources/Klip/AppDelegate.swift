@@ -653,13 +653,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             panel.isOpaque = false
             panel.backgroundColor = .clear
             panel.hasShadow = true
-            panel.appearance = NSAppearance(named: .darkAqua)   // dark HUD glass → light content, consistent
             panel.level = .floating
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.isMovableByWindowBackground = true
             panel.isReleasedWhenClosed = false
             let fx = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 264, height: 150))
-            fx.material = .hudWindow
+            fx.material = .popover
             fx.blendingMode = .behindWindow
             fx.state = .active
             fx.wantsLayer = true
