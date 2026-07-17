@@ -105,7 +105,12 @@ struct HistoryView: View {
         VStack(spacing: 0) {
             header
             if !manager.items.isEmpty { filterRow }
-            Divider()
+            // Scroll-edge effect instead of a hard divider (Apple: a rule under floating chrome is
+            // decorative; a soft edge separates the chrome from the scrolling content).
+            LinearGradient(colors: [Color.primary.opacity(0.10), .clear],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 6)
+                .allowsHitTesting(false)
             if filtered.isEmpty { emptyState } else { list }
             if selecting { batchBar }
         }
@@ -240,6 +245,14 @@ struct HistoryView: View {
             }
             .padding(.horizontal, 12)
         }
+        // Soft trailing fade: the chip row scrolls, and a hard clip mid-word ("Credencial|") reads as
+        // broken. Fading the edge is Apple's scroll-edge cue for "there's more this way".
+        .mask(
+            LinearGradient(stops: [.init(color: .black, location: 0),
+                                   .init(color: .black, location: 0.93),
+                                   .init(color: .clear, location: 1)],
+                           startPoint: .leading, endPoint: .trailing)
+        )
         .padding(.bottom, 8)
     }
 
@@ -523,7 +536,8 @@ struct ItemRow: View {
         }
         // Single, clean selection: one rounded accent-tint fill — no border, no rail. Tuned for the
         // panel's light glass.
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+        // Concentric with the panel (Apple: inner_radius = parent_radius - padding → 12 - 6).
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
             .fill((selecting && isChecked) || (!selecting && isSelected) ? Color.accentColor.opacity(0.20)
                   : (hovering ? Color.primary.opacity(0.06) : Color.clear)))
         .contentShape(Rectangle())
