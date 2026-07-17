@@ -6,12 +6,20 @@ private final class HoverToolButton: NSButton {
     var isSelectedTool = false { didSet { refreshBackground() } }
     private var hovering = false
 
+    /// Our own hover area, tracked so we can replace ONLY it on relayout.
+    private var hoverArea: NSTrackingArea?
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.mouseEnteredAndExited, .activeInKeyWindow],
-                                       owner: self, userInfo: nil))
+        // Remove only OUR area. `trackingAreas.forEach(removeTrackingArea)` also destroys the
+        // tracking area AppKit installs for `toolTip`, which silently kills every tooltip on the
+        // toolbar — the hover effect was eating the help text.
+        if let a = hoverArea { removeTrackingArea(a); hoverArea = nil }
+        let a = NSTrackingArea(rect: bounds,
+                               options: [.mouseEnteredAndExited, .activeInKeyWindow],
+                               owner: self, userInfo: nil)
+        addTrackingArea(a)
+        hoverArea = a
     }
     override func mouseEntered(with event: NSEvent) { hovering = true; refreshBackground() }
     override func mouseExited(with event: NSEvent) { hovering = false; refreshBackground() }
