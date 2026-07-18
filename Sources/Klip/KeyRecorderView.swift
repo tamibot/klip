@@ -49,7 +49,10 @@ final class RecorderNSView: NSView {
         let candidate = KeyCombo(keyCode: UInt32(event.keyCode), carbonModifiers: carbon)
         // Requires a non-Shift modifier: a Shift-only combo would register globally and hijack
         // shifted letters (typing capital E) system-wide.
-        guard candidate.isValid, carbon & ~UInt32(shiftKey) != 0 else { NSSound.beep(); return }
+        guard candidate.isValid, carbon & ~UInt32(shiftKey) != 0 else {
+            MainActor.assumeIsolated { SoundFX.warning() }   // key events are always on the main thread
+            return
+        }
         current = candidate
         recording = false
         onCapture?(candidate)

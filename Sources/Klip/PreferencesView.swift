@@ -390,14 +390,14 @@ struct PreferencesView: View {
         commitFocusedField()
         // After flushing the binding in this runloop cycle, read the now-updated value.
         DispatchQueue.main.async {
-            if apiKey.save(draftKey) { draftKey = ""; showKey = false }
+            if apiKey.save(draftKey) { SoundFX.play(.success); draftKey = ""; showKey = false }
         }
     }
 
     private func saveGemini() {
         commitFocusedField()
         DispatchQueue.main.async {
-            if geminiKey.save(draftGeminiKey) { draftGeminiKey = ""; showGeminiKey = false }
+            if geminiKey.save(draftGeminiKey) { SoundFX.play(.success); draftGeminiKey = ""; showGeminiKey = false }
         }
     }
 

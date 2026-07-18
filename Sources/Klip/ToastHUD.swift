@@ -11,9 +11,14 @@ extension Notification.Name {
 /// own. Never takes focus; safe to call from any copy path.
 @MainActor
 enum ToastHUD {
+    /// Outcome the toast reports. Drives the glyph, its tint, whether it bounces, and the VoiceOver
+    /// announcement priority — a failure must not read like a confirmation.
+    enum Style { case success, failure }
+
     private static var panel: NSPanel?
     private static var hideWork: DispatchWorkItem?
     private static var actionTarget: ClickTarget?   // NSControl.target is weak: retain it here
+    private static var lastAnnouncedAt = Date.distantPast
 
     /// Bridges the action button's click to a closure (ToastHUD is an enum: it can't be a target itself).
     private final class ClickTarget: NSObject {
@@ -25,17 +30,20 @@ enum ToastHUD {
     /// Shows the toast. `detail` is a one-line preview (truncated); pass nil for a title-only toast.
     /// With `actionTitle` + `action` an inline button is added (Shottr-style): the panel then accepts
     /// clicks — still without ever taking focus — and stays on screen longer.
-    static func show(_ title: String, detail: String? = nil,
+    static func show(_ title: String, detail: String? = nil, style: Style = .success,
                      actionTitle: String? = nil, action: (() -> Void)? = nil) {
         hideWork?.cancel()
         panel?.orderOut(nil)
         actionTarget = nil
 
-        // Real SF Symbol checkmark (bounced on appear) instead of a text "✓" glyph.
+        // Real SF Symbol glyph (not a text "✓"): the accent checkmark confirms, the orange warning
+        // triangle reports a failure. Only the confirmation bounces — celebrating an error is wrong.
         let check = NSImageView()
-        check.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)?
+        let symbol = style == .failure ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+        let glyphLabel = L10n.t(style == .failure ? "toast.a11y.failure" : "toast.a11y.success")
+        check.image = NSImage(systemSymbolName: symbol, accessibilityDescription: glyphLabel)?
             .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
-        check.contentTintColor = .controlAccentColor   // brand accent on the confirm glyph
+        check.contentTintColor = style == .failure ? .systemOrange : .controlAccentColor
         check.symbolConfiguration = .preferringHierarchical()
         let titleField = NSTextField(labelWithString: title)
         titleField.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -48,8 +56,10 @@ enum ToastHUD {
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
+        var spokenDetail = ""
         if let detail, !detail.isEmpty {
             let one = detail.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+            spokenDetail = String(one.prefix(64))
             let detailField = NSTextField(labelWithString: String(one.prefix(64)) + (one.count > 64 ? "…" : ""))
             detailField.font = .systemFont(ofSize: 11)
             detailField.textColor = .secondaryLabelColor
@@ -108,9 +118,13 @@ enum ToastHUD {
         p.alphaValue = 0
         p.orderFrontRegardless()
         panel = p
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if style == .success, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             check.addSymbolEffect(.bounce, options: .nonRepeating)
         }
+        // The panel never takes focus, so VoiceOver never visits it: speak the outcome instead.
+        // Failures interrupt whatever is being read — a silently-queued error is a missed error.
+        announce(spokenDetail.isEmpty ? title : "\(title), \(spokenDetail)",
+                 priority: style == .failure ? .high : .medium)
 
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
@@ -132,8 +146,42 @@ enum ToastHUD {
             })
         }
         hideWork = work
-        // With a button the toast lingers so the user has time to reach it.
-        DispatchQueue.main.asyncAfter(deadline: .now() + (action == nil ? 1.8 : 4.0), execute: work)
+        // With a button the toast lingers so the user has time to reach it. Under VoiceOver that
+        // budget also has to cover the spoken announcement plus the trip to the button, so double it.
+        let linger: TimeInterval = action == nil ? 1.8
+            : (NSWorkspace.shared.isVoiceOverEnabled ? 8.0 : 4.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + linger, execute: work)
+    }
+
+    /// Speaks an outcome through VoiceOver. Klip's confirmations are all zero-real-estate (toast,
+    /// menu-bar icon flash, sound) — none of them reach the accessibility tree on their own.
+    private static func announce(_ text: String, priority: NSAccessibilityPriorityLevel) {
+        guard !text.isEmpty else { return }
+        lastAnnouncedAt = Date()
+        // Announcements are posted against the app, not the toast panel: a non-activating panel is
+        // never the accessibility focus, and VoiceOver drops announcements from an unfocused element.
+        NSAccessibility.post(element: NSApplication.shared, notification: .announcementRequested, userInfo: [
+            .announcement: text,
+            .priority: priority.rawValue,
+        ])
+    }
+
+    /// Speaks every pasteboard write made through Klip (mirrors SoundFX.activate's copy tick).
+    /// Call once at startup.
+    static func activateAnnouncements() {
+        NotificationCenter.default.addObserver(forName: .klipDidCopy, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                guard NSWorkspace.shared.isVoiceOverEnabled else { return }
+                // Copy paths that also raise a toast post .klipDidCopy FIRST, so the check can't run
+                // inline: defer a beat and drop this generic cue if the toast already said it better.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    MainActor.assumeIsolated {
+                        guard Date().timeIntervalSince(lastAnnouncedAt) > 0.3 else { return }
+                        announce(L10n.t("toast.copied"), priority: .medium)
+                    }
+                }
+            }
+        }
     }
 
     /// Immediate dismissal (button clicked). Leaves `actionTarget` alone — the click handler is still

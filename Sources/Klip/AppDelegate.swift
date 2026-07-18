@@ -94,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         MeetingRecorder.sweepOrphanedTempFiles()   // clear unfinalized tracks from a crashed run
         manager.start()
         SoundFX.activate()   // copy tick for every pasteboard write made through the app
+        ToastHUD.activateAnnouncements()   // …and its VoiceOver equivalent
         // Zero-real-estate copy confirmation (Shottr-style): flash the menu-bar icon to a checkmark
         // whenever anything lands on the pasteboard through Klip.
         NotificationCenter.default.addObserver(forName: .klipDidCopy, object: nil, queue: .main) { [weak self] _ in
@@ -161,7 +162,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var iconFlashWork: DispatchWorkItem?
     private func flashStatusIcon() {
         guard let button = statusItem.button else { return }
+        // The red recording indicator outranks the copy flash. Without this guard, copying while a
+        // meeting records re-arms the 0.8s debounce on every copy — sustained copying would suppress
+        // the only signal that the mic is live, indefinitely.
+        guard !meetingRecorder.isRecording else { return }
         let cfg = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+        fadeStatusIcon(button)
         button.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Copied")?
             .withSymbolConfiguration(cfg)
         button.contentTintColor = nil   // flash reads the same in every state; updateStatusIcon restores the red record tint
@@ -173,10 +179,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
     }
 
+    /// Cross-fades the next image/tint swap on the status button so the icon changes read as one
+    /// element changing state rather than two icons cutting. Reduce Motion keeps the instant swap.
+    private func fadeStatusIcon(_ button: NSStatusBarButton) {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        button.wantsLayer = true
+        let fade = CATransition()
+        fade.type = .fade
+        fade.duration = 0.12
+        button.layer?.add(fade, forKey: kCATransition)
+    }
+
     /// Base status-item icon: the red record symbol while a meeting records, the clipboard otherwise.
     private func updateStatusIcon() {
         guard let button = statusItem.button else { return }
         let cfg = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+        fadeStatusIcon(button)
         if meetingRecorder.isRecording {
             button.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "Recording meeting")?
                 .withSymbolConfiguration(cfg)
@@ -186,6 +204,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 .withSymbolConfiguration(cfg)
             button.contentTintColor = nil
         }
+    }
+
+    /// Keeps the menu-bar button lit while a Klip surface it owns is open, the way AppKit lights it
+    /// for its own menu. Driven by PanelController.
+    func setStatusItemHighlighted(_ on: Bool) {
+        statusItem?.button?.highlight(on)
     }
 
     /// Adds an item whose global-shortcut combo renders as a native right-aligned key equivalent
@@ -475,79 +499,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func applyCaptureHotKey(_ combo: KeyCombo) {
         if collidesWithOtherShortcut(combo, .capture) {
-            NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse"))
+            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
             Settings.shared.captureCombo = lastGoodCaptureCombo; buildMenu(); return
         }
         let ok: Bool
         if captureHotKey == nil { makeCaptureHotKey(combo); ok = (captureHotKey != nil) }   // was dead: re-create
         else { ok = captureHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
         if ok { lastGoodCaptureCombo = combo }
-        else { NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse")); Settings.shared.captureCombo = lastGoodCaptureCombo }
+        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.captureCombo = lastGoodCaptureCombo }
         buildMenu()
     }
 
     private func applyHotKey(_ combo: KeyCombo) {
         if collidesWithOtherShortcut(combo, .panel) {
-            NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse"))
+            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
             Settings.shared.combo = lastGoodCombo; buildMenu(); return
         }
         let ok: Bool
         if hotKey == nil { makePanelHotKey(combo); ok = (hotKey != nil) }
         else { ok = hotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
         if ok { lastGoodCombo = combo }
-        else { NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse")); Settings.shared.combo = lastGoodCombo }   // collision: revert
+        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.combo = lastGoodCombo }   // collision: revert
         buildMenu()
     }
 
     private func applyVoiceHotKey(_ combo: KeyCombo) {
         if collidesWithOtherShortcut(combo, .voice) {
-            NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse"))
+            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
             Settings.shared.voiceCombo = lastGoodVoiceCombo; buildMenu(); return
         }
         let ok: Bool
         if voiceHotKey == nil { makeVoiceHotKey(combo); ok = (voiceHotKey != nil) }
         else { ok = voiceHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
         if ok { lastGoodVoiceCombo = combo }
-        else { NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse")); Settings.shared.voiceCombo = lastGoodVoiceCombo }
+        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.voiceCombo = lastGoodVoiceCombo }
         buildMenu()
     }
 
     private func applyUploadHotKey(_ combo: KeyCombo) {
         if collidesWithOtherShortcut(combo, .upload) {
-            NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse"))
+            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
             Settings.shared.uploadCombo = lastGoodUploadCombo; buildMenu(); return
         }
         let ok: Bool
         if uploadHotKey == nil { makeUploadHotKey(combo); ok = (uploadHotKey != nil) }
         else { ok = uploadHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
         if ok { lastGoodUploadCombo = combo }
-        else { NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse")); Settings.shared.uploadCombo = lastGoodUploadCombo }
+        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.uploadCombo = lastGoodUploadCombo }
         buildMenu()
     }
 
     private func applyTextCaptureHotKey(_ combo: KeyCombo) {
         if collidesWithOtherShortcut(combo, .textCapture) {
-            NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse"))
+            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
             Settings.shared.textCaptureCombo = lastGoodTextCaptureCombo; buildMenu(); return
         }
         let ok: Bool
         if textCaptureHotKey == nil { makeTextCaptureHotKey(combo); ok = (textCaptureHotKey != nil) }
         else { ok = textCaptureHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
         if ok { lastGoodTextCaptureCombo = combo }
-        else { NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse")); Settings.shared.textCaptureCombo = lastGoodTextCaptureCombo }
+        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.textCaptureCombo = lastGoodTextCaptureCombo }
         buildMenu()
     }
 
     private func applyMeetingHotKey(_ combo: KeyCombo) {
         if collidesWithOtherShortcut(combo, .meeting) {
-            NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse"))
+            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
             Settings.shared.meetingCombo = lastGoodMeetingCombo; buildMenu(); return
         }
         let ok: Bool
         if meetingHotKey == nil { makeMeetingHotKey(combo); ok = (meetingHotKey != nil) }
         else { ok = meetingHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
         if ok { lastGoodMeetingCombo = combo }
-        else { NSSound.beep(); ToastHUD.show(L10n.t("hotkey.inuse")); Settings.shared.meetingCombo = lastGoodMeetingCombo }
+        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.meetingCombo = lastGoodMeetingCombo }
         buildMenu()
     }
 
@@ -850,7 +874,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 try Storage.shared.exportBackup(to: url)
                 DispatchQueue.main.async {
                     self?.manager.resumeMonitoring()
-                    ToastHUD.show(L10n.t("toast.imageSaved"), detail: url.lastPathComponent, actionTitle: L10n.t("toast.reveal")) {
+                    ToastHUD.show(L10n.t("toast.backupSaved"), detail: url.lastPathComponent, actionTitle: L10n.t("toast.reveal")) {
                         NSWorkspace.shared.activateFileViewerSelecting([url])
                     }
                 }

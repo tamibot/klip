@@ -20,6 +20,14 @@ enum HistoryFilter: String, CaseIterable, Identifiable {
     }
 }
 
+/// One optical left edge for the whole list: day headers, text rows, image rows and the OCR card all
+/// start at the same x. The list keeps `gutter` between the row backgrounds and the panel wall, and
+/// every row insets its content by `inset` inside that background.
+enum RowMetrics {
+    static let gutter: CGFloat = 6
+    static let inset: CGFloat = 12
+}
+
 /// Panel UI: header, type filters, list and guide.
 struct HistoryView: View {
     @ObservedObject var manager: ClipboardManager
@@ -290,18 +298,27 @@ struct HistoryView: View {
     private var batchItems: [ClipboardItem] { sortedItems.filter { selectedBatch.contains($0.id) } }
 
     private var batchBar: some View {
-        HStack(spacing: 8) {
-            Text(String(format: L10n.t("sel.count"), selectedBatch.count)).font(.system(size: 13, weight: .semibold)).monospacedDigit().foregroundStyle(.secondary)
-            Spacer()
-            batchButton("doc.richtext", "PDF") { onCombinePDF(batchItems) }
-            batchButton("doc.zipper", "ZIP") { onExportZip(batchItems) }
-            batchButton("folder.badge.plus", L10n.t("sel.collection")) { onAssignCollection(batchItems) }
-            Button(L10n.t("sel.done")) { selecting = false; selectedBatch = [] }
-                .buttonStyle(.link).font(.system(size: 13))
+        VStack(spacing: 0) {
+            // Mirror of the header's scroll-edge gradient, flipped for a bottom edge: the bar floats over
+            // the list, so it gets a soft edge, never a rule (a hard divider on glass reads as decoration).
+            LinearGradient(colors: [.clear, Color.primary.opacity(0.10)],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 6)
+                .allowsHitTesting(false)
+            HStack(spacing: 8) {
+                Text(String(format: L10n.t("sel.count"), selectedBatch.count)).font(.system(size: 13, weight: .semibold)).monospacedDigit().foregroundStyle(.secondary)
+                Spacer()
+                batchButton("doc.richtext", "PDF") { onCombinePDF(batchItems) }
+                batchButton("doc.zipper", "ZIP") { onExportZip(batchItems) }
+                batchButton("folder.badge.plus", L10n.t("sel.collection")) { onAssignCollection(batchItems) }
+                Button(L10n.t("sel.done")) { selecting = false; selectedBatch = [] }
+                    .buttonStyle(.link).font(.system(size: 13))
+            }
+            .padding(.horizontal, RowMetrics.inset).padding(.vertical, 8)
+            // A vibrancy-safe fill, NOT a second material: stacking another blur on the panel's own
+            // glass flattens both (the top layer only ever gets fills, transparency and vibrancy).
+            .background(Color.primary.opacity(0.04))
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .overlay(Divider(), alignment: .top)
         .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))   // slides in via the container's animation on `selecting`
     }
 
@@ -326,7 +343,8 @@ struct HistoryView: View {
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .textCase(.uppercase)
-                                .padding(.top, idx == 0 ? 2 : 12).padding(.bottom, 4).padding(.leading, 12)
+                                .padding(.top, idx == 0 ? 2 : 12).padding(.bottom, 4)
+                                .padding(.leading, RowMetrics.inset)
                         }
                         ItemRow(item: item,
                                 isSelected: item.id == selection.selectedID,
@@ -344,7 +362,7 @@ struct HistoryView: View {
                         if ocrResultID == item.id { ocrBox }
                     }
                 }
-                .padding(.horizontal, 6).padding(.vertical, 4)
+                .padding(.horizontal, RowMetrics.gutter).padding(.vertical, 4)
                 // No list layout animation: a new clip must appear in place, never slide the rows
                 // (text must not move — the user copies constantly). Only the OCR box fades.
                 .animation(.easeOut(duration: 0.13), value: ocrResultID)
@@ -413,9 +431,11 @@ struct HistoryView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(12)
+        .padding(RowMetrics.inset)
+        // No extra horizontal inset: the card is a continuation of the row it belongs to, so its
+        // accent background must share that row background's edges.
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.12)))
-        .padding(.horizontal, 8).padding(.bottom, 4)
+        .padding(.bottom, 4)
         .transition(.opacity)   // fades in via the list's animation on `ocrResultID`
     }
 
@@ -456,9 +476,14 @@ struct ItemRow: View {
     var isChecked: Bool = false
     var onToggleCheck: () -> Void = {}
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
     @State private var revealed = false
-    @State private var justCopied = false
+    /// Counts every copy click. Rapid clicks must each get their own bounce + tick, and each pending
+    /// revert must be able to tell whether it still owns the icon — a Bool can't express either.
+    @State private var copyGeneration = 0
+    /// The generation whose checkmark is on screen (0 = showing the copy glyph).
+    @State private var shownCopyGeneration = 0
 
     private var isCredential: Bool { item.isCredential == true }
     private var hasText: Bool { !(item.text?.isEmpty ?? true) }
@@ -566,10 +591,12 @@ struct ItemRow: View {
                         .background(.quaternary)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.1)))
+                    // Same readout badge as the capture overlay (solid black capsule, white monospaced),
+                    // not a material: a blur here would be a second glass layer sitting on the panel's.
                     Text({ let p = img.pixelDimensions; return "\(Int(p.width))×\(Int(p.height))" }())
-                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(.white)
                         .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .background(Color.black.opacity(0.7), in: Capsule())
                         .padding(6)
                 }
             }
@@ -584,7 +611,7 @@ struct ItemRow: View {
                 }
             }
         }
-        .padding(.vertical, 7).padding(.horizontal, 10)
+        .padding(.vertical, 7).padding(.horizontal, RowMetrics.inset)
     }
 
     private var standardRow: some View {
@@ -613,7 +640,7 @@ struct ItemRow: View {
             if hovering && !selecting { actions }
             else if item.pinned { pinDot }
         }
-        .padding(.vertical, 7).padding(.horizontal, 12)
+        .padding(.vertical, 7).padding(.horizontal, RowMetrics.inset)
     }
 
     private var pinDot: some View { Image(systemName: "star.fill").foregroundStyle(.orange).font(.system(size: 11, weight: .semibold)) }
@@ -624,8 +651,9 @@ struct ItemRow: View {
     private var titleText: Text {
         let body = Text(Self.highlight(displayedPreview, searchTerm))
         if item.linkURL != nil {
+            // `highlight` only paints a background, so the accent tint and the glyph survive it.
             return Text(Image(systemName: "arrow.up.right")).foregroundColor(.accentColor)
-                 + Text("  ") + Text(displayedPreview).foregroundColor(.accentColor)
+                 + Text("  ") + body.foregroundColor(.accentColor)
         } else if isCredential {
             return Text(Image(systemName: "key.fill")).foregroundColor(.orange) + Text("  ") + body
         } else if item.isVoiceNote == true && hasText {
@@ -706,12 +734,21 @@ struct ItemRow: View {
     /// Copy WITHOUT pasting or closing (unlike the row click / Return): the panel stays open and
     /// the icon flashes a checkmark as feedback.
     private var copyButton: some View {
-        iconButton(justCopied ? "checkmark" : "doc.on.doc", L10n.t("row.copyonly")) {
+        iconButton(shownCopyGeneration == copyGeneration && copyGeneration > 0 ? "checkmark" : "doc.on.doc",
+                   L10n.t("row.copyonly")) {
             manager.copyToPasteboard(item)
-            justCopied = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { justCopied = false }
+            copyGeneration &+= 1
+            let generation = copyGeneration
+            shownCopyGeneration = generation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                // A newer click owns the icon now: let ITS revert clear the tick, not this stale one,
+                // or the second click's feedback would be cut short by the first click's timer.
+                guard copyGeneration == generation else { return }
+                shownCopyGeneration = 0
+            }
         }
-        .symbolEffect(.bounce, value: justCopied)
+        // Under Reduce Motion the value never changes, so the bounce never fires (the tick still swaps).
+        .symbolEffect(.bounce, value: reduceMotion ? 0 : copyGeneration)
     }
 
     private func iconButton(_ symbol: String, _ help: String, _ action: @escaping () -> Void) -> some View {

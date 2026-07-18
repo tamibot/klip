@@ -50,7 +50,10 @@ struct WelcomeView: View {
                 .font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
         .padding(.horizontal, 24).padding(.vertical, 18)
-        .frame(width: 440, height: 700)
+        // Width-fixed only: the height is whatever the (localized, wrapping) content needs, and the
+        // window is sized from it. A hardcoded height clips the logo or the primary button.
+        .frame(width: 440)
+        .fixedSize(horizontal: false, vertical: true)
         .onAppear { rowsVisible = true; refreshPermissions() }
         // Re-check when any window becomes key: covers coming back from System Settings.
         // ponytail: app-wide notification, cheap enough — no per-window filter or timer needed.

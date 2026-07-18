@@ -46,6 +46,73 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     override var isFlipped: Bool { false }
     override var acceptsFirstResponder: Bool { true }
 
+    // MARK: - Cursor
+
+    /// Cursor the active tool claims over the whole canvas. `.select` returns nil on purpose: it has
+    /// no single cursor — the hover tracking below drives arrow / open hand / closed hand instead, and
+    /// a cursor rect would fight it by re-asserting itself every time the pointer re-enters.
+    private var toolCursor: NSCursor? {
+        switch currentTool {
+        case .select: return nil
+        case .text:   return .iBeam
+        case .pencil, .line, .arrow, .rectangle, .ellipse, .marker, .blur, .spotlight, .counter:
+            return .crosshair
+        }
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if let cursor = toolCursor { addCursorRect(bounds, cursor: cursor) }
+    }
+
+    /// Hover tracking for `.select`, owned by us so `updateTrackingAreas` can replace ONLY this one.
+    /// Removing every area would also destroy the ones AppKit installs for other purposes (the same
+    /// trap that once killed the toolbar tooltips).
+    private var selectHoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let a = selectHoverArea { removeTrackingArea(a); selectHoverArea = nil }
+        guard currentTool == .select else { return }   // only .select needs per-position feedback
+        // .inVisibleRect keeps the area correct as the scroll view pans/zooms under us.
+        let a = NSTrackingArea(rect: .zero,
+                               options: [.mouseMoved, .mouseEnteredAndExited,
+                                         .activeInKeyWindow, .inVisibleRect],
+                               owner: self, userInfo: nil)
+        addTrackingArea(a)
+        selectHoverArea = a
+    }
+
+    /// The cursor rects and the hover tracking are both keyed on `currentTool`, and nothing about the
+    /// view's geometry changes when the tool does — so neither refreshes on its own. The editor calls
+    /// this (plus `invalidateCursorRects`) from its tool-change choke point.
+    func toolDidChange() {
+        updateTrackingAreas()
+        // A tool switched by its letter shortcut leaves the pointer parked, so nothing re-enters the
+        // cursor rect: apply the new cursor now if the pointer is already over the canvas.
+        guard let window else { return }
+        let p = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard visibleRect.contains(p) else { return }
+        if currentTool == .select { updateSelectCursor(at: p) } else { toolCursor?.set() }
+    }
+
+    /// Open hand over something grabbable, closed hand while dragging it — the standard macOS
+    /// affordance for "this moves". Plain arrow over empty canvas.
+    private func updateSelectCursor(at point: CGPoint) {
+        if movingID != nil { NSCursor.closedHand.set(); return }
+        let hit = annotations.contains(where: { $0.hitTest(point) })
+        (hit ? NSCursor.openHand : NSCursor.arrow).set()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard currentTool == .select else { return }
+        updateSelectCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if currentTool == .select { NSCursor.arrow.set() }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         baseImage.draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
         drawAnnotationLayers(forCanvas: true)
@@ -119,6 +186,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             } else {
                 selectedID = nil
             }
+            updateSelectCursor(at: p)
             onSelectionChange?()
             needsDisplay = true
             return
@@ -191,6 +259,9 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             }
             lastDragPoint = p
             movedDuringDrag = true
+            // Cursor rects can re-assert mid-drag if the pointer crosses out of the canvas; keep the
+            // closed hand pinned for as long as the grab lasts.
+            if currentTool == .select { NSCursor.closedHand.set() }
             needsDisplay = true
             return
         }
@@ -209,6 +280,9 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         if movingID != nil {
             if movedDuringDrag, let snap = preMoveSnapshot { pushUndo(snap) }   // ONE undo per completed drag
             movingID = nil; preMoveSnapshot = nil; movedDuringDrag = false
+            if currentTool == .select {   // grab released: closed hand → open hand / arrow
+                updateSelectCursor(at: convert(event.locationInWindow, from: nil))
+            }
             return
         }
         guard let d = draft else { return }

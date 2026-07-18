@@ -143,6 +143,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         previousApp = NSWorkspace.shared.frontmostApplication
         positionPanel()
 
+        // The status item stays lit for as long as the panel is up, so the menu bar shows where the
+        // panel came from (AppKit only highlights it for a menu it owns).
+        (NSApp.delegate as? AppDelegate)?.setStatusItemHighlighted(true)
+
         // Plain fade-in — no positional slide (the text must not move as the panel appears).
         panel.alphaValue = 0
         NSApp.activate(ignoringOtherApps: true)
@@ -164,6 +168,9 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func hide(restoreFocus: Bool = true) {
         removeMonitors()
+        // Every hide path funnels through here, including the early-out below: drop the highlight
+        // first so the status item can never stay lit with no panel on screen.
+        (NSApp.delegate as? AppDelegate)?.setStatusItemHighlighted(false)
         AudioPlayer.shared.stop()   // don't leave audio playing when the panel closes
         if restoreFocus { previousApp?.activate() }   // restore focus first; the fade is purely visual
         guard panel.isVisible, !fadingOut else { return }
@@ -446,6 +453,7 @@ final class PanelController: NSObject, NSWindowDelegate {
                     let detail = exportable < items.count
                         ? String(format: L10n.t("export.partial"), exportable, items.count)
                         : url.lastPathComponent
+                    SoundFX.play(.save)   // same cue as the PDF sibling: two batch buttons, one sound
                     ToastHUD.show(L10n.t("toast.imageSaved"), detail: detail,
                                   actionTitle: L10n.t("toast.reveal")) {
                         NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -573,7 +581,15 @@ final class PanelController: NSObject, NSWindowDelegate {
             Glass.install(WelcomeView(onStart: { [weak self] in
                 Settings.shared.hasSeenWelcome = true
                 self?.welcomeWindow?.orderOut(nil)
+                // Klip has no Dock icon: closing the only window would leave the app looking gone.
+                // Hand the user straight to the panel under the status item (its first-run empty state).
+                self?.show()
             }), in: w)
+            // The content is width-fixed and grows to fit its (localized) text: take the height from
+            // the hosting view, never a literal — a short rect lays the logo/primary button off-window.
+            if let fitting = w.contentView?.fittingSize, fitting.width > 0, fitting.height > 0 {
+                w.setContentSize(fitting)
+            }
             w.center()
             welcomeWindow = w
         }

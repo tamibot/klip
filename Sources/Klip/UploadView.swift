@@ -202,7 +202,8 @@ struct UploadView: View {
                     // Mixed drop: the supported files proceed, but don't silently swallow the rest.
                     MainActor.assumeIsolated {
                         SoundFX.warning()
-                        ToastHUD.show(String(format: L10n.t("upload.skipped"), urls.count - media.count))
+                        ToastHUD.show(String(format: L10n.t("upload.skipped"), urls.count - media.count),
+                                      style: .failure)
                     }
                 }
                 onFiles(media, effectiveLanguage)

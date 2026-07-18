@@ -48,7 +48,7 @@ final class SnapController {
             } catch {
                 self.inProgress = false
                 SoundFX.error()
-                ToastHUD.show(L10n.t("capture.failed"))
+                ToastHUD.show(L10n.t("capture.failed"), style: .failure)
             }
         }
     }
@@ -86,7 +86,7 @@ final class SnapController {
             guard let self else { return }
             guard self.manager.addCapturedText(text) else {   // nothing recognized: say so — a bare beep
                 SoundFX.error()                                   // can't be told apart from "the feature broke"
-                ToastHUD.show(L10n.t("snap.notext.title"), detail: L10n.t("snap.notext.info"))
+                ToastHUD.show(L10n.t("snap.notext.title"), detail: L10n.t("snap.notext.info"), style: .failure)
                 return
             }
             ToastHUD.show(L10n.t("toast.textCopied"), detail: text,

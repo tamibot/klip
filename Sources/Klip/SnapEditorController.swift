@@ -39,9 +39,31 @@ private final class HoverToolButton: NSButton {
     }
 }
 
+/// Canvas surround that keeps its checkerboard legible in both themes. A pattern image bakes its
+/// pixels, so — unlike a semantic NSColor — it cannot follow a light↔dark switch on its own; it has
+/// to be regenerated and reassigned whenever the effective appearance changes.
+private final class CheckerScrollView: NSScrollView {
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyCheckerBackground()
+    }
+
+    func applyCheckerBackground() {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        backgroundColor = NSColor(patternImage: SnapEditorController.checkerPattern(dark: dark))
+    }
+}
+
 /// Snapshot editor window: tool toolbar + canvas. On copy/save it returns the annotated image;
 /// on close without saving it returns nil.
 final class SnapEditorController: NSObject, NSWindowDelegate {
+    /// One chip grid across the whole toolbar: every well is this size, so the hover washes of the
+    /// tools, the steppers and the actions all line up on one row instead of stepping 30/32.
+    private static let chipSize: CGFloat = 32
+    /// Toolbar height. The canvas is inset by exactly this much, so present() and buildToolbar must
+    /// agree — naming it keeps the window arithmetic and the bar from drifting apart.
+    private static let barHeight: CGFloat = 46
+
     private var window: NSWindow?
     private let canvas: AnnotationCanvasView
     private let onFinish: (NSImage?) -> Void
@@ -97,12 +119,12 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         setInfoHidden(true)
         toolbar.layoutSubtreeIfNeeded()   // settle the stack's collapse before re-measuring
         let minBarWidth = min(toolbar.fittingSize.width + 24, screen.width)
-        let maxW = screen.width * 0.9, maxH = screen.height * 0.85 - 46
+        let maxW = screen.width * 0.9, maxH = screen.height * 0.85 - Self.barHeight
         let scale = min(1, min(maxW / imgSize.width, maxH / imgSize.height))
         // Clamp to the screen so the trailing Copy/Save/Close cluster never opens off-screen on
         // narrow displays (the toolbar's contextual hiding absorbs the narrower bar).
         let contentW = min(max(minBarWidth, imgSize.width * scale), screen.width)
-        let contentH = imgSize.height * scale + 46   // 46 = toolbar
+        let contentH = imgSize.height * scale + Self.barHeight
         setInfoHidden(contentW < infoHideWidth)
 
         let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: contentW, height: contentH),
@@ -116,13 +138,14 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         let content = NSView(frame: NSRect(x: 0, y: 0, width: contentW, height: contentH))
 
         // Canvas inside a scroll view (in case the capture is large).
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: contentW, height: contentH - 46))
+        let scroll = CheckerScrollView(frame: NSRect(x: 0, y: 0, width: contentW,
+                                                     height: contentH - Self.barHeight))
         scroll.autoresizingMask = [.width, .height]
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
         scroll.documentView = canvas
         // Classic transparency checkerboard so the image "floats" on the surround, Shottr-style.
-        scroll.backgroundColor = NSColor(patternImage: Self.checkerPattern)
+        scroll.applyCheckerBackground()
         // Large captures: allow zooming and open fitted so the WHOLE image is visible (1x if it fits).
         scroll.allowsMagnification = true
         scroll.minMagnification = 0.2
@@ -139,7 +162,8 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         content.addSubview(scroll)
 
         // (built once above, to measure the window's real minimum width)
-        toolbar.frame = NSRect(x: 0, y: contentH - 46, width: contentW, height: 46)
+        toolbar.frame = NSRect(x: 0, y: contentH - Self.barHeight,
+                               width: contentW, height: Self.barHeight)
         toolbar.autoresizingMask = [.width, .minYMargin]
         content.addSubview(toolbar)
 
@@ -189,11 +213,13 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     // MARK: - Toolbar
 
     private func buildToolbar(width: CGFloat) -> NSView {
-        let bar = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: 46))
+        let bar = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: Self.barHeight))
         bar.material = .titlebar
         bar.blendingMode = .withinWindow
-        bar.state = .active
-        let size: CGFloat = 30
+        // The bar sits flush under the titlebar and reads as part of it: forcing .active kept it
+        // fully saturated while the titlebar above greyed out on deactivation, splitting the window
+        // into two apparent activation states.
+        bar.state = .followsWindowActiveState
 
         // Left group: tools + color + thickness + undo.
         let leading = NSStackView()
@@ -204,8 +230,8 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
 
         for tool in SnapTool.allCases {
             let b = makeToolButton(tool)
-            b.widthAnchor.constraint(equalToConstant: 32).isActive = true   // 32pt: 11 tools now, 36 overflowed
-            b.heightAnchor.constraint(equalToConstant: 32).isActive = true
+            // chipSize (32pt) is also the ceiling here: at 11 tools, 36 overflowed the bar.
+            pinChip(b)
             // Shottr-style single-letter shortcut: a bare letter selects the tool. Registered in
             // keyEquivControls so the letters return to the field while typing in-place text.
             let key = Self.toolKey(tool)
@@ -223,6 +249,8 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         addSeparator(to: leading)
 
         // Colors: 4 presets (they switch to highlighter tones with the marker) + "more" for the rest.
+        // Swatches stay 24pt — they are discs, not chips, and the stack's .centerY centers them on
+        // the 32pt row.
         for i in 0..<4 {
             let b = makeColorButton(tag: i)
             b.widthAnchor.constraint(equalToConstant: 24).isActive = true
@@ -231,8 +259,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
             leading.addArrangedSubview(b)
         }
         let more = makeActionButton(symbol: "ellipsis.circle", tip: L10n.t("editor.morecolors"), action: #selector(moreColorTapped))
-        more.translatesAutoresizingMaskIntoConstraints = false
-        more.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        pinChip(more)
         leading.addArrangedSubview(more)
 
         strokeSeparator = addSeparator(to: leading)
@@ -267,8 +294,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         let smaller = makeActionButton(symbol: "textformat.size.smaller", tip: L10n.t("editor.textsmaller"), action: #selector(textSmaller))
         let larger = makeActionButton(symbol: "textformat.size.larger", tip: L10n.t("editor.textlarger"), action: #selector(textLarger))
         for b in [smaller, larger] {
-            b.translatesAutoresizingMaskIntoConstraints = false
-            b.widthAnchor.constraint(equalToConstant: size).isActive = true
+            pinChip(b)
             leading.addArrangedSubview(b)
         }
         textSizeButtons = [smaller, larger]
@@ -277,15 +303,13 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
 
         let undo = makeActionButton(symbol: "arrow.uturn.backward", tip: L10n.t("editor.undo"), action: #selector(undoTapped))
         undo.keyEquivalent = "z"; undo.keyEquivalentModifierMask = [.command]
-        undo.translatesAutoresizingMaskIntoConstraints = false
-        undo.widthAnchor.constraint(equalToConstant: size).isActive = true
+        pinChip(undo)
         leading.addArrangedSubview(undo)
         keyEquivControls.append((undo, "z", [.command]))
 
         let redo = makeActionButton(symbol: "arrow.uturn.forward", tip: L10n.t("editor.redo"), action: #selector(redoTapped))
         redo.keyEquivalent = "Z"; redo.keyEquivalentModifierMask = [.command, .shift]
-        redo.translatesAutoresizingMaskIntoConstraints = false
-        redo.widthAnchor.constraint(equalToConstant: size).isActive = true
+        pinChip(redo)
         leading.addArrangedSubview(redo)
         keyEquivControls.append((redo, "Z", [.command, .shift]))
 
@@ -325,8 +349,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         save.keyEquivalent = "s"; save.keyEquivalentModifierMask = [.command]
         let close = makeActionButton(symbol: "xmark", tip: L10n.t("editor.close"), action: #selector(closeTapped))
         close.keyEquivalent = "\u{1b}"   // Esc
-        close.translatesAutoresizingMaskIntoConstraints = false
-        close.widthAnchor.constraint(equalToConstant: size).isActive = true
+        pinChip(close)
         keyEquivControls.append((copy, "c", [.command]))
         keyEquivControls.append((save, "s", [.command]))
         keyEquivControls.append((close, "\u{1b}", []))
@@ -344,6 +367,14 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
             leading.trailingAnchor.constraint(lessThanOrEqualTo: trailing.leadingAnchor, constant: -16)
         ])
         return bar
+    }
+
+    /// Pins a control to the bar's square chip well. Width-only pinning let the hover wash take its
+    /// height from the glyph, so the chips rendered at different heights across one row.
+    private func pinChip(_ view: NSView) {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.widthAnchor.constraint(equalToConstant: Self.chipSize).isActive = true
+        view.heightAnchor.constraint(equalToConstant: Self.chipSize).isActive = true
     }
 
     private func makeActionButton(symbol: String, tip: String, action: Selector) -> NSButton {
@@ -399,6 +430,10 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
 
     private func selectTool(_ tool: SnapTool) {
         canvas.currentTool = tool
+        // Single choke point for every tool change (buttons, letter shortcuts, restored defaults), so
+        // it is also where the canvas's per-tool cursor rects and hover tracking get rebuilt.
+        canvas.toolDidChange()
+        canvas.window?.invalidateCursorRects(for: canvas)
         for (t, b) in toolButtons {
             let on = (t == tool)
             (b as? HoverToolButton)?.isSelectedTool = on   // solid accent chip lives in the button
@@ -637,20 +672,23 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         zoomButton?.title = "\(Int(round(scroll.magnification * 100)))%"
     }
 
-    /// Classic transparency checkerboard tile for the canvas surround.
-    /// ponytail: fixed mid-grays readable in both themes — NSColor(patternImage:) can't adapt live.
-    private static let checkerPattern: NSImage = {
+    /// Classic transparency checkerboard tile for the canvas surround. The tile bakes fixed greys, so
+    /// the theme has to be passed in and the pattern rebuilt on appearance changes (CheckerScrollView
+    /// does that): mid-greys that read as "surround" in light mode glow like a lightbox in dark.
+    fileprivate static func checkerPattern(dark: Bool) -> NSImage {
         let square: CGFloat = 8
+        let base: CGFloat = dark ? 0.22 : 0.53
+        let alt: CGFloat = dark ? 0.28 : 0.60
         let img = NSImage(size: NSSize(width: square * 2, height: square * 2))
         img.lockFocus()
-        NSColor(white: 0.53, alpha: 1).setFill()
+        NSColor(white: base, alpha: 1).setFill()
         NSRect(x: 0, y: 0, width: square * 2, height: square * 2).fill()
-        NSColor(white: 0.60, alpha: 1).setFill()
+        NSColor(white: alt, alpha: 1).setFill()
         NSRect(x: 0, y: square, width: square, height: square).fill()
         NSRect(x: square, y: 0, width: square, height: square).fill()
         img.unlockFocus()
         return img
-    }()
+    }
 
     @objc private func copyTapped() {
         let image = canvas.flattened()
