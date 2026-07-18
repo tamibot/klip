@@ -134,9 +134,9 @@ struct MeetingHUDView: View {
         .padding(14)
         .frame(width: 264)
         // Cross-fade into the finishing state instead of jumping.
-        .animation(.easeOut(duration: 0.13), value: recorder.finishing)
+        .animation(Motion.ease(Motion.state), value: recorder.finishing)
         // Fade the "no meeting audio" warning in/out instead of popping mid-meeting.
-        .animation(.easeOut(duration: 0.15), value: noSystem)
+        .animation(Motion.ease(Motion.state), value: noSystem)
         .transition(.opacity)
     }
 
@@ -150,9 +150,9 @@ struct MeetingHUDView: View {
     }
 
     private func setCompact(_ value: Bool) {
-        // Matches the 0.18s panel resize in AppDelegate.resizeMeetingHUD so the
-        // pill/card cross-fade rides along with the frame animation.
-        withAnimation(.easeOut(duration: 0.18)) { compact = value }
+        // Same `morph` token as the panel resize in AppDelegate.resizeMeetingHUD, so the pill/card
+        // cross-fade rides along with the frame animation instead of finishing ahead of it.
+        withAnimation(Motion.ease(Motion.morph)) { compact = value }
         onToggleCompact(value)
     }
 

@@ -103,7 +103,7 @@ enum ToastHUD {
                            width: width, height: size.height)
 
         // Slide down from the screen edge + fade (banner-style); slide is dropped under Reduce Motion.
-        let slide: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 8
+        let slide: CGFloat = Motion.reduced ? 0 : 8
         let p = NSPanel(contentRect: frame.offsetBy(dx: 0, dy: slide), styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: false)
         p.isOpaque = false
@@ -118,7 +118,7 @@ enum ToastHUD {
         p.alphaValue = 0
         p.orderFrontRegardless()
         panel = p
-        if style == .success, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if style == .success, !Motion.reduced {
             check.addSymbolEffect(.bounce, options: .nonRepeating)
         }
         // The panel never takes focus, so VoiceOver never visits it: speak the outcome instead.
@@ -126,20 +126,16 @@ enum ToastHUD {
         announce(spokenDetail.isEmpty ? title : "\(title), \(spokenDetail)",
                  priority: style == .failure ? .high : .medium)
 
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        Motion.run(Motion.appear) { _ in
             p.animator().alphaValue = 1
             p.animator().setFrame(frame, display: true)
         }
         let work = DispatchWorkItem { [weak p] in
             guard let p else { return }
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.2
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            Motion.run(Motion.dismiss, { _ in
                 p.animator().alphaValue = 0
                 p.animator().setFrame(p.frame.offsetBy(dx: 0, dy: slide), display: true)
-            }, completionHandler: {
+            }, completion: {
                 MainActor.assumeIsolated {   // AppKit animation completions run on the main thread
                     p.orderOut(nil); if panel === p { panel = nil }
                 }

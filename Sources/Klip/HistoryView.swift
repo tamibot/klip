@@ -287,7 +287,7 @@ struct HistoryView: View {
                 Capsule().fill(selected ? AnyShapeStyle(Color.accentColor)
                                         : AnyShapeStyle(.quaternary))
             )
-            .animation(.snappy(duration: 0.2, extraBounce: 0), value: selected)   // critically-damped selection swap
+            .animation(Motion.spring, value: selected)   // critically-damped selection swap
         }
         .buttonStyle(PressableButtonStyle())   // press-down feedback (Apple: respond on press)
     }
@@ -415,7 +415,7 @@ struct HistoryView: View {
                 .padding(.horizontal, RowMetrics.gutter).padding(.vertical, 4)
                 // No list layout animation: a new clip must appear in place, never slide the rows
                 // (text must not move — the user copies constantly). Only the OCR box fades.
-                .animation(.easeOut(duration: 0.13), value: ocrResultID)
+                .animation(Motion.ease(Motion.appear), value: ocrResultID)
             }
             .scrollContentBackground(.hidden)   // let the window's glass material show through the list
             .onChange(of: selection.selectedID) { _, newID in
@@ -934,7 +934,7 @@ struct ItemRow: View {
             Image(systemName: symbol).font(.system(size: 12))
                 // Smooth symbol swap (copy→checkmark flash, eye/star toggles) instead of a hard pop.
                 .contentTransition(.symbolEffect(.replace))
-                .animation(.easeOut(duration: 0.12), value: symbol)
+                .animation(Motion.ease(Motion.state), value: symbol)
         }
         .buttonStyle(PressableButtonStyle()).help(help)   // press-down feedback (Apple: respond on press)
     }

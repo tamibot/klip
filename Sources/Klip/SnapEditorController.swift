@@ -30,11 +30,15 @@ private final class HoverToolButton: NSButton {
         // primary wash only on the inactive tools.
         let color: NSColor = isSelectedTool ? .controlAccentColor
             : hovering ? .labelColor.withAlphaComponent(0.06) : .clear
-        // View-backed layers disable implicit animations, so ease the wash in/out explicitly.
-        let anim = CABasicAnimation(keyPath: "backgroundColor")
-        anim.duration = 0.15
-        anim.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        layer?.add(anim, forKey: "backgroundColor")
+        // View-backed layers disable implicit animations, so ease the wash in/out explicitly — and
+        // an explicit CAAnimation gets no Reduce Motion degradation either: there, add none at all
+        // and let the assignment below land instantly.
+        if !Motion.reduced {
+            let anim = CABasicAnimation(keyPath: "backgroundColor")
+            anim.duration = Motion.state
+            anim.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer?.add(anim, forKey: "backgroundColor")
+        }
         layer?.backgroundColor = color.cgColor
     }
 }
@@ -184,18 +188,14 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         content.addSubview(toolbar)
 
         win.contentView = content
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let reduceMotion = Motion.reduced
         win.alphaValue = reduceMotion ? 1 : 0
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         win.makeFirstResponder(canvas)
         // Quick fade-in, same curve as the main HUD panel.
         if !reduceMotion {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.13
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                win.animator().alphaValue = 1
-            }
+            Motion.run(Motion.appear) { _ in win.animator().alphaValue = 1 }
         }
         // Restore last-used tool state across editor sessions (defaults: 3pt stroke, arrow, swatch 0).
         let defaults = UserDefaults.standard
@@ -544,16 +544,10 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
             self.textSizeButtons.forEach { $0.isHidden = !showText }
             self.textSizeSeparator?.isHidden = !showText
         }
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        // NSStackView fades + reflows hidden arranged subviews when animated implicitly.
+        Motion.run(Motion.state) { ctx in
+            ctx.allowsImplicitAnimation = true
             apply()
-        } else {
-            // NSStackView fades + reflows hidden arranged subviews when animated implicitly.
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.15
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                ctx.allowsImplicitAnimation = true
-                apply()
-            }
         }
         if showBlur { blurSlider?.doubleValue = Double(canvas.effectiveBlurLevel) }
     }
@@ -725,17 +719,15 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     /// the user re-find their place. Reduce Motion gets the plain set.
     private func applyMagnification(_ target: CGFloat) {
         guard let scroll = scrollView else { return }
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+        guard !Motion.reduced else {
             scroll.magnification = target
             updateZoomLabel()
             return
         }
         beginLiveZoomTracking()   // so the percentage counts along with the animation
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.18
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        Motion.run(Motion.morph, { _ in
             scroll.animator().magnification = target
-        }, completionHandler: { [weak self] in self?.endLiveZoomTracking() })
+        }, completion: { [weak self] in self?.endLiveZoomTracking() })
     }
 
     @objc private func liveMagnifyStarted(_ note: Notification) { beginLiveZoomTracking() }

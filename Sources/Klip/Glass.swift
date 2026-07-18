@@ -1,16 +1,61 @@
 import AppKit
 import SwiftUI
 
+/// The app's motion table: one duration per named role, so the same kind of change reads the same
+/// on every surface — and so Reduce Motion has ONE gate to close instead of a dozen scattered ones.
+///
+/// A hand-rolled AppKit/SwiftUI animation inherits NONE of the system's automatic accessibility
+/// adaptation (DESIGN.md §4, "Cannot have"). Every token below is already gated, so a call site that
+/// takes its duration — or its `Animation` — from here is gated too, and nothing else has to remember.
+enum Motion {
+    /// A surface arriving: panel, window, HUD, toast.
+    static let appear: TimeInterval = 0.13
+    /// A surface leaving. Shorter than `appear`: an exit the user already committed to must not hold
+    /// them up.
+    static let dismiss: TimeInterval = 0.12
+    /// An in-place state change on something that stays put — hover wash, symbol swap, contextual
+    /// controls, a cross-fade between two states of the same element.
+    static let state: TimeInterval = 0.15
+    /// Geometry actually changing: a frame resize, a zoom. The longest thing the app animates.
+    static let morph: TimeInterval = 0.18
+
+    /// The single source of truth for "the user asked for less motion".
+    static var reduced: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// Press/selection feedback: critically damped, no overshoot, so it reads as physical rather than
+    /// scripted. nil under Reduce Motion — SwiftUI reads that as "apply the change with no animation".
+    static var spring: Animation? { reduced ? nil : .snappy(duration: morph, extraBounce: 0) }
+
+    /// SwiftUI gate, for `.animation(_:value:)` and `withAnimation` call sites.
+    static func ease(_ duration: TimeInterval) -> Animation? {
+        reduced ? nil : .easeOut(duration: duration)
+    }
+
+    /// AppKit gate. Under Reduce Motion the group runs at zero duration, which still commits the end
+    /// state and still fires the completion handler — so no call site needs a second code path.
+    static func run(_ duration: TimeInterval,
+                    _ changes: (NSAnimationContext) -> Void,
+                    completion: (() -> Void)? = nil) {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = reduced ? 0 : duration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            changes(ctx)
+        }, completionHandler: completion)
+    }
+}
+
 /// Press feedback for custom (`.plain`/`.borderless`) buttons that don't get AppKit's native
 /// press dip. Apple's first fluid-interface principle: respond on press-DOWN, instantly. The dip
-/// rides a critically-damped spring (no overshoot) so it feels physical, not scripted. Respects
-/// Reduce Motion (the spring degrades to an instant state change there automatically).
+/// rides a critically-damped spring (no overshoot) so it feels physical, not scripted.
+///
+/// The spring comes from Motion because a hand-rolled SwiftUI animation gets no automatic Reduce
+/// Motion degradation — `Motion.spring` is nil there, which is what actually makes the dip instant.
 struct PressableButtonStyle: ButtonStyle {
     var scale: CGFloat = 0.96
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
-            .animation(.snappy(duration: 0.18, extraBounce: 0), value: configuration.isPressed)
+            .animation(Motion.spring, value: configuration.isPressed)
     }
 }
 

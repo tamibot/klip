@@ -182,11 +182,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Cross-fades the next image/tint swap on the status button so the icon changes read as one
     /// element changing state rather than two icons cutting. Reduce Motion keeps the instant swap.
     private func fadeStatusIcon(_ button: NSStatusBarButton) {
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        guard !Motion.reduced else { return }
         button.wantsLayer = true
         let fade = CATransition()
         fade.type = .fade
-        fade.duration = 0.12
+        fade.duration = Motion.state
         button.layer?.add(fade, forKey: kCATransition)
     }
 
@@ -739,15 +739,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let target = panel.frame
         if appearing {
             panel.alphaValue = 0
-            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            if !Motion.reduced {
                 panel.setFrameOrigin(NSPoint(x: target.origin.x, y: target.origin.y + 8))
             }
         }
         panel.orderFrontRegardless()
         if panel.alphaValue < 1 {   // newly appearing OR caught mid fade-out: fade up to full
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.13
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            Motion.run(Motion.appear) { _ in
                 panel.animator().alphaValue = 1
                 panel.animator().setFrame(target, display: true)
             }
@@ -768,23 +766,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let size = compact ? Self.hudCompactSize : Self.hudExpandedSize
         let topRight = NSPoint(x: panel.frame.maxX, y: panel.frame.maxY)
         hudResizing = true
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.18
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        Motion.run(Motion.morph, { _ in
             panel.animator().setFrame(NSRect(x: topRight.x - size.width, y: topRight.y - size.height,
                                              width: size.width, height: size.height), display: true)
-        }, completionHandler: { [weak self] in
+        }, completion: { [weak self] in
             Task { @MainActor in self?.hudResizing = false }
         })
     }
     private func closeMeetingHUD() {
         guard let hud = meetingHUD, hud.isVisible, !hudFadingOut else { return }
         hudFadingOut = true
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.12
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        Motion.run(Motion.dismiss, { _ in
             hud.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
+        }, completion: { [weak self] in
             MainActor.assumeIsolated {   // AppKit animation completions run on the main thread
                 guard let self, self.hudFadingOut else { return }   // re-shown mid-fade: leave it up
                 self.hudFadingOut = false

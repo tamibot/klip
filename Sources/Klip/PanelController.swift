@@ -181,11 +181,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         selection.openToken &+= 1                 // triggers the search/focus reset in the view
         if recordingPanel?.isVisible != true { recorder.reset() }  // don't close the voice popup if it's open
 
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.13
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 1
-        }
+        Motion.run(Motion.appear) { _ in panel.animator().alphaValue = 1 }
 
         installMonitors()
     }
@@ -199,11 +195,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         if restoreFocus { previousApp?.activate() }   // restore focus first; the fade is purely visual
         guard panel.isVisible, !fadingOut else { return }
         fadingOut = true
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.12
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        Motion.run(Motion.dismiss, { _ in
             panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
+        }, completion: { [weak self] in
             MainActor.assumeIsolated {   // AppKit animation completions run on the main thread
                 guard let self, self.fadingOut else { return }   // reopened mid-fade: leave it on screen
                 self.fadingOut = false
@@ -213,17 +207,13 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     /// Orders a window front via `orderFront` and fades it in when it's newly appearing
-    /// (same 0.13s easeOut the history panel uses). Already-visible windows are left alone.
+    /// (the same appear fade the history panel uses). Already-visible windows are left alone.
     private func fadeInPresenting(_ window: NSWindow, orderFront: () -> Void) {
         let appearing = !window.isVisible
         if appearing { window.alphaValue = 0 }
         orderFront()
         guard appearing else { return }
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.13
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            window.animator().alphaValue = 1
-        }
+        Motion.run(Motion.appear) { _ in window.animator().alphaValue = 1 }
     }
 
     // MARK: - Monitors (keyboard + outside click)
