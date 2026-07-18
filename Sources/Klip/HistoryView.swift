@@ -52,6 +52,7 @@ struct HistoryView: View {
     var onCombinePDF: ([ClipboardItem]) -> Void
     var onExportZip: ([ClipboardItem]) -> Void
     var onAssignCollection: ([ClipboardItem]) -> Void
+    var onDragSession: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var search = ""
@@ -60,6 +61,9 @@ struct HistoryView: View {
     @State private var collectionFilter: String?
     @State private var selecting = false
     @State private var selectedBatch: Set<UUID> = []
+    /// Origin of a Shift-click range. Every plain check (and the Cmd-click that opens batch mode) moves
+    /// it; Shift-click itself never does, so repeated Shift-clicks re-extend from the same row.
+    @State private var batchAnchor: UUID?
     @State private var ocrResultID: UUID?
     @State private var ocrText = ""
     @State private var ocrRunning = false
@@ -151,13 +155,18 @@ struct HistoryView: View {
         .onChange(of: selecting) { _, newValue in selection.selecting = newValue }
         // Esc in multi-select: the controller flips selection.selecting off; drop the batch here.
         .onChange(of: selection.selecting) { _, newValue in
-            if !newValue && selecting { selecting = false; selectedBatch = [] }
+            if !newValue && selecting { selecting = false; selectedBatch = []; batchAnchor = nil }
+        }
+        // Return in batch mode: the controller only knows which row the cursor is on, the batch lives here.
+        .onChange(of: selection.toggleCheckToken) { _, _ in
+            guard selecting, let id = selection.selectedID else { return }
+            toggleCheck(id)
         }
         // Esc with text in the search field: clear it (second back-out layer, before closing).
         .onChange(of: selection.clearSearchToken) { _, _ in search = ""; searchFocused = true }
         .onChange(of: selection.openToken) { _, _ in
             search = ""; filter = .all; collectionFilter = nil
-            selecting = false; selectedBatch = []
+            selecting = false; selectedBatch = []; batchAnchor = nil
             ocrResultID = nil; ocrText = ""; ocrRunning = false   // don't show a stale OCR box on reopen
             selection.updateVisible(sortedItems.map(\.id))
             selection.selectedIndex = sortedItems.isEmpty ? -1 : 0
@@ -287,10 +296,38 @@ struct HistoryView: View {
 
     private func toggleSelecting() {
         selecting.toggle()
-        if !selecting { selectedBatch = [] }
+        if !selecting { selectedBatch = []; batchAnchor = nil }
     }
     private func toggleCheck(_ id: UUID) {
         if selectedBatch.contains(id) { selectedBatch.remove(id) } else { selectedBatch.insert(id) }
+        batchAnchor = id
+    }
+    /// Cmd-click on a row outside batch mode: the Finder-style shortcut into multi-select, with that
+    /// row already checked — otherwise the only way in is the header button.
+    private func commandSelect(_ id: UUID) {
+        selecting = true
+        selectedBatch = [id]
+        batchAnchor = id
+    }
+    /// Shift-click inside batch mode: (un)checks the whole contiguous run between the anchor and this
+    /// row in FILTERED order — what the user sees is what gets checked. The clicked end decides the
+    /// direction, so Shift-clicking a checked row clears the run instead of re-checking it.
+    private func rangeSelect(_ id: UUID) {
+        let ids = filtered.map(\.id)
+        guard let to = ids.firstIndex(of: id) else { return }
+        let from = batchAnchor.flatMap { ids.firstIndex(of: $0) } ?? to
+        let run = Set(ids[min(from, to)...max(from, to)])
+        if selectedBatch.contains(id) { selectedBatch.subtract(run) } else { selectedBatch.formUnion(run) }
+    }
+    /// The ids the "Select all" toggle acts on: only what the current search/filter actually shows,
+    /// so the control can never silently sweep in clips the user can't see.
+    private var visibleBatchIDs: Set<UUID> { Set(filtered.map(\.id)) }
+    private var allVisibleChecked: Bool {
+        !visibleBatchIDs.isEmpty && visibleBatchIDs.isSubset(of: selectedBatch)
+    }
+    private func toggleSelectAll() {
+        let ids = visibleBatchIDs
+        if allVisibleChecked { selectedBatch.subtract(ids) } else { selectedBatch.formUnion(ids) }
     }
     // VISIBLE order (newest first) — not manager.items' insertion order — so that
     // the PDF/ZIP comes out in the same order the user sees and checks the items. Includes selected
@@ -307,6 +344,14 @@ struct HistoryView: View {
                 .allowsHitTesting(false)
             HStack(spacing: 8) {
                 Text(String(format: L10n.t("sel.count"), selectedBatch.count)).font(.system(size: 13, weight: .semibold)).monospacedDigit().foregroundStyle(.secondary)
+                // Sits next to the counter it changes. Only the button's own width moves when the label
+                // flips — the counter is leading and the Spacer eats the rest, so no text shifts.
+                Button(allVisibleChecked ? L10n.t("sel.none")
+                                         : String(format: L10n.t("sel.all"), filtered.count)) {
+                    toggleSelectAll()
+                }
+                .buttonStyle(.link).font(.system(size: 11))
+                .disabled(filtered.isEmpty)
                 Spacer()
                 batchButton("doc.richtext", "PDF") { onCombinePDF(batchItems) }
                 batchButton("doc.zipper", "ZIP") { onExportZip(batchItems) }
@@ -345,6 +390,7 @@ struct HistoryView: View {
                                 .textCase(.uppercase)
                                 .padding(.top, idx == 0 ? 2 : 12).padding(.bottom, 4)
                                 .padding(.leading, RowMetrics.inset)
+                                .accessibilityAddTraits(.isHeader)   // lets the VoiceOver rotor jump day to day
                         }
                         ItemRow(item: item,
                                 isSelected: item.id == selection.selectedID,
@@ -357,7 +403,11 @@ struct HistoryView: View {
                                 onSaveAsFile: onSaveAsFile, onCopyAsCode: onCopyAsCode,
                                 searchTerm: search,
                                 selecting: selecting, isChecked: selectedBatch.contains(item.id),
-                                onToggleCheck: { toggleCheck(item.id) })
+                                onToggleCheck: { toggleCheck(item.id) },
+                                keyboardActive: selection.hasNavigated,
+                                onCommandSelect: { commandSelect(item.id) },
+                                onRangeSelect: { rangeSelect(item.id) },
+                                onDragSession: onDragSession)
                             .id(item.id)
                         if ocrResultID == item.id { ocrBox }
                     }
@@ -475,6 +525,14 @@ struct ItemRow: View {
     var selecting: Bool = false
     var isChecked: Bool = false
     var onToggleCheck: () -> Void = {}
+    /// True once the arrow keys have driven the selection: the selected row then shows the same action
+    /// strip hover gives, so the strip stops being pointer-only.
+    var keyboardActive: Bool = false
+    var onCommandSelect: () -> Void = {}
+    var onRangeSelect: () -> Void = {}
+    /// Told at the start of a drag out of the panel so the controller can keep the transient panel
+    /// alive until the drop lands.
+    var onDragSession: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
@@ -487,6 +545,12 @@ struct ItemRow: View {
 
     private var isCredential: Bool { item.isCredential == true }
     private var hasText: Bool { !(item.text?.isEmpty ?? true) }
+    /// The row reads as "current" for two different reasons — the batch check and the keyboard cursor —
+    /// and they are mutually exclusive by mode.
+    private var isRowSelected: Bool { (selecting && isChecked) || (!selecting && isSelected) }
+    /// The hover strip also belongs to the keyboard cursor. No animation on the swap: this fires while
+    /// the user arrows through the list, and an animated strip would settle the row's text sideways.
+    private var showsActions: Bool { (hovering || (isSelected && keyboardActive)) && !selecting }
     private var customName: String? {
         guard let nm = item.name, !nm.isEmpty else { return nil }
         return nm
@@ -549,6 +613,10 @@ struct ItemRow: View {
     }
 
     var body: some View {
+        accessibleRow(rowCore)
+    }
+
+    private var rowCore: some View {
         HStack(spacing: 8) {
             if selecting {
                 Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
@@ -563,7 +631,7 @@ struct ItemRow: View {
         // panel's light glass.
         // Concentric with the panel (Apple: inner_radius = parent_radius - padding → 12 - 6).
         .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill((selecting && isChecked) || (!selecting && isSelected) ? Color.accentColor.opacity(0.20)
+            .fill(isRowSelected ? Color.accentColor.opacity(0.20)
                   : (hovering ? Color.primary.opacity(0.06) : Color.clear)))
         .contentShape(Rectangle())
         .contextMenu {
@@ -572,14 +640,122 @@ struct ItemRow: View {
                 Button { manager.copyToPasteboard(item) } label: { Label(L10n.t("row.copyonly"), systemImage: "doc.on.doc") }
             }
             Button { manager.togglePin(item) } label: { Label(L10n.t(item.pinned ? "row.unpin" : "row.pin"), systemImage: item.pinned ? "star.fill" : "star") }
+                // Display only — the real handler is PanelController's key monitor. Without this the
+                // monitor's shortcuts are invisible and read as undiscoverable trivia.
+                .keyboardShortcut("f", modifiers: [.command, .shift])
             Divider()
             moreMenu
         }
         // Animated so the hover highlight and the inline actions fade instead of popping in.
         .onHover { h in hovering = h }   // instant — no animated "text settling" as the row's actions appear
-        .onTapGesture { if selecting { onToggleCheck() } else { onPick(item) } }
+        .onTapGesture { handleTap() }
+        .modifier(RowDrag(enabled: canDrag, provider: { self.makeDragProvider() }, onStart: onDragSession))
         .onChange(of: resetToken) { _, _ in revealed = false }   // re-mask when reopening the panel
         .onChange(of: hovering) { _, h in if !h { revealed = false } }   // re-mask once the pointer leaves the row (covers search/filter/scroll)
+    }
+
+    /// Modifier flags decide the click's meaning, Finder-style: Cmd opens batch mode on this row, Shift
+    /// extends the run inside it. `NSApp.currentEvent` is the only place SwiftUI's tap gesture exposes them.
+    private func handleTap() {
+        let mods = NSApp.currentEvent?.modifierFlags.intersection(.deviceIndependentFlagsMask) ?? []
+        if selecting {
+            if mods.contains(.shift) { onRangeSelect() } else { onToggleCheck() }
+        } else if mods.contains(.command) {
+            onCommandSelect()
+        } else {
+            onPick(item)
+        }
+    }
+
+    // MARK: - Drag out of the panel
+
+    /// Whether this row has something real to hand a drop target. Credentials are excluded outright:
+    /// a token must never leave the panel by drag, revealed or not.
+    private var canDrag: Bool {
+        guard !isCredential else { return false }
+        if item.kind == .image { return item.imageFileName != nil }
+        if voiceAudioFile != nil { return true }
+        return item.linkURL != nil || hasText
+    }
+
+    /// Media vends its file URL (so a Finder drop writes a real file); links vend a URL and text the
+    /// stored string, not the trimmed preview.
+    private func makeDragProvider() -> NSItemProvider {
+        if item.kind == .image, let fn = item.imageFileName {
+            return NSItemProvider(contentsOf: Storage.shared.imageURL(for: fn)) ?? NSItemProvider()
+        }
+        if let af = voiceAudioFile {
+            return NSItemProvider(contentsOf: Storage.shared.audioURL(for: af)) ?? NSItemProvider()
+        }
+        if let u = item.linkURL { return NSItemProvider(object: u as NSURL) }
+        return NSItemProvider(object: (item.text ?? "") as NSString)
+    }
+
+    // MARK: - VoiceOver
+
+    /// What VoiceOver reads for the row: type, then the user's name for the clip or its preview, then
+    /// how long ago it was captured. A credential contributes its masked placeholder and nothing else —
+    /// `displayedPreview` turns into cleartext while revealed and must never reach this string.
+    private var a11yLabel: String {
+        let kind: String
+        if isCredential { kind = L10n.t("a11y.kind.cred") }
+        else if item.kind == .image { kind = L10n.t("a11y.kind.image") }
+        else if item.isVoiceNote == true { kind = L10n.t("a11y.kind.voice") }
+        else if item.linkURL != nil { kind = L10n.t("a11y.kind.link") }
+        else { kind = L10n.t("a11y.kind.text") }
+        let content = customName ?? (isCredential ? CredentialDetector.maskedPlaceholder : displayedPreview)
+        return "\(kind), \(content), \(Self.relativeTime(item.createdAt))"
+    }
+
+    /// One VoiceOver element per row (the checkmark, preview and metadata are decoration around a single
+    /// activatable thing). In batch mode the row IS the checkbox, so it takes the toggle semantics that
+    /// the ignored checkmark image can no longer carry.
+    @ViewBuilder private func accessibleRow<V: View>(_ content: V) -> some View {
+        if selecting {
+            labelledRow(content)
+                .accessibilityAddTraits(.isToggle)
+                .accessibilityValue(Text(L10n.t(isChecked ? "a11y.on" : "a11y.off")))
+                .accessibilityHint(Text(L10n.t("a11y.hint.batch")))
+        } else {
+            typeActions(labelledRow(content))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(Text(L10n.t("a11y.hint.row")))
+                .accessibilityAction(named: Text(L10n.t(item.pinned ? "row.unpin" : "row.pin"))) { manager.togglePin(item) }
+                .accessibilityAction(named: Text(L10n.t("row.rename"))) { onRename(item) }
+                .accessibilityAction(named: Text(L10n.t("row.delete"))) { onDelete(item) }
+        }
+    }
+
+    private func labelledRow<V: View>(_ content: V) -> some View {
+        content
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(a11yLabel))
+            .accessibilityAddTraits(isRowSelected ? AccessibilityTraits.isSelected : [])
+    }
+
+    /// The per-type half of the hover strip, re-exposed as rotor actions. Same conditions and the same
+    /// closures as `actions` — the two paths must never be able to offer different things.
+    @ViewBuilder private func typeActions<V: View>(_ content: V) -> some View {
+        if item.isVoiceNote == true {
+            if voiceAudioFile != nil, !hasText, !isTranscribing {
+                content.accessibilityAction(named: Text(L10n.t("voice.retry"))) { onRetryTranscription(item) }
+            } else if hasText {
+                content.accessibilityAction(named: Text(L10n.t("row.copyonly"))) { manager.copyToPasteboard(item) }
+            } else {
+                content
+            }
+        } else if isCredential {
+            content
+                .accessibilityAction(named: Text(L10n.t("row.reveal"))) { revealed.toggle() }
+                .accessibilityAction(named: Text(L10n.t("row.copyonly"))) { manager.copyToPasteboard(item) }
+        } else if item.kind == .image {
+            content
+                .accessibilityAction(named: Text(L10n.t("row.annotate"))) { onAnnotate(item) }
+                .accessibilityAction(named: Text(L10n.t("row.save"))) { onSaveImage(item) }
+                .accessibilityAction(named: Text(L10n.t("row.copyonly"))) { manager.copyToPasteboard(item) }
+        } else {
+            content.accessibilityAction(named: Text(L10n.t("row.copyonly"))) { manager.copyToPasteboard(item) }
+        }
     }
 
     private var imageCard: some View {
@@ -607,7 +783,7 @@ struct ItemRow: View {
                 HStack(spacing: 6) {
                     metadata
                     Spacer(minLength: 4)
-                    if hovering && !selecting { actions } else if item.pinned { pinDot }
+                    if showsActions { actions } else if item.pinned { pinDot }
                 }
             }
         }
@@ -637,7 +813,7 @@ struct ItemRow: View {
                 metadata
             }
             Spacer(minLength: 4)
-            if hovering && !selecting { actions }
+            if showsActions { actions }
             else if item.pinned { pinDot }
         }
         .padding(.vertical, 7).padding(.horizontal, RowMetrics.inset)
@@ -719,6 +895,7 @@ struct ItemRow: View {
             Button { manager.setClipboardText(Markdownify.toWhatsApp(item.text ?? "")); ToastHUD.show(L10n.t("toast.copied")) } label: { Label(L10n.t("row.whatsapp"), systemImage: "message") }
             Button { manager.copyForEmail(item.text ?? ""); ToastHUD.show(L10n.t("toast.copied")) } label: { Label(L10n.t("row.email"), systemImage: "envelope") }
             Button { onCopyAsCode(item) } label: { Label(L10n.t("row.code"), systemImage: "chevron.left.forwardslash.chevron.right") }
+                .keyboardShortcut(.return, modifiers: .command)   // display only (see the star in contextMenu)
             if let u = item.linkURL {
                 Button { NSWorkspace.shared.open(u) } label: { Label(L10n.t("row.openlink"), systemImage: "arrow.up.right.square") }
             }
@@ -729,6 +906,7 @@ struct ItemRow: View {
         Divider()
         Button { onRename(item) } label: { Label(L10n.t("row.rename"), systemImage: "tag") }
         Button(role: .destructive) { onDelete(item) } label: { Label(L10n.t("row.delete"), systemImage: "trash") }
+            .keyboardShortcut(.delete, modifiers: .command)   // display only (see the star in contextMenu)
     }
 
     /// Copy WITHOUT pasting or closing (unlike the row click / Return): the panel stays open and
@@ -795,6 +973,24 @@ struct ItemRow: View {
     /// Two dates fall in the same calendar day (drives section breaks).
     static func sameDay(_ a: Date, _ b: Date) -> Bool { Calendar.current.isDate(a, inSameDayAs: b) }
 
+    /// Age in words, for VoiceOver only. The visible row shows a bare clock time, which read aloud out
+    /// of its day section is just a number with no anchor.
+    static func relativeTime(_ date: Date) -> String {
+        rdf().localizedString(for: date, relativeTo: Date())
+    }
+
+    /// Cached per UI language, same reason as `dfCache`: this runs once per visible row per render.
+    private static var rdfCache: [String: RelativeDateTimeFormatter] = [:]
+    private static func rdf() -> RelativeDateTimeFormatter {
+        let lang = L10n.lang
+        if let f = rdfCache[lang] { return f }
+        let f = RelativeDateTimeFormatter()
+        f.locale = Locale(identifier: lang)
+        f.unitsStyle = .full
+        rdfCache[lang] = f
+        return f
+    }
+
     /// DateFormatters cached by (language, format, time zone) — avoids recreating them on every render, while
     /// still reflecting a system time-zone change mid-session (the TZ in the key busts a stale formatter).
     private static var dfCache: [String: DateFormatter] = [:]
@@ -807,6 +1003,23 @@ struct ItemRow: View {
         f.dateFormat = format
         dfCache[cacheKey] = f
         return f
+    }
+}
+
+/// Attaches `.onDrag` only to rows that have something to vend. A modifier (not an inline `if`) because
+/// SwiftUI's `.onDrag` has no "nothing to drag" return: handing it an empty provider would still lift the
+/// row and start a drag no destination can accept — and for a credential there must be no drag at all.
+private struct RowDrag: ViewModifier {
+    let enabled: Bool
+    let provider: () -> NSItemProvider
+    let onStart: () -> Void
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled {
+            content.onDrag { onStart(); return provider() }
+        } else {
+            content
+        }
     }
 }
 

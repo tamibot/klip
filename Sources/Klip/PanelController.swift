@@ -98,7 +98,8 @@ final class PanelController: NSObject, NSWindowDelegate {
             onCaptureAnnotate: { [weak self] in self?.onCaptureAnnotate?() },
             onCombinePDF: { [weak self] items in self?.combineSelectedToPDF(items) },
             onExportZip: { [weak self] items in self?.exportSelectedZip(items) },
-            onAssignCollection: { [weak self] items in self?.assignSelectedToCollection(items) }
+            onAssignCollection: { [weak self] items in self?.assignSelectedToCollection(items) },
+            onDragSession: { [weak self] in self?.beginDragSession() }
         )
 
         let panel = KeyablePanel(
@@ -131,6 +132,29 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     /// True while the close fade-out runs (the panel is still technically visible but going away).
     private var fadingOut = false
+
+    /// True while a row is being dragged out of the panel. The panel is `.transient` and auto-hides the
+    /// moment focus goes elsewhere — which is exactly what a drop into Finder does — and tearing the
+    /// source window down mid-drag kills the drag image, so both auto-hide paths stand down until the
+    /// drop lands.
+    private var dragSessionActive = false
+
+    /// Called by a row as its drag starts. SwiftUI's `.onDrag` has no end callback, so the mouse button
+    /// is the end signal: while the drag runs it is held, and it can only come up on drop or cancel.
+    func beginDragSession() {
+        guard !dragSessionActive else { return }
+        dragSessionActive = true
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        watchDragSession(ticksLeft: 600)   // ~60s ceiling: the flag can never latch on and wedge the panel open
+    }
+
+    private func watchDragSession(ticksLeft: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self, self.dragSessionActive else { return }
+            guard NSEvent.pressedMouseButtons & 1 != 0, ticksLeft > 0 else { self.dragSessionActive = false; return }
+            self.watchDragSession(ticksLeft: ticksLeft - 1)
+        }
+    }
 
     func toggle() {
         if isModalActive { return }   // don't open/close the panel while a save/export sheet is open behind it
@@ -215,7 +239,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self, !self.isModalActive, !self.isRenaming, !self.recorder.isRecording,
-                  !self.auxWindowVisible else { return }   // don't close while a child window is on screen
+                  !self.auxWindowVisible, !self.dragSessionActive else { return }   // don't close while a child window is on screen or a drag is in flight
             self.hide(restoreFocus: false)
         }
     }
@@ -257,14 +281,12 @@ final class PanelController: NSObject, NSWindowDelegate {
             return nil
         }
 
-        // In batch multi-select mode the keyboard does NOT paste/close (it would break the batch in progress):
-        // arrows only navigate; ⌘1-9 / Return don't pick. The mouse still toggles (onToggleCheck).
-        // Batch mode (multi-select) is driven by the mouse (checkboxes). Don't move a keyboard cursor here
-        // with no visible highlight — it only confused; let the keys pass through (search typing, list scrolling).
-        if selection.selecting { return event }
+        // Batch mode keeps the full keyboard, minus anything that pastes or closes: that would throw away
+        // the batch the user is assembling. Arrows move the cursor, Return checks the row under it, and
+        // ⌘⌫ / ⌘⇧F still act on that row (neither leaves the panel).
 
         // ⌘↩ → copies the selected text item as a code block (the vibe-coder's star action), keyboard only.
-        if flags == .command, event.keyCode == 36,
+        if flags == .command, event.keyCode == 36, !selection.selecting,   // it hides the panel: not while batching
            let id = selection.selectedID, let item = manager.items.first(where: { $0.id == id }),
            item.kind == .text, item.isCredential != true, !(item.text?.isEmpty ?? true) {   // never auto-paste a secret
             copyAsCode(of: item); return nil
@@ -286,7 +308,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         switch event.keyCode {
         case 125: selection.moveDown(); return nil    // ↓
         case 126: selection.moveUp();   return nil    // ↑
-        case 36, 76: pickSelected();    return nil    // Return / Enter
+        case 36, 76:                                  // Return / Enter
+            // In batch mode Return is the keyboard's checkbox; the view owns the batch set, so it toggles.
+            if selection.selecting { selection.toggleCheckToken &+= 1 } else { pickSelected() }
+            return nil
         default: return event
         }
     }
@@ -763,10 +788,12 @@ final class PanelController: NSObject, NSWindowDelegate {
     // MARK: - NSWindowDelegate (fallback to close when focus is lost)
 
     func windowDidResignKey(_ notification: Notification) {
-        guard !isModalActive, !isRenaming, !recorder.isRecording, !auxWindowVisible else { return }
+        guard !isModalActive, !isRenaming, !recorder.isRecording, !auxWindowVisible,
+              !dragSessionActive else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.panel.isVisible, !self.isModalActive, !self.isRenaming,
-                  !self.recorder.isRecording, !self.auxWindowVisible, !self.panel.isKeyWindow else { return }
+                  !self.recorder.isRecording, !self.auxWindowVisible, !self.dragSessionActive,
+                  !self.panel.isKeyWindow else { return }
             self.hide(restoreFocus: false)
         }
     }

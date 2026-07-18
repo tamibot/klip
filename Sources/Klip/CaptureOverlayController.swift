@@ -115,6 +115,7 @@ private final class CaptureOverlayView: NSView {
     private var currentRect: NSRect = .zero
     private var lastDragPoint: NSPoint?         // current mouse position during the drag
     private var shiftHeld = false               // Shift = constrain selection to a square
+    private var optionHeld = false              // Option = resize from the press point (center)
     private var spaceHeld = false               // Space = move the in-progress selection
     private let bgImage: NSImage
     /// Marching-ants phase: advanced by a timer while a selection exists (skipped under Reduce Motion).
@@ -234,20 +235,86 @@ private final class CaptureOverlayView: NSView {
 
     /// Centered hint shown while the user hasn't dragged anything yet (so the overlay is self-explanatory).
     private func drawHint() {
-        let text = L10n.t("capture.hint")
+        let text = L10n.t("capture.hint") as NSString
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
             .foregroundColor: NSColor.white
         ]
-        let size = (text as NSString).size(withAttributes: attrs)
+        let size = text.size(withAttributes: attrs)
+        let legend = legendSize
+        let lineGap: CGFloat = 8
         let padX: CGFloat = 16, padY: CGFloat = 12
-        let pill = NSRect(x: bounds.midX - (size.width + padX * 2) / 2,
-                          y: bounds.midY - (size.height + padY * 2) / 2,
-                          width: size.width + padX * 2, height: size.height + padY * 2)
+        let contentW = max(size.width, legend.width)
+        let contentH = size.height + lineGap + legend.height
+        let pill = NSRect(x: bounds.midX - (contentW + padX * 2) / 2,
+                          y: bounds.midY - (contentH + padY * 2) / 2,
+                          width: contentW + padX * 2, height: contentH + padY * 2)
         NSColor.black.withAlphaComponent(0.7).setFill()
-        let r = pill.height / 2   // full capsule, matching the app's selected filter chips
-        NSBezierPath(roundedRect: pill, xRadius: r, yRadius: r).fill()
-        (text as NSString).draw(at: NSPoint(x: pill.minX + padX, y: pill.minY + padY), withAttributes: attrs)
+        // Two lines make this a block, not a chip: a full-capsule radius (right when the hint was one
+        // line tall) would bow the sides out around the text. Rounded rect, concentric with nothing else.
+        NSBezierPath(roundedRect: pill, xRadius: 16, yRadius: 16).fill()
+        text.draw(at: NSPoint(x: pill.midX - size.width / 2, y: pill.maxY - padY - size.height),
+                  withAttributes: attrs)
+        drawModifierLegend(at: NSPoint(x: pill.midX - legend.width / 2, y: pill.minY + padY))
+    }
+
+    // MARK: - Modifier legend
+
+    private static let legendFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+    private let legendKeyGap: CGFloat = 3     // key glyph → the symbol that says what it does
+    private let legendItemGap: CGFloat = 14   // between the three pairs
+
+    /// (key glyph, its measured width, the SF Symbol for what the key does). Deliberately wordless:
+    /// ⇧ square / ⌥ from-center / ␣ move are the three modifiers this overlay understands, and glyphs
+    /// say all of it without a sentence to translate per locale. Built once — the pill redraws on
+    /// every pointer move before the drag starts.
+    private lazy var legendPieces: [(key: NSString, width: CGFloat, image: NSImage?)] = {
+        let cfg = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
+        let items = [("⇧", "square"),
+                     ("⌥", "dot.circle"),
+                     ("␣", "arrow.up.and.down.and.arrow.left.and.right")]
+        return items.map { pair in
+            let key = pair.0 as NSString
+            let image = NSImage(systemSymbolName: pair.1, accessibilityDescription: nil)?
+                .withSymbolConfiguration(cfg)
+            // The palette config already bakes the white in; clearing the template flag keeps a
+            // template repaint from putting the glyph back to black over the dark pill.
+            image?.isTemplate = false
+            return (key: key,
+                    width: key.size(withAttributes: [.font: Self.legendFont]).width,
+                    image: image)
+        }
+    }()
+
+    private var legendSize: NSSize {
+        let keyHeight = Self.legendFont.ascender - Self.legendFont.descender
+        let height = max(keyHeight, legendPieces.compactMap { $0.image?.size.height }.max() ?? 0)
+        var width: CGFloat = 0
+        for (i, piece) in legendPieces.enumerated() {
+            if i > 0 { width += legendItemGap }
+            width += piece.width + legendKeyGap + (piece.image?.size.width ?? 0)
+        }
+        return NSSize(width: width, height: height)
+    }
+
+    private func drawModifierLegend(at origin: NSPoint) {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: Self.legendFont,
+            .foregroundColor: NSColor.white
+        ]
+        let height = legendSize.height
+        let keyHeight = Self.legendFont.ascender - Self.legendFont.descender
+        var x = origin.x
+        for (i, piece) in legendPieces.enumerated() {
+            if i > 0 { x += legendItemGap }
+            piece.key.draw(at: NSPoint(x: x, y: origin.y + (height - keyHeight) / 2), withAttributes: attrs)
+            x += piece.width + legendKeyGap
+            guard let img = piece.image else { continue }
+            img.draw(in: NSRect(x: x, y: origin.y + (height - img.size.height) / 2,
+                                width: img.size.width, height: img.size.height))
+            x += img.size.width
+        }
     }
 
     /// Small "x, y" pixel readout that follows the crosshair before any drag starts.
@@ -299,6 +366,7 @@ private final class CaptureOverlayView: NSView {
         startPoint = convert(event.locationInWindow, from: nil)
         lastDragPoint = startPoint
         shiftHeld = event.modifierFlags.contains(.shift)
+        optionHeld = event.modifierFlags.contains(.option)
         currentRect = .zero
         hoverPoint = nil
         setAnts(running: true)
@@ -317,12 +385,13 @@ private final class CaptureOverlayView: NSView {
         }
         lastDragPoint = p
         shiftHeld = event.modifierFlags.contains(.shift)
+        optionHeld = event.modifierFlags.contains(.option)
         updateSelection()
     }
 
-    /// Recomputes the selection from anchor + current mouse point, applying the
-    /// Shift square constraint. Called from mouseDragged AND flagsChanged so
-    /// pressing/releasing Shift updates the rect without needing mouse movement.
+    /// Recomputes the selection from anchor + current mouse point, applying the Shift square and
+    /// Option from-center constraints. Called from mouseDragged AND flagsChanged so pressing or
+    /// releasing a modifier updates the rect without needing mouse movement.
     private func updateSelection() {
         guard let start = startPoint, let p = lastDragPoint else { return }
         var dx = p.x - start.x
@@ -333,12 +402,35 @@ private final class CaptureOverlayView: NSView {
             dx = dx < 0 ? -side : side
             dy = dy < 0 ? -side : side
         }
-        currentRect = NSRect(x: min(start.x, start.x + dx), y: min(start.y, start.y + dy),
-                             width: abs(dx), height: abs(dy))
+        let rect: NSRect
+        if optionHeld {
+            // Option = the press point is the CENTER: mirror the drag to the opposite side, so the
+            // selection grows both ways instead of anchoring a corner.
+            rect = NSRect(x: start.x - abs(dx), y: start.y - abs(dy),
+                          width: abs(dx) * 2, height: abs(dy) * 2)
+        } else {
+            rect = NSRect(x: min(start.x, start.x + dx), y: min(start.y, start.y + dy),
+                          width: abs(dx), height: abs(dy))
+        }
+        // Snap BEFORE clamping: `bounds` already sits on the pixel grid, so the intersection keeps
+        // the alignment, while snapping afterwards could round a clamped edge back outside the screen.
+        currentRect = pixelSnapped(rect)
         // Space-move and multi-monitor drags can push the rect past the screen: clamp it here so
         // finish() never sizes the NSImage from a rect larger than the pixels it actually crops.
         currentRect = currentRect.intersection(bounds)
         needsDisplay = true
+    }
+
+    /// Rounds the rect onto the display's device-pixel grid. Without this the badge reads
+    /// `Int(width * scale)` (truncating) while finish() crops `.integral` (rounding outward), so a
+    /// selection landing on a half-pixel would export one pixel wider than the badge promised.
+    private func pixelSnapped(_ rect: NSRect) -> NSRect {
+        let scale = shot.scale
+        guard scale > 0 else { return rect }
+        return NSRect(x: (rect.minX * scale).rounded() / scale,
+                      y: (rect.minY * scale).rounded() / scale,
+                      width: (rect.width * scale).rounded() / scale,
+                      height: (rect.height * scale).rounded() / scale)
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -366,6 +458,7 @@ private final class CaptureOverlayView: NSView {
 
     override func flagsChanged(with event: NSEvent) {
         shiftHeld = event.modifierFlags.contains(.shift)
+        optionHeld = event.modifierFlags.contains(.option)
         updateSelection()
         super.flagsChanged(with: event)
     }

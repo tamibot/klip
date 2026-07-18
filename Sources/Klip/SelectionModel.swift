@@ -20,6 +20,13 @@ final class SelectionModel: ObservableObject {
     /// true while the panel is in batch multi-selection mode: the keyboard (Return / ⌘1-9) must NOT
     /// paste or close the panel (it would break the batch the user is assembling). Synced by HistoryView.
     @Published var selecting: Bool = false
+    /// true once the arrow keys have moved the cursor this session. The row action strip is a hover
+    /// affordance, so without this a keyboard-only user can never reach it; it stays false until the
+    /// user actually navigates so merely opening the panel doesn't paint a strip on the first row.
+    @Published var hasNavigated: Bool = false
+    /// Bumped by the controller when Return is pressed in batch mode. The view owns the batch set,
+    /// so the toggle itself has to happen there, on whatever row the cursor is on.
+    @Published var toggleCheckToken: Int = 0
 
     var selectedID: UUID? {
         guard visibleIDs.indices.contains(selectedIndex) else { return nil }
@@ -38,15 +45,18 @@ final class SelectionModel: ObservableObject {
 
     func moveDown() {
         guard !visibleIDs.isEmpty else { return }
+        hasNavigated = true
         selectedIndex = min(selectedIndex + 1, visibleIDs.count - 1)
     }
 
     func moveUp() {
         guard !visibleIDs.isEmpty else { return }
+        hasNavigated = true
         selectedIndex = max(selectedIndex - 1, 0)
     }
 
     func reset() {
         selectedIndex = visibleIDs.isEmpty ? -1 : 0
+        hasNavigated = false
     }
 }

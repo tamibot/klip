@@ -356,6 +356,17 @@ enum L10n {
         "tool.hint.blur": "Pixela datos privados — ajusta la intensidad con el control",
         "tool.hint.spotlight": "Oscurece todo menos esta zona",
         "tool.hint.counter": "Numera pasos: 1, 2, 3…",
+        "sel.all": "Seleccionar todo (%d)",
+        "sel.none": "Deseleccionar todo",
+        "a11y.kind.text": "Texto",
+        "a11y.kind.link": "Enlace",
+        "a11y.kind.image": "Imagen",
+        "a11y.kind.voice": "Nota de voz",
+        "a11y.kind.cred": "Credencial",
+        "a11y.hint.row": "Copia este clip y lo pega en la app anterior",
+        "a11y.hint.batch": "Añade o quita este clip de la selección",
+        "a11y.on": "marcado",
+        "a11y.off": "sin marcar",
     ]
 
     private static let en: [String: String] = [
@@ -695,6 +706,17 @@ enum L10n {
         "tool.hint.blur": "Pixelate private info — set the strength with the slider",
         "tool.hint.spotlight": "Dim everything except this area",
         "tool.hint.counter": "Stamp numbered steps: 1, 2, 3…",
+        "sel.all": "Select all (%d)",
+        "sel.none": "Deselect all",
+        "a11y.kind.text": "Text",
+        "a11y.kind.link": "Link",
+        "a11y.kind.image": "Image",
+        "a11y.kind.voice": "Voice note",
+        "a11y.kind.cred": "Credential",
+        "a11y.hint.row": "Copies this clip and pastes it into the previous app",
+        "a11y.hint.batch": "Adds or removes this clip from the selection",
+        "a11y.on": "checked",
+        "a11y.off": "unchecked",
     ]
 
     // The translations below (fr/de/it/pt/zh/ja) are filled in by the translation workflow; any
@@ -1037,6 +1059,17 @@ enum L10n {
         "tool.hint.blur": "Pixellise les infos privées — règle l'intensité avec le curseur",
         "tool.hint.spotlight": "Assombrit tout sauf cette zone",
         "tool.hint.counter": "Numérote les étapes : 1, 2, 3…",
+        "sel.all": "Tout sélectionner (%d)",
+        "sel.none": "Tout désélectionner",
+        "a11y.kind.text": "Texte",
+        "a11y.kind.link": "Lien",
+        "a11y.kind.image": "Image",
+        "a11y.kind.voice": "Note vocale",
+        "a11y.kind.cred": "Identifiant",
+        "a11y.hint.row": "Copie ce clip et le colle dans l'app précédente",
+        "a11y.hint.batch": "Ajoute ce clip à la sélection ou l'en retire",
+        "a11y.on": "coché",
+        "a11y.off": "décoché",
     ]
 
     private static let de: [String: String] = [
@@ -1377,6 +1410,17 @@ enum L10n {
         "tool.hint.blur": "Private Daten verpixeln — Stärke über den Regler",
         "tool.hint.spotlight": "Alles außer diesem Bereich abdunkeln",
         "tool.hint.counter": "Schritte nummerieren: 1, 2, 3…",
+        "sel.all": "Alle auswählen (%d)",
+        "sel.none": "Auswahl aufheben",
+        "a11y.kind.text": "Text",
+        "a11y.kind.link": "Link",
+        "a11y.kind.image": "Bild",
+        "a11y.kind.voice": "Sprachnotiz",
+        "a11y.kind.cred": "Anmeldedaten",
+        "a11y.hint.row": "Kopiert diesen Clip und fügt ihn in der vorherigen App ein",
+        "a11y.hint.batch": "Fügt diesen Clip der Auswahl hinzu oder entfernt ihn",
+        "a11y.on": "aktiviert",
+        "a11y.off": "deaktiviert",
     ]
 
     private static let it: [String: String] = [
@@ -1717,6 +1761,17 @@ enum L10n {
         "tool.hint.blur": "Pixela dati privati — regola l'intensità con il cursore",
         "tool.hint.spotlight": "Oscura tutto tranne quest'area",
         "tool.hint.counter": "Numera i passaggi: 1, 2, 3…",
+        "sel.all": "Seleziona tutto (%d)",
+        "sel.none": "Deseleziona tutto",
+        "a11y.kind.text": "Testo",
+        "a11y.kind.link": "Link",
+        "a11y.kind.image": "Immagine",
+        "a11y.kind.voice": "Nota vocale",
+        "a11y.kind.cred": "Credenziale",
+        "a11y.hint.row": "Copia questa clip e la incolla nell'app precedente",
+        "a11y.hint.batch": "Aggiunge o rimuove questa clip dalla selezione",
+        "a11y.on": "selezionato",
+        "a11y.off": "non selezionato",
     ]
 
     private static let pt: [String: String] = [
@@ -2057,6 +2112,17 @@ enum L10n {
         "tool.hint.blur": "Pixela dados privados — ajusta a intensidade no controlo",
         "tool.hint.spotlight": "Escurece tudo menos esta zona",
         "tool.hint.counter": "Numera passos: 1, 2, 3…",
+        "sel.all": "Selecionar tudo (%d)",
+        "sel.none": "Desselecionar tudo",
+        "a11y.kind.text": "Texto",
+        "a11y.kind.link": "Link",
+        "a11y.kind.image": "Imagem",
+        "a11y.kind.voice": "Nota de voz",
+        "a11y.kind.cred": "Credencial",
+        "a11y.hint.row": "Copia este clipe e cola no app anterior",
+        "a11y.hint.batch": "Adiciona ou remove este clipe da seleção",
+        "a11y.on": "marcado",
+        "a11y.off": "desmarcado",
     ]
 
     private static let zh: [String: String] = [
@@ -2397,6 +2463,17 @@ enum L10n {
         "tool.hint.blur": "像素化隐私信息 — 用滑块调节强度",
         "tool.hint.spotlight": "除此区域外全部变暗",
         "tool.hint.counter": "标注编号步骤：1、2、3…",
+        "sel.all": "全选（%d）",
+        "sel.none": "取消全选",
+        "a11y.kind.text": "文本",
+        "a11y.kind.link": "链接",
+        "a11y.kind.image": "图片",
+        "a11y.kind.voice": "语音备忘",
+        "a11y.kind.cred": "凭据",
+        "a11y.hint.row": "复制此剪贴项并粘贴到上一个应用",
+        "a11y.hint.batch": "将此剪贴项加入或移出所选内容",
+        "a11y.on": "已选中",
+        "a11y.off": "未选中",
     ]
 
     private static let ja: [String: String] = [
@@ -2737,5 +2814,16 @@ enum L10n {
         "tool.hint.blur": "個人情報をモザイク化 — 強さはスライダで調整",
         "tool.hint.spotlight": "この範囲以外を暗くする",
         "tool.hint.counter": "手順に番号を振る: 1, 2, 3…",
+        "sel.all": "すべて選択（%d）",
+        "sel.none": "すべて選択解除",
+        "a11y.kind.text": "テキスト",
+        "a11y.kind.link": "リンク",
+        "a11y.kind.image": "画像",
+        "a11y.kind.voice": "音声メモ",
+        "a11y.kind.cred": "認証情報",
+        "a11y.hint.row": "このクリップをコピーして直前のアプリにペーストします",
+        "a11y.hint.batch": "このクリップを選択に追加、または選択から外します",
+        "a11y.on": "オン",
+        "a11y.off": "オフ",
     ]
 }

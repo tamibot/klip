@@ -54,6 +54,15 @@ private final class CheckerScrollView: NSScrollView {
     }
 }
 
+/// Window content view that rejoins Esc to the canvas. Esc is no longer the Close button's key
+/// equivalent (it walks the layered ladder in `AnnotationCanvasView.cancelOperation` instead), and the
+/// responder chain from a focused toolbar control — the blur slider, say — never passes through the
+/// canvas. This is the one ancestor every control in the window does share.
+private final class EditorContentView: NSView {
+    weak var escapeResponder: AnnotationCanvasView?
+    override func cancelOperation(_ sender: Any?) { escapeResponder?.cancelOperation(sender) }
+}
+
 /// Snapshot editor window: tool toolbar + canvas. On copy/save it returns the annotated image;
 /// on close without saving it returns nil.
 final class SnapEditorController: NSObject, NSWindowDelegate {
@@ -71,8 +80,8 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     private var colorButtons: [NSButton] = []
     private var colorIndex = 0
     private var lastToolWasMarker = false
-    /// Buttons whose ⌘-key equivalents must be released while the user types into the in-place text field
-    /// (otherwise ⌘C/⌘Z/⌘S/Esc hit the toolbar instead of the field editor).
+    /// Buttons whose key equivalents must be released while the user types into the in-place text field
+    /// (otherwise the tool letters and ⌘C/⌘Z/⌘S/⌘±/⌘0 hit the toolbar instead of the field editor).
     private var keyEquivControls: [(button: NSButton, key: String, mods: NSEvent.ModifierFlags)] = []
     /// Palette for normal drawing and a palette of highlighter tones (used with the marker).
     private let normalColors: [NSColor] = [.systemRed, .systemBlue, .black, .white]
@@ -89,9 +98,10 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     private weak var blurSeparator: NSView?
     private var textSizeButtons: [NSButton] = []
     private weak var textSizeSeparator: NSView?
-    /// Trailing readout (pixel size + zoom + the separator before them). Pure information, no action —
-    /// so it's the first thing dropped when the window is narrow, and it never counts toward the
-    /// window's minimum width.
+    /// Trailing readout (the capture's pixel size). Pure information, no action — so it's the first
+    /// thing dropped when the window is narrow, and it never counts toward the window's minimum width.
+    /// The zoom cluster next to it stays: those three carry ⌘−/⌘0/⌘+, and a hidden button is a dead
+    /// key equivalent.
     private var infoViews: [NSView] = []
     /// Toolbar width (measured, not guessed) below which `infoViews` hide.
     private var infoHideWidth: CGFloat = 0
@@ -135,7 +145,8 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         win.delegate = self
         win.center()
 
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: contentW, height: contentH))
+        let content = EditorContentView(frame: NSRect(x: 0, y: 0, width: contentW, height: contentH))
+        content.escapeResponder = canvas
 
         // Canvas inside a scroll view (in case the capture is large).
         let scroll = CheckerScrollView(frame: NSRect(x: 0, y: 0, width: contentW,
@@ -155,7 +166,12 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         // The toolbar is built before this point (it has to be measured to size the window), so the
         // updateZoomLabel() inside buildToolbar ran while scrollView was still nil and bailed out.
         updateZoomLabel()
-        // Live zoom readout: pinch magnification ends → refresh the toolbar's percentage label.
+        // Live zoom readout. `magnification` only settles at the END of a pinch, so the percentage
+        // used to jump in one step; the clip view's bounds, on the other hand, change every frame —
+        // tracking those between the two live-magnify notifications is what makes it follow the gesture.
+        NotificationCenter.default.addObserver(self, selector: #selector(liveMagnifyStarted),
+                                               name: NSScrollView.willStartLiveMagnifyNotification,
+                                               object: scroll)
         NotificationCenter.default.addObserver(self, selector: #selector(liveMagnifyEnded),
                                                name: NSScrollView.didEndLiveMagnifyNotification,
                                                object: scroll)
@@ -196,9 +212,12 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
             self?.syncColorSelectionFromCanvas()
             self?.refreshContextualControls()
         }
-        // While typing into the in-place text field, release the toolbar's ⌘C/⌘Z/⌘S/Esc so they edit the
+        // While typing into the in-place text field, release the toolbar's shortcuts so they edit the
         // text (copy/undo/cancel) instead of firing the toolbar actions.
         canvas.onTextEditingChanged = { [weak self] editing in self?.setKeyEquivalents(enabled: !editing) }
+        // Last rung of the canvas's Esc ladder: nothing left there to dismiss → close the editor
+        // (through the same discard confirmation the Close button uses).
+        canvas.onEscape = { [weak self] in self?.closeTapped() }
         self.window = win
     }
 
@@ -313,7 +332,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         leading.addArrangedSubview(redo)
         keyEquivControls.append((redo, "Z", [.command, .shift]))
 
-        // Right group: info cluster (pixel size + zoom) + copy + save + close.
+        // Right group: pixel-size readout + zoom cluster + copy + save + close.
         let trailing = NSStackView()
         trailing.orientation = .horizontal
         trailing.spacing = 6
@@ -328,17 +347,45 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         sizeLabel.toolTip = L10n.t("editor.imagesize")
         trailing.addArrangedSubview(sizeLabel)
 
+        // Zoom out / percentage / zoom in. These carry ⌘− / ⌘0 / ⌘+, so unlike the pixel-size label
+        // they are ACTIONS and never join `infoViews` — a hidden NSButton stops answering its key
+        // equivalent, and a small capture (which hides the readout) is exactly when zoom matters.
+        let zoomOut = makeActionButton(symbol: "minus.magnifyingglass", tip: "⌘−",
+                                       action: #selector(zoomOutTapped))
+        zoomOut.keyEquivalent = "-"; zoomOut.keyEquivalentModifierMask = [.command]
+        pinChip(zoomOut)
+        trailing.addArrangedSubview(zoomOut)
+        keyEquivControls.append((zoomOut, "-", [.command]))
+
         let zoom = NSButton(title: "100%", target: self, action: #selector(zoomResetTapped))
         zoom.isBordered = false
         zoom.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         zoom.contentTintColor = .secondaryLabelColor
         zoom.toolTip = L10n.t("editor.zoom.reset")
+        zoom.keyEquivalent = "0"; zoom.keyEquivalentModifierMask = [.command]
+        // The percentage now re-renders on every frame of a pinch: pin it to the widest value the
+        // 0.2–4 magnification range can produce so the trailing actions can never shuffle sideways
+        // while the user zooms (the title stays centered, so nothing inside the button moves either).
+        zoom.translatesAutoresizingMaskIntoConstraints = false
+        zoom.title = "400%"
+        zoom.widthAnchor.constraint(equalToConstant: ceil(zoom.fittingSize.width)).isActive = true
+        zoom.title = "100%"
         zoomButton = zoom
         updateZoomLabel()   // no-op on the first build (scrollView is still nil); present() calls it again
         trailing.addArrangedSubview(zoom)
+        keyEquivControls.append((zoom, "0", [.command]))
 
-        let infoSeparator = addSeparator(to: trailing)
-        infoViews = [sizeLabel, zoom, infoSeparator]
+        // ⌘+ is physically ⌘⇧= on the keyboards this ships to, so the mask has to say so — same shape
+        // as Redo's ⇧⌘Z above.
+        let zoomIn = makeActionButton(symbol: "plus.magnifyingglass", tip: "⌘+",
+                                      action: #selector(zoomInTapped))
+        zoomIn.keyEquivalent = "+"; zoomIn.keyEquivalentModifierMask = [.command, .shift]
+        pinChip(zoomIn)
+        trailing.addArrangedSubview(zoomIn)
+        keyEquivControls.append((zoomIn, "+", [.command, .shift]))
+
+        addSeparator(to: trailing)
+        infoViews = [sizeLabel]
 
         let copy = makeCompactButton(symbol: "doc.on.doc", title: L10n.t("editor.copy"),
                                      tip: L10n.t("editor.copy.tip"), action: #selector(copyTapped))
@@ -347,12 +394,13 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         let save = makeCompactButton(symbol: "square.and.arrow.down", title: L10n.t("editor.save"),
                                      tip: L10n.t("editor.save.tip"), action: #selector(saveTapped))
         save.keyEquivalent = "s"; save.keyEquivalentModifierMask = [.command]
+        // No Esc key equivalent here on purpose: a button would swallow Esc before the canvas could
+        // run its ladder (color panel → deselect → this). AnnotationCanvasView.cancelOperation calls
+        // back into closeTapped for the last rung, so the tooltip's "(Esc)" stays true.
         let close = makeActionButton(symbol: "xmark", tip: L10n.t("editor.close"), action: #selector(closeTapped))
-        close.keyEquivalent = "\u{1b}"   // Esc
         pinChip(close)
         keyEquivControls.append((copy, "c", [.command]))
         keyEquivControls.append((save, "s", [.command]))
-        keyEquivControls.append((close, "\u{1b}", []))
         trailing.addArrangedSubview(copy)
         trailing.addArrangedSubview(save)
         trailing.addArrangedSubview(close)
@@ -410,7 +458,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         return b
     }
 
-    /// Hides/shows the pixel-size + zoom readout (see `infoViews`).
+    /// Hides/shows the pixel-size readout (see `infoViews`).
     private func setInfoHidden(_ hidden: Bool) {
         for v in infoViews where v.isHidden != hidden { v.isHidden = hidden }
     }
@@ -660,12 +708,59 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
 
     // MARK: - Zoom readout
 
-    @objc private func zoomResetTapped() {
-        scrollView?.magnification = 1
-        updateZoomLabel()
+    /// One zoom step, matching the ratio a pinch covers in a comfortable gesture.
+    private static let zoomStep: CGFloat = 1.25
+
+    @objc private func zoomResetTapped() { applyMagnification(1) }
+    @objc private func zoomInTapped() { zoomBy(Self.zoomStep) }
+    @objc private func zoomOutTapped() { zoomBy(1 / Self.zoomStep) }
+
+    private func zoomBy(_ factor: CGFloat) {
+        guard let scroll = scrollView else { return }
+        applyMagnification(min(scroll.maxMagnification,
+                               max(scroll.minMagnification, scroll.magnification * factor)))
     }
 
-    @objc private func liveMagnifyEnded(_ note: Notification) { updateZoomLabel() }
+    /// Zoom travels instead of teleporting — the canvas is the only thing on screen, so a snap makes
+    /// the user re-find their place. Reduce Motion gets the plain set.
+    private func applyMagnification(_ target: CGFloat) {
+        guard let scroll = scrollView else { return }
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            scroll.magnification = target
+            updateZoomLabel()
+            return
+        }
+        beginLiveZoomTracking()   // so the percentage counts along with the animation
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.18
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            scroll.animator().magnification = target
+        }, completionHandler: { [weak self] in self?.endLiveZoomTracking() })
+    }
+
+    @objc private func liveMagnifyStarted(_ note: Notification) { beginLiveZoomTracking() }
+    @objc private func liveMagnifyEnded(_ note: Notification) { endLiveZoomTracking() }
+    @objc private func clipBoundsChanged(_ note: Notification) { updateZoomLabel() }
+
+    /// True while the clip view's per-frame bounds changes are feeding the percentage label.
+    private var trackingLiveZoom = false
+
+    private func beginLiveZoomTracking() {
+        guard !trackingLiveZoom, let clip = scrollView?.contentView else { return }
+        trackingLiveZoom = true
+        clip.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(clipBoundsChanged),
+                                               name: NSView.boundsDidChangeNotification, object: clip)
+    }
+
+    private func endLiveZoomTracking() {
+        if trackingLiveZoom, let clip = scrollView?.contentView {
+            NotificationCenter.default.removeObserver(self, name: NSView.boundsDidChangeNotification,
+                                                      object: clip)
+        }
+        trackingLiveZoom = false
+        updateZoomLabel()
+    }
 
     private func updateZoomLabel() {
         guard let scroll = scrollView else { return }
@@ -730,8 +825,8 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     }
 
     /// Annotations take real work: closing with any on the canvas asks first (an empty canvas closes
-    /// instantly). Esc reaches here via the close button's key equivalent; the title-bar close goes
-    /// through windowShouldClose.
+    /// instantly). Esc reaches here as the last rung of the canvas's ladder (canvas.onEscape); the
+    /// title-bar close goes through windowShouldClose.
     private func confirmDiscardIfNeeded() -> Bool {
         // Typed-but-uncommitted text is work too: guard it like committed annotations.
         guard !canvas.annotations.isEmpty || canvas.hasPendingText else { return true }

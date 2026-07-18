@@ -18,15 +18,31 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     private var editColor: NSColor = .systemRed
     private(set) var selectedID: UUID?        // selected annotation (dashed outline); any type via .select
     private var movingID: UUID?               // annotation currently being dragged
-    private var lastDragPoint = CGPoint.zero  // previous drag location (moves translate by delta)
+    /// Grab anchor and latest pointer position of a move. The move is applied as a TOTAL offset from
+    /// the anchor against `preMoveSnapshot` (not as a per-event delta), which is what lets Shift
+    /// axis-lock mid-drag — and un-lock again — without the discarded axis drifting away.
+    private var moveAnchor = CGPoint.zero
+    private var lastMovePoint = CGPoint.zero
     private var movedDuringDrag = false
+    /// Live modifier state, mirroring CaptureOverlayView: ⇧ constrains, ⌥ grows from the press point.
+    /// Held here (not read per-event) so `flagsChanged` can re-derive the draft with no mouse movement.
+    private var shiftHeld = false
+    private var optionHeld = false
+    /// Anchor + latest pointer position of the shape draft, for the same re-derivation.
+    private var draftAnchor: CGPoint?
+    private var lastDraftPoint: CGPoint?
     /// Full-state undo snapshots: add / move / edit / recolor / resize / delete are all reversible.
     private var undoStack: [[Annotation]] = []
     private var redoStack: [[Annotation]] = []
     private var preMoveSnapshot: [Annotation]?
     /// Fired when in-place text editing starts (true) / ends (false), so the editor can disable its
-    /// ⌘C/⌘Z/⌘S/Esc key equivalents while the user types into the field (otherwise they hijack editing).
+    /// ⌘C/⌘Z/⌘S/⌘±/⌘0 key equivalents while the user types into the field (otherwise they hijack
+    /// editing). Esc is not among them: it belongs to the field editor while typing, and to the
+    /// responder chain (cancelOperation) otherwise.
     var onTextEditingChanged: ((Bool) -> Void)?
+    /// Last rung of the Esc ladder (see `cancelOperation`): nothing left on the canvas to dismiss, so
+    /// the editor takes over and runs its discard confirmation.
+    var onEscape: (() -> Void)?
 
     var currentTool: SnapTool = .arrow
     var currentColor: NSColor = .systemRed
@@ -62,6 +78,13 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
 
     override func resetCursorRects() {
         super.resetCursorRects()
+        // While Space is held the whole canvas is a pan surface. Claiming it as a cursor RECT (rather
+        // than just calling .set()) is what keeps the hand there: the tool's own rect would otherwise
+        // re-assert the crosshair on the next pointer move.
+        if spaceHeld {
+            addCursorRect(bounds, cursor: panAnchor == nil ? .openHand : .closedHand)
+            return
+        }
         if let cursor = toolCursor { addCursorRect(bounds, cursor: cursor) }
     }
 
@@ -105,12 +128,50 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        guard !spaceHeld else { return }   // the pan cursor rect owns the pointer while Space is down
         guard currentTool == .select else { return }
         updateSelectCursor(at: convert(event.locationInWindow, from: nil))
     }
 
     override func mouseExited(with event: NSEvent) {
-        if currentTool == .select { NSCursor.arrow.set() }
+        if currentTool == .select, !spaceHeld { NSCursor.arrow.set() }
+    }
+
+    // MARK: - Space-hold hand pan
+
+    /// Space means "move the thing you're framing" in the capture overlay; it means the same here,
+    /// panning the zoomed canvas under the pointer. Only ever armed when there IS something off-screen
+    /// to pan to, and never while the in-place text field is up — the field editor owns Space then,
+    /// and typing a space must never grab the canvas instead.
+    private var spaceHeld = false
+    private var panAnchor: NSPoint?   // window-space pointer position, re-anchored on every drag event
+
+    private var canPan: Bool {
+        guard let scroll = enclosingScrollView else { return false }
+        let visible = scroll.documentVisibleRect
+        return visible.width < bounds.width - 0.5 || visible.height < bounds.height - 0.5
+    }
+
+    private func setSpaceHeld(_ held: Bool) {
+        guard spaceHeld != held else { return }
+        spaceHeld = held
+        window?.invalidateCursorRects(for: self)
+        if held {
+            NSCursor.openHand.set()
+        } else {
+            panAnchor = nil
+            restoreToolCursor()
+        }
+    }
+
+    /// Puts the tool's own cursor back after a pan (cursor rects only re-run when the pointer moves).
+    private func restoreToolCursor() {
+        if currentTool == .select {
+            guard let window else { NSCursor.arrow.set(); return }
+            updateSelectCursor(at: convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        } else {
+            toolCursor?.set()
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -172,6 +233,16 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        shiftHeld = event.modifierFlags.contains(.shift)
+        optionHeld = event.modifierFlags.contains(.option)
+        nudgeCoalescingArmed = true   // any mouse work ends the current arrow-key burst
+
+        if spaceHeld, canPan {
+            panAnchor = event.locationInWindow
+            window?.invalidateCursorRects(for: self)
+            NSCursor.closedHand.set()
+            return
+        }
 
         if currentTool == .select {
             // Universal select & move: hit-test ALL annotations, topmost first. Never creates
@@ -180,7 +251,8 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             if let ann = annotations.last(where: { $0.hitTest(p) }) {
                 selectedID = ann.id
                 movingID = ann.id
-                lastDragPoint = p
+                moveAnchor = p
+                lastMovePoint = p
                 preMoveSnapshot = annotations   // snapshot in case the drag moves it (undoable)
                 movedDuringDrag = false
             } else {
@@ -222,7 +294,8 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
                     // Single click → select and prepare to drag.
                     selectedID = ann.id
                     movingID = ann.id
-                    lastDragPoint = p
+                    moveAnchor = p
+                    lastMovePoint = p
                     preMoveSnapshot = annotations   // snapshot in case the drag moves it (undoable)
                     movedDuringDrag = false
                     onSelectionChange?()
@@ -242,6 +315,8 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         selectedID = nil
         onSelectionChange?()
         commitActiveText()
+        draftAnchor = p
+        lastDraftPoint = p
         draft = Annotation(tool: currentTool, color: currentColor,
                            lineWidth: currentLineWidth, points: [p], text: nil,
                            blurLevel: currentBlurLevel)
@@ -249,34 +324,116 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
 
     override func mouseDragged(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        shiftHeld = event.modifierFlags.contains(.shift)
+        optionHeld = event.modifierFlags.contains(.option)
 
-        // Move the grabbed annotation: translate ALL its points by the drag delta (works for
-        // single-point text/counters and multi-point strokes alike).
-        if let movingID, let idx = annotations.firstIndex(where: { $0.id == movingID }) {
-            let dx = p.x - lastDragPoint.x, dy = p.y - lastDragPoint.y
-            annotations[idx].points = annotations[idx].points.map {
-                CGPoint(x: $0.x + dx, y: $0.y + dy)
-            }
-            lastDragPoint = p
-            movedDuringDrag = true
-            // Cursor rects can re-assert mid-drag if the pointer crosses out of the canvas; keep the
-            // closed hand pinned for as long as the grab lasts.
-            if currentTool == .select { NSCursor.closedHand.set() }
-            needsDisplay = true
+        if let anchor = panAnchor, let scroll = enclosingScrollView {
+            // Hand pan: the image follows the pointer, so the viewport travels the other way. The
+            // anchor is re-set every event because the document slides under a pointer whose WINDOW
+            // position hasn't changed — an absolute delta would compound.
+            let now = event.locationInWindow
+            let magnification = max(scroll.magnification, 0.0001)
+            var origin = scroll.documentVisibleRect.origin
+            origin.x -= (now.x - anchor.x) / magnification
+            origin.y -= (now.y - anchor.y) / magnification
+            panAnchor = now
+            scroll.contentView.scroll(to: origin)
+            scroll.reflectScrolledClipView(scroll.contentView)
+            NSCursor.closedHand.set()
+            return
+        }
+
+        // Move the grabbed annotation (works for single-point text/counters and multi-point strokes).
+        if movingID != nil {
+            lastMovePoint = p
+            updateMove()
             return
         }
 
         guard var d = draft else { return }
         if d.tool == .pencil || d.tool == .marker {
-            d.points.append(p)
+            d.points.append(p)   // freehand: every sample is the stroke, no constraint to apply
+            draft = d
+            needsDisplay = true
         } else {
-            d.points = [d.points.first ?? p, p]
+            lastDraftPoint = p
+            updateDraft()
+        }
+    }
+
+    /// Re-derives the moved annotation from the grab snapshot — from `mouseDragged` and from
+    /// `flagsChanged`, so Shift starts and stops axis-locking without waiting for the pointer.
+    private func updateMove() {
+        guard let movingID, let idx = annotations.firstIndex(where: { $0.id == movingID }),
+              let base = preMoveSnapshot?.first(where: { $0.id == movingID })?.points else { return }
+        var dx = lastMovePoint.x - moveAnchor.x
+        var dy = lastMovePoint.y - moveAnchor.y
+        if shiftHeld {
+            // Shift = constrain, same as everywhere else: here that means locking to the axis the
+            // drag is committed to, so a nudge sideways can't tilt a carefully placed annotation.
+            if abs(dx) >= abs(dy) { dy = 0 } else { dx = 0 }
+        }
+        if dx != 0 || dy != 0 { movedDuringDrag = true }
+        annotations[idx].points = base.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }
+        // Cursor rects can re-assert mid-drag if the pointer crosses out of the canvas; keep the
+        // closed hand pinned for as long as the grab lasts.
+        if currentTool == .select { NSCursor.closedHand.set() }
+        needsDisplay = true
+    }
+
+    /// Re-derives the two-point draft from anchor + pointer, applying the modifiers. Ported from
+    /// CaptureOverlayView.updateSelection so the editor and the capture overlay constrain identically.
+    private func updateDraft() {
+        guard var d = draft, let anchor = draftAnchor, let p = lastDraftPoint,
+              d.tool != .pencil, d.tool != .marker else { return }
+        var dx = p.x - anchor.x
+        var dy = p.y - anchor.y
+        switch d.tool {
+        case .line, .arrow:
+            if shiftHeld {
+                // Shift = snap the direction to the nearest 45°, keeping the drag's length along it
+                // (a square constraint would break the one case where the ANGLE is the point).
+                let step = CGFloat.pi / 4
+                let length = hypot(dx, dy)
+                let angle = (atan2(dy, dx) / step).rounded() * step
+                dx = cos(angle) * length
+                dy = sin(angle) * length
+            }
+        default:
+            if shiftHeld {
+                // Shift = square: smaller extent wins, drag direction preserved.
+                let side = min(abs(dx), abs(dy))
+                dx = dx < 0 ? -side : side
+                dy = dy < 0 ? -side : side
+            }
+        }
+        if optionHeld {
+            // Option = the press point is the CENTER: mirror the drag to the opposite side.
+            d.points = [CGPoint(x: anchor.x - dx, y: anchor.y - dy),
+                        CGPoint(x: anchor.x + dx, y: anchor.y + dy)]
+        } else {
+            d.points = [anchor, CGPoint(x: anchor.x + dx, y: anchor.y + dy)]
         }
         draft = d
         needsDisplay = true
     }
 
+    override func flagsChanged(with event: NSEvent) {
+        shiftHeld = event.modifierFlags.contains(.shift)
+        optionHeld = event.modifierFlags.contains(.option)
+        if movingID != nil { updateMove() } else { updateDraft() }
+        super.flagsChanged(with: event)
+    }
+
     override func mouseUp(with event: NSEvent) {
+        if panAnchor != nil {
+            panAnchor = nil
+            window?.invalidateCursorRects(for: self)
+            if spaceHeld { NSCursor.openHand.set() } else { restoreToolCursor() }
+            return
+        }
+        draftAnchor = nil
+        lastDraftPoint = nil
         if movingID != nil {
             if movedDuringDrag, let snap = preMoveSnapshot { pushUndo(snap) }   // ONE undo per completed drag
             movingID = nil; preMoveSnapshot = nil; movedDuringDrag = false
@@ -320,14 +477,14 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         field.action = #selector(textFieldCommitted(_:))
         // Return fires the action; but Esc (abortEditing), click-away and focus loss end editing WITHOUT
         // firing it — and only commitActiveText re-enables the toolbar's key equivalents. Route every
-        // end-of-editing through the delegate so ⌘C/⌘S/⌘Z/Esc + the tool keys can't get stranded off.
+        // end-of-editing through the delegate so ⌘C/⌘S/⌘Z + the tool keys can't get stranded off.
         field.delegate = self
         addSubview(field)
         window?.makeFirstResponder(field)
         activeTextField = field
         editFontSize = fontSize
         editColor = color
-        onTextEditingChanged?(true)   // let the toolbar release ⌘C/⌘Z/⌘S/Esc while typing
+        onTextEditingChanged?(true)   // let the toolbar release its ⌘ shortcuts while typing
     }
 
     @objc private func textFieldCommitted(_ sender: NSTextField) { commitActiveText() }
@@ -530,8 +687,38 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         needsDisplay = true
     }
 
-    /// Deletes the currently selected annotation (Delete / Backspace), undoably.
+    /// Arrow-key nudges arrive as a burst — key repeat while held, or a run of quick taps. Snapshot
+    /// ONCE at the head of the burst and translate in place afterwards: the arm-once shape of
+    /// armColorCoalescing, with the gap between key events standing in for the mouse-up that ends a
+    /// drag (and any mouse-down re-arming it, so a nudge never folds into someone else's snapshot).
+    private var nudgeCoalescingArmed = true
+    private var lastNudgeTime: TimeInterval = 0
+    private static let nudgeBurstGap: TimeInterval = 0.6
+
+    /// Unit nudge for the four arrow keys, in canvas coordinates (the view is not flipped, so Up is +y).
+    private static func nudgeDelta(for keyCode: UInt16) -> CGPoint? {
+        switch keyCode {
+        case 123: return CGPoint(x: -1, y: 0)
+        case 124: return CGPoint(x: 1, y: 0)
+        case 125: return CGPoint(x: 0, y: -1)
+        case 126: return CGPoint(x: 0, y: 1)
+        default:  return nil
+        }
+    }
+
+    /// Deletes the currently selected annotation (Delete / Backspace) and nudges it with the arrow
+    /// keys, both undoably; Space arms the hand pan; Esc walks the layered ladder in cancelOperation.
     override func keyDown(with event: NSEvent) {
+        // Esc: AppKit only routes cancelOperation through the text input system, which a plain NSView
+        // never invokes — so call the ladder directly, exactly as CaptureOverlayView does.
+        if event.keyCode == 53 { cancelOperation(nil); return }
+
+        if event.keyCode == 49 {   // Space = hold to pan the zoomed canvas
+            guard activeTextField == nil, canPan else { super.keyDown(with: event); return }
+            setSpaceHeld(true)
+            return                 // swallow the repeats too: Space must not also page-scroll
+        }
+
         let isDelete = event.keyCode == 51 || event.keyCode == 117   // Backspace / Forward-Delete
         if isDelete, activeTextField == nil, let id = selectedID,
            annotations.contains(where: { $0.id == id }) {
@@ -542,7 +729,53 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             needsDisplay = true
             return
         }
+
+        if let unit = Self.nudgeDelta(for: event.keyCode), activeTextField == nil,
+           let id = selectedID, let idx = annotations.firstIndex(where: { $0.id == id }) {
+            let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
+            if event.timestamp - lastNudgeTime > Self.nudgeBurstGap { nudgeCoalescingArmed = true }
+            if nudgeCoalescingArmed {
+                nudgeCoalescingArmed = false
+                pushUndo()   // one snapshot for the whole burst
+            }
+            lastNudgeTime = event.timestamp
+            annotations[idx].points = annotations[idx].points.map {
+                CGPoint(x: $0.x + unit.x * step, y: $0.y + unit.y * step)
+            }
+            needsDisplay = true
+            return
+        }
+
         super.keyDown(with: event)
+    }
+
+    override func keyUp(with event: NSEvent) {
+        if event.keyCode == 49, spaceHeld { setSpaceHeld(false); return }
+        super.keyUp(with: event)
+    }
+
+    /// No keyUp ever arrives if focus leaves mid-hold (the text field taking over, the window
+    /// deactivating): drop the pan so the hand cursor can't strand itself over the canvas.
+    override func resignFirstResponder() -> Bool {
+        setSpaceHeld(false)
+        return super.resignFirstResponder()
+    }
+
+    /// Layered Esc, mirroring the panel's: dismiss the most transient thing first and only reach the
+    /// editor's discard confirmation once the canvas itself has nothing left to close. Esc is no
+    /// longer the Close button's key equivalent precisely so the earlier rungs get their turn.
+    override func cancelOperation(_ sender: Any?) {
+        if NSColorPanel.sharedColorPanelExists, NSColorPanel.shared.isVisible {
+            NSColorPanel.shared.orderOut(nil)
+            return
+        }
+        if selectedID != nil {
+            selectedID = nil
+            onSelectionChange?()
+            needsDisplay = true
+            return
+        }
+        onEscape?()
     }
 
     /// Flattens base + annotations into an NSImage at full pixel resolution (Retina).
