@@ -234,9 +234,11 @@ Open **Preferences** (`⌘,` from the Klip menu):
 
 Contributions are welcome! Open an *issue* or a *pull request*. The project builds with just the Command Line Tools (no Xcode), so it's easy to get started. Code and comments are in English to keep the project approachable for everyone. Run the tests with `./test.sh`; if you touch any panel or window material, read [DESIGN.md](DESIGN.md) first — the glass is easy to break in ways that fail silently.
 
-## 👤 Author
+## 👤 Author & collaborators
 
 Created and maintained by **Martin Velasco O.** — [@tamibot](https://github.com/tamibot).
+
+Collaborator: **Sebastian Bimbi** — [@sebasbimbi](https://github.com/sebasbimbi).
 
 ## 📄 License
 
