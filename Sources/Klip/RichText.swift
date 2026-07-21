@@ -14,10 +14,18 @@ enum RichText {
             data: rtf, options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil) {
             return markdown(from: attr)
         }
-        if let html = pb.data(forType: .html), html.count < limit, let attr = try? NSAttributedString(
-            data: html, options: [.documentType: NSAttributedString.DocumentType.html], documentAttributes: nil) {
-            return markdown(from: attr)
-        }
+        // NO HTML BRANCH, ON PURPOSE. `NSAttributedString(.documentType: .html)` is the WebKit-backed
+        // importer, and it RESOLVES the document's external sub-resources while parsing. capture() runs
+        // this on every pasteboard change and cleanCapture defaults on, so copying attacker-authored HTML
+        // (`<img src="http://attacker/beacon">`) made Klip fire an outbound request with no interaction
+        // beyond ⌘C: a tracking beacon, and a blind SSRF that reaches localhost/LAN from this
+        // non-sandboxed process. Measured against this exact importer: it fetched 127.0.0.1 and BLOCKED
+        // the main thread waiting on the response. The RTF branch above was measured the same way and does
+        // NOT fetch (INCLUDEPICTURE / HYPERLINK / IMPORT fields are inert), so rich capture still works for
+        // the common case; an HTML-only copy falls back to the plain string in capture().
+        // Sanitizing the HTML first is NOT a safe substitute — WebKit's error recovery reliably defeats
+        // markup filtering. If HTML-only sources ever need bold/italic back, parse them with a
+        // non-network parser instead of handing them to this API.
         return nil
     }
 
