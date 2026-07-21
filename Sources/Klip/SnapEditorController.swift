@@ -43,18 +43,19 @@ private final class HoverToolButton: NSButton {
     }
 }
 
-/// Canvas surround that keeps its checkerboard legible in both themes. A pattern image bakes its
-/// pixels, so — unlike a semantic NSColor — it cannot follow a light↔dark switch on its own; it has
-/// to be regenerated and reassigned whenever the effective appearance changes.
-private final class CheckerScrollView: NSScrollView {
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        applyCheckerBackground()
-    }
-
-    func applyCheckerBackground() {
-        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        backgroundColor = NSColor(patternImage: SnapEditorController.checkerPattern(dark: dark))
+/// Clip view that centers a smaller-than-viewport canvas. When the toolbar's minimum width forces
+/// the window wider than the capture, the slack splits evenly around the image instead of piling up
+/// as a dead gray block on one side — the window should read as "the capture, framed", never as
+/// "the capture plus leftover space".
+private final class CenteringClipView: NSClipView {
+    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+        var r = super.constrainBoundsRect(proposedBounds)
+        guard let doc = documentView else { return r }
+        // Under magnification the clip's bounds are in zoomed document space, so frame-vs-bounds
+        // compares correctly at every zoom level.
+        if doc.frame.width  < r.width  { r.origin.x = (doc.frame.width  - r.width)  / 2 }
+        if doc.frame.height < r.height { r.origin.y = (doc.frame.height - r.height) / 2 }
+        return r
     }
 }
 
@@ -138,14 +139,44 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         // Build the toolbar ONCE (it populates the button/shortcut/swatch state) and ask it what it
         // ACTUALLY needs, instead of the old hard-coded 1220 — a conservative guess that made a small
-        // capture open in a huge window padded with dead checkerboard. +24 for breathing room.
+        // capture open in a huge window padded with dead surround. +24 for breathing room.
         let toolbar = buildToolbar(width: 2000)
-        // Two measurements: with the readout (the width at which it can stay) and without it (the
-        // REAL floor — every remaining control is an action, so nothing else may be dropped).
-        infoHideWidth = toolbar.fittingSize.width + 24
+        // The contextual groups (stroke / blur / text size) are mutually exclusive at open: co-showing
+        // needs a selected annotation, impossible before any exists. The old floor measured all three
+        // visible AT ONCE, inflating every window by two unused groups' width — the "dead gray
+        // surround around the capture" complaint. Measure the base and each group alone, then size
+        // for the tool the editor will actually open with.
+        let restoredTool = SnapTool(rawValue: UserDefaults.standard.string(forKey: "klip.editor.tool") ?? "") ?? .arrow
         setInfoHidden(true)
-        toolbar.layoutSubtreeIfNeeded()   // settle the stack's collapse before re-measuring
-        let minBarWidth = min(toolbar.fittingSize.width + 24, screen.width)
+        func fitting() -> CGFloat { toolbar.layoutSubtreeIfNeeded(); return toolbar.fittingSize.width }
+        setContextualVisible(stroke: false, blur: false, text: false)
+        let base = fitting()
+        setContextualVisible(stroke: true, blur: false, text: false); let strokeW = fitting() - base
+        setContextualVisible(stroke: false, blur: true, text: false); let blurW = fitting() - base
+        setContextualVisible(stroke: false, blur: false, text: true); let textW = fitting() - base
+        let widestGroup = max(strokeW, blurW, textW)
+        // Readout threshold measured against the WIDEST group, so the readout never overlaps a
+        // contextual control the user can switch to later.
+        setContextualVisible(stroke: strokeW == widestGroup, blur: blurW == widestGroup, text: textW == widestGroup)
+        setInfoHidden(false)
+        infoHideWidth = fitting() + 24
+        setInfoHidden(true)
+        let openGroupW: CGFloat
+        switch restoredTool {
+        case .pencil, .line, .arrow, .rectangle, .ellipse, .marker: openGroupW = strokeW
+        case .blur: openGroupW = blurW
+        case .text: openGroupW = textW
+        default: openGroupW = 0
+        }
+        // Leave the bar in the state it opens with (selectTool() below re-applies the same state).
+        switch restoredTool {
+        case .pencil, .line, .arrow, .rectangle, .ellipse, .marker:
+            setContextualVisible(stroke: true, blur: false, text: false)
+        case .blur: setContextualVisible(stroke: false, blur: true, text: false)
+        case .text: setContextualVisible(stroke: false, blur: false, text: true)
+        default:    setContextualVisible(stroke: false, blur: false, text: false)
+        }
+        let minBarWidth = min(base + openGroupW + 24, screen.width)
         let maxW = screen.width * 0.9, maxH = screen.height * 0.85 - Self.barHeight
         let scale = min(1, min(maxW / imgSize.width, maxH / imgSize.height))
         // Clamp to the screen so the trailing Copy/Save/Close cluster never opens off-screen on
@@ -157,7 +188,8 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: contentW, height: contentH),
                            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         win.title = L10n.t("win.editor")
-        win.minSize = NSSize(width: min(minBarWidth, screen.width), height: 240)
+        // The user may resize down to any single group's needs (they are never all visible together).
+        win.minSize = NSSize(width: min(base + widestGroup + 24, screen.width), height: 240)
         win.isReleasedWhenClosed = false
         win.delegate = self
         win.center()
@@ -166,14 +198,18 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         content.escapeResponder = canvas
 
         // Canvas inside a scroll view (in case the capture is large).
-        let scroll = CheckerScrollView(frame: NSRect(x: 0, y: 0, width: contentW,
-                                                     height: contentH - Self.barHeight))
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: contentW,
+                                                height: contentH - Self.barHeight))
+        scroll.contentView = CenteringClipView()   // before documentView: the clip hosts it
         scroll.autoresizingMask = [.width, .height]
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
         scroll.documentView = canvas
-        // Classic transparency checkerboard so the image "floats" on the surround, Shottr-style.
-        scroll.applyCheckerBackground()
+        // Quiet solid surround (the system's document-surround color, follows light/dark on its own).
+        // The old transparency checkerboard signalled nothing — captures are opaque — and read as a
+        // block of dead gray around the image.
+        scroll.drawsBackground = true
+        scroll.backgroundColor = .underPageBackgroundColor
         // Large captures: allow zooming and open fitted so the WHOLE image is visible (1x if it fits).
         scroll.allowsMagnification = true
         scroll.minMagnification = 0.2
@@ -539,6 +575,18 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
 
     /// Shows only the options that apply to the active tool / selection (Shottr-style contextual
     /// bar): stroke width for drawing tools, intensity for blur, size buttons for text.
+    /// Raw visibility of the three contextual groups (each with its separator). Shared by
+    /// refreshContextualControls and by present()'s width measurement, so what gets measured is
+    /// exactly what gets shown.
+    private func setContextualVisible(stroke: Bool, blur: Bool, text: Bool) {
+        strokeControl?.isHidden = !stroke
+        strokeSeparator?.isHidden = !stroke
+        blurSlider?.isHidden = !blur
+        blurSeparator?.isHidden = !blur
+        textSizeButtons.forEach { $0.isHidden = !text }
+        textSizeSeparator?.isHidden = !text
+    }
+
     private func refreshContextualControls() {
         let tool = canvas.currentTool
         let selected = canvas.selectedAnnotationTool
@@ -549,14 +597,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         }
         let showBlur = tool == .blur || selected == .blur
         let showText = tool == .text || selected == .text
-        let apply = {
-            self.strokeControl?.isHidden = !showStroke
-            self.strokeSeparator?.isHidden = !showStroke
-            self.blurSlider?.isHidden = !showBlur
-            self.blurSeparator?.isHidden = !showBlur
-            self.textSizeButtons.forEach { $0.isHidden = !showText }
-            self.textSizeSeparator?.isHidden = !showText
-        }
+        let apply = { self.setContextualVisible(stroke: showStroke, blur: showBlur, text: showText) }
         // NSStackView fades + reflows hidden arranged subviews when animated implicitly.
         Motion.run(Motion.state) { ctx in
             ctx.allowsImplicitAnimation = true
@@ -780,24 +821,6 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     private func updateZoomLabel() {
         guard let scroll = scrollView else { return }
         zoomButton?.title = "\(Int(round(scroll.magnification * 100)))%"
-    }
-
-    /// Classic transparency checkerboard tile for the canvas surround. The tile bakes fixed greys, so
-    /// the theme has to be passed in and the pattern rebuilt on appearance changes (CheckerScrollView
-    /// does that): mid-greys that read as "surround" in light mode glow like a lightbox in dark.
-    fileprivate static func checkerPattern(dark: Bool) -> NSImage {
-        let square: CGFloat = 8
-        let base: CGFloat = dark ? 0.22 : 0.53
-        let alt: CGFloat = dark ? 0.28 : 0.60
-        let img = NSImage(size: NSSize(width: square * 2, height: square * 2))
-        img.lockFocus()
-        NSColor(white: base, alpha: 1).setFill()
-        NSRect(x: 0, y: 0, width: square * 2, height: square * 2).fill()
-        NSColor(white: alt, alpha: 1).setFill()
-        NSRect(x: 0, y: square, width: square, height: square).fill()
-        NSRect(x: square, y: 0, width: square, height: square).fill()
-        img.unlockFocus()
-        return img
     }
 
     @objc private func copyTapped() {
