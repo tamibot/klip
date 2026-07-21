@@ -22,7 +22,7 @@ open source is a moat worth stating loudly.
 - Deliberately cut from v1: webcam bubble, pause/resume, countdown, click/keystroke overlays,
   trim editor, FPS/quality prefs. Trim first when asked — it was CleanShot's first editor feature.
 
-## 2. Cloud share — NEXT (small)
+## 2. Cloud share — SHIPPED (v1)
 
 Recommendation from the survey: **S3-compatible signed PUT, bring-your-own-bucket** — the exact
 shape Shottr 1.9 shipped. No hosted Klip service: user-owned storage is the only cloud that fits

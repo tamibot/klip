@@ -14,8 +14,14 @@ import IOKit.pwr_mgt
 /// AVAssetWriter's movieFragmentInterval only fragments QuickTime files, and periodic fragments are
 /// what make a crash mid-recording leave a playable file instead of a corrupt one.
 @MainActor
-final class ScreenRecorder: NSObject, ObservableObject {
+final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
     @Published private(set) var isRecording = false
+    /// True from the moment a start is REQUESTED until the stream is actually capturing (or failed).
+    /// The spin-up takes several hundred ms (SCShareableContent + startCapture), and the toggle must
+    /// treat that window as "recording" — otherwise a stop press during it reopens the picker while
+    /// the first recording runs on unnoticed.
+    private(set) var isStarting = false
+    private var startTask: Task<Void, Never>?
     private(set) var startedAt: Date?
 
     /// The finished recording, already moved to ~/Downloads. nil = failed (an error toast is the caller's job).
@@ -27,12 +33,23 @@ final class ScreenRecorder: NSObject, ObservableObject {
 
     enum RecordingError: Error { case startFailed }
 
-    /// Starts recording `region` (top-left-origin points, as the capture overlay hands it over) of
-    /// `screen`. Recording begins immediately — the overlay has already been dismissed, and Klip's
-    /// own windows (menu-bar item included) are excluded from the stream.
-    func start(screen: NSScreen, region: CGRect) async throws {
-        guard !isRecording else { return }
+    /// Requests a recording of `region` (top-left-origin points, as the capture overlay hands it
+    /// over) of `screen`. Synchronous on purpose: `isStarting` flips immediately, closing the race
+    /// window where a second ⌥⇧V could pass the toggle as a fresh start. Failures toast from here.
+    func begin(screen: NSScreen, region: CGRect) {
+        guard !isRecording, !isStarting else { return }
+        isStarting = true
+        startTask = Task { @MainActor in
+            do { try await self.startCapture(screen: screen, region: region) }
+            catch {
+                self.isStarting = false
+                SoundFX.error(); ToastHUD.show(L10n.t("rec.screen.failed"), style: .failure)
+            }
+            self.startTask = nil
+        }
+    }
 
+    private func startCapture(screen: NSScreen, region: CGRect) async throws {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         guard let display = content.displays.first(where: { $0.displayID == screen.displayID }) else {
             throw RecordingError.startFailed
@@ -57,13 +74,20 @@ final class ScreenRecorder: NSObject, ObservableObject {
             .appendingPathComponent("klip-rec-\(UUID().uuidString).mov")
         let writer = try VideoWriter(url: tempURL, width: config.width, height: config.height)
 
-        let stream = SCStream(filter: filter, configuration: config, delegate: nil)
+        // delegate: self — didStopWithError is ScreenCaptureKit's ONLY stream-death notification
+        // (display unplugged, permission revoked). Without it isRecording latches true and the
+        // display-sleep assertion is held forever. MeetingRecorder handles it the same way.
+        let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(writer, type: .screen, sampleHandlerQueue: writer.queue)
-        try await stream.startCapture()
+        do { try await stream.startCapture() } catch {
+            _ = await writer.finish()   // cancels the writer and deletes the orphaned temp file
+            throw error
+        }
 
         self.stream = stream
         self.videoWriter = writer
         self.startedAt = Date()
+        self.isStarting = false
         self.isRecording = true
 
         // Long recordings must survive the display trying to sleep (idle keyboard is the norm
@@ -73,8 +97,18 @@ final class ScreenRecorder: NSObject, ObservableObject {
                                     "Klip screen recording" as CFString, &sleepAssertion)
     }
 
-    /// Stops, finalizes and moves the file to ~/Downloads. Safe to call redundantly.
+    /// The stream died underneath us (display unplugged, permission revoked mid-recording):
+    /// salvage the partial file through the normal stop path, which also releases the
+    /// display-sleep assertion and un-latches isRecording.
+    nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
+        Task { @MainActor in await self.stop() }
+    }
+
+    /// Stops, finalizes and moves the file to ~/Downloads. Safe to call redundantly. A stop that
+    /// lands during the spin-up window waits for the start to settle, then tears it down — so a
+    /// fast double-press cancels cleanly instead of being swallowed.
     func stop() async {
+        if let pending = startTask { await pending.value }
         guard isRecording, let stream, let writer = videoWriter else { return }
         isRecording = false
         self.stream = nil
@@ -93,15 +127,25 @@ final class ScreenRecorder: NSObject, ObservableObject {
     // MARK: - GIF export
 
     /// Transcodes a finished recording to an animated GIF next to it (same collision-safe naming).
-    /// Streams frame by frame — decode one, downscale, append, release — so a long recording never
-    /// holds its frames in memory. 10 fps and ≤1000 px wide: the classic chat-friendly tradeoff.
-    static func exportGIF(from movie: URL) async throws -> URL {
+    /// `nonisolated`: the whole decode/render/encode stretch is synchronous, so on the main actor it
+    /// would beachball the app for seconds per recorded minute — off-main it costs nothing visible.
+    ///
+    /// MEMORY REALITY (measured): CGImageDestination is NOT a streaming encoder — it buffers every
+    /// added frame (~6 MB each at 1000 px) until Finalize. Frames are therefore CAPPED at 300
+    /// (≈ 30 s of GIF at 10 fps, ~2 GB peak); a longer recording gets its first 30 s. The honest
+    /// fix is a chunked GIF writer — do that if anyone actually records multi-minute GIFs.
+    ///
+    /// Each frame carries its REAL distance to the next selected frame (clamped 0.1–4 s): screen
+    /// recordings are sparse (ScreenCaptureKit only delivers frames on content change), and a fixed
+    /// delay would compress every idle stretch, playing the GIF back absurdly fast.
+    nonisolated static func exportGIF(from movie: URL) async throws -> URL {
         let asset = AVURLAsset(url: movie)
         guard let track = try await asset.loadTracks(withMediaType: .video).first else {
             throw RecordingError.startFailed
         }
         let size = try await track.load(.naturalSize)
         let fps: Double = 10
+        let maxFrames = 300
         let maxWidth: CGFloat = 1000
         let outScale = min(1, maxWidth / max(1, size.width))
         let outW = Int(size.width * outScale), outH = Int(size.height * outScale)
@@ -120,13 +164,18 @@ final class ScreenRecorder: NSObject, ObservableObject {
         CGImageDestinationSetProperties(dest, [
             kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0],   // loop forever
         ] as CFDictionary)
-        let frameProps = [
-            kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / fps],
-        ] as CFDictionary
+        func append(_ cg: CGImage, delay: Double) {
+            let d = min(max(delay, 1.0 / fps), 4.0)
+            CGImageDestinationAddImage(dest, cg, [
+                kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: d],
+            ] as CFDictionary)
+        }
 
         let ciContext = CIContext(options: [.useSoftwareRenderer: false])
         var nextPTS = 0.0
-        while let sample = output.copyNextSampleBuffer() {
+        var held: (cg: CGImage, pts: Double)?   // a frame's delay is only known at the NEXT frame
+        var appended = 0
+        while appended < maxFrames, let sample = output.copyNextSampleBuffer() {
             let pts = CMSampleBufferGetPresentationTimeStamp(sample).seconds
             guard pts >= nextPTS, let pixel = CMSampleBufferGetImageBuffer(sample) else { continue }
             nextPTS = pts + 1.0 / fps
@@ -134,9 +183,12 @@ final class ScreenRecorder: NSObject, ObservableObject {
             if outScale < 1 { ci = ci.transformed(by: CGAffineTransform(scaleX: outScale, y: outScale)) }
             guard let cg = ciContext.createCGImage(ci, from: CGRect(x: 0, y: 0, width: outW, height: outH))
             else { continue }
-            CGImageDestinationAddImage(dest, cg, frameProps)
+            if let h = held { append(h.cg, delay: pts - h.pts); appended += 1 }
+            held = (cg, pts)
         }
-        guard reader.status == .completed, CGImageDestinationFinalize(dest) else {
+        reader.cancelReading()   // harmless when already .completed; required by the frame cap
+        if let h = held, appended < maxFrames { append(h.cg, delay: 1.0 / fps); appended += 1 }
+        guard appended > 0, CGImageDestinationFinalize(dest) else {
             try? FileManager.default.removeItem(at: gifTemp)
             throw RecordingError.startFailed
         }

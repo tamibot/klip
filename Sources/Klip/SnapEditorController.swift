@@ -53,8 +53,10 @@ private final class CenteringClipView: NSClipView {
         guard let doc = documentView else { return r }
         // Under magnification the clip's bounds are in zoomed document space, so frame-vs-bounds
         // compares correctly at every zoom level.
-        if doc.frame.width  < r.width  { r.origin.x = (doc.frame.width  - r.width)  / 2 }
-        if doc.frame.height < r.height { r.origin.y = (doc.frame.height - r.height) / 2 }
+        // floor: odd slack would land the clip origin on a half point, drawing the capture off the
+        // pixel grid (soft on 1x displays).
+        if doc.frame.width  < r.width  { r.origin.x = floor((doc.frame.width  - r.width)  / 2) }
+        if doc.frame.height < r.height { r.origin.y = floor((doc.frame.height - r.height) / 2) }
         return r
     }
 }
@@ -161,13 +163,6 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         setInfoHidden(false)
         infoHideWidth = fitting() + 24
         setInfoHidden(true)
-        let openGroupW: CGFloat
-        switch restoredTool {
-        case .pencil, .line, .arrow, .rectangle, .ellipse, .marker: openGroupW = strokeW
-        case .blur: openGroupW = blurW
-        case .text: openGroupW = textW
-        default: openGroupW = 0
-        }
         // Leave the bar in the state it opens with (selectTool() below re-applies the same state).
         switch restoredTool {
         case .pencil, .line, .arrow, .rectangle, .ellipse, .marker:
@@ -176,7 +171,11 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         case .text: setContextualVisible(stroke: false, blur: false, text: true)
         default:    setContextualVisible(stroke: false, blur: false, text: false)
         }
-        let minBarWidth = min(base + openGroupW + 24, screen.width)
+        // Floor = base + the WIDEST single group — the same value minSize uses below. Flooring on
+        // the open tool's (possibly narrower) group would open the window below its own minSize,
+        // and the first resize drag would snap it abruptly wider. Still far under the old floor,
+        // which stacked ALL groups plus the readout at once.
+        let minBarWidth = min(base + widestGroup + 24, screen.width)
         let maxW = screen.width * 0.9, maxH = screen.height * 0.85 - Self.barHeight
         let scale = min(1, min(maxW / imgSize.width, maxH / imgSize.height))
         // Clamp to the screen so the trailing Copy/Save/Close cluster never opens off-screen on

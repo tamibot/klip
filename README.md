@@ -94,6 +94,11 @@ Text & image history · **native capture + annotation** · **fast OCR capture** 
 - **Type-aware actions**: **open links** 🔗 and a **color swatch** for hex values (`#1E90FF`).
 - **Mini credential manager** 🔑: detects tokens and API keys when you copy them and **encrypts them at rest** (AES-256-GCM, key in the macOS Keychain — so `items.json` and backups never hold the secret in the clear). Shown **masked** (👁 to reveal/copy), with their own filter, and **never auto-pasted** (copied so you paste them by hand).
 
+### 🔗 Share links — your own cloud
+- **Copy a public link** to any clip (image or text) from its row menu: it uploads to **your own S3-compatible bucket** — Cloudflare R2, AWS S3, Backblaze B2, MinIO… — and the link lands on your clipboard.
+- Configure it in **Preferences → Share links** (endpoint, bucket, keys, public URL) with a **Test connection** button. Pure-Swift SigV4 signing, no SDK.
+- **Strictly opt-in per click** — nothing is ever uploaded automatically, and there is no hosted middleman: the storage is yours.
+
 ### 💾 Backup
 - **Export / import** the whole history (images and audio included) as a `.zip`. **Never** includes your API keys.
 
@@ -214,6 +219,7 @@ Open **Preferences** (`⌘,` from the Klip menu):
 | `MediaAudioExtractor.swift` | Extracts a **video's** audio track (AVAssetReader→Writer, 16 kHz mono AAC) for transcription. |
 | `MeetingRecorder.swift` | **Meeting notes**: mic + system audio (ScreenCaptureKit), local mix, Me/Them dual-track transcription. |
 | `ScreenRecorder.swift` | **Screen recording**: region → H.264 video (SCStream → AVAssetWriter) + streamed GIF export. |
+| `S3Uploader.swift` | **Share links**: SigV4-signed PUT to the user's own S3-compatible bucket (pure CryptoKit). |
 | `OpenAIClient.swift` / `GeminiClient.swift` / `LocalTranscriber.swift` | Transcription via OpenAI, Google Gemini or on-device WhisperKit. |
 | `L10n.swift` | Lightweight localization (8 languages). |
 | `SecretStore.swift` | API keys in local `0600` files (`openai.key`, `gemini.key`). |

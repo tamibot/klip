@@ -357,7 +357,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Screen recording: same hotkey toggles start (region selection) and stop. The selection
     /// reuses the capture overlay in region mode; recording starts the moment the region is chosen.
     @objc private func toggleScreenRecording() {
-        if screenRecorder.isRecording {
+        // isStarting counts as recording: the stream spin-up takes a few hundred ms, and a stop
+        // press in that window must stop the recording, not open a second picker over it.
+        if screenRecorder.isRecording || screenRecorder.isStarting {
             Task { @MainActor in await screenRecorder.stop() }
             return
         }
@@ -367,16 +369,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Task { @MainActor in
             do {
                 let shot = try await ScreenCapturer.captureDisplay(containing: mouse)
+                // Re-check AFTER the await: a second ⌥⇧V during the capture latency passes the
+                // synchronous guard above, and overwriting recOverlay would leak the first shield
+                // window on screen, undismissable (SnapController documents this exact trap).
+                guard self.recOverlay == nil, !self.screenRecorder.isRecording,
+                      !self.screenRecorder.isStarting else { return }
                 let overlay = CaptureOverlayController(shot: shot) { [weak self] screen, region in
                     guard let self else { return }
                     self.recOverlay = nil
                     guard let region else { return }   // Esc / empty drag = cancelled
-                    Task { @MainActor in
-                        do { try await self.screenRecorder.start(screen: screen, region: region) }
-                        catch {
-                            SoundFX.error(); ToastHUD.show(L10n.t("rec.screen.failed"), style: .failure)
-                        }
-                    }
+                    self.screenRecorder.begin(screen: screen, region: region)
                 }
                 self.recOverlay = overlay
                 overlay.present()
