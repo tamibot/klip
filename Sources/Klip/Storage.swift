@@ -259,6 +259,9 @@ final class Storage {
         guard let root = Self.findBackupRoot(in: tmp) else {
             throw Self.err(L10n.t("backup.err.notBackup"))
         }
+        // A backup is UNTRUSTED input (the user can point the picker at any .zip). Reject a crafted
+        // archive BEFORE anything is moved — see rejectUnsafeEntries.
+        try Self.rejectUnsafeEntries(in: root, within: tmp)
         // Validate that the backup's items.json decodes BEFORE touching anything (don't import garbage).
         let newItemsFile = root.appendingPathComponent("items.json")
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
@@ -336,6 +339,40 @@ final class Storage {
             if fm.fileExists(atPath: sub.appendingPathComponent("items.json").path) { return sub }
         }
         return nil
+    }
+
+    /// A backup .zip is attacker-supplyable (the picker accepts any file), and `ditto` faithfully restores
+    /// SYMLINK entries. A crafted archive can therefore ship `images`/`audio` as a symlink pointing anywhere
+    /// on disk; copying that into the store would plant the symlink and let every later write land outside
+    /// it. Accept an entry only when it is a real file/dir resolving INSIDE the extraction root — anything
+    /// else is not a Klip backup. The media dirs are copied wholesale, so their contents are scanned too.
+    private static func rejectUnsafeEntries(in root: URL, within extractRoot: URL) throws {
+        let fm = FileManager.default
+        let base = extractRoot.resolvingSymlinksInPath().standardizedFileURL.path
+
+        // attributesOfItem does NOT follow the final symlink, so this sees the link itself.
+        func isSymlink(_ url: URL) -> Bool {
+            guard let attrs = try? fm.attributesOfItem(atPath: url.path) else { return false }
+            return (attrs[.type] as? FileAttributeType) == .typeSymbolicLink
+        }
+        func escapes(_ url: URL) -> Bool {
+            let p = url.resolvingSymlinksInPath().standardizedFileURL.path
+            return p != base && !p.hasPrefix(base + "/")
+        }
+        func check(_ url: URL) throws {
+            guard !isSymlink(url), !escapes(url) else { throw Self.err(L10n.t("backup.err.notBackup")) }
+        }
+
+        for name in ["items.json", "images", "audio"] {
+            let entry = root.appendingPathComponent(name)
+            // Absent is fine (an old backup may have no media). isSymlink catches a DANGLING link, which
+            // fileExists — which follows the link — would report as missing.
+            guard isSymlink(entry) || fm.fileExists(atPath: entry.path) else { continue }
+            try check(entry)
+            if let kids = try? fm.contentsOfDirectory(at: entry, includingPropertiesForKeys: nil) {
+                for kid in kids { try check(kid) }
+            }
+        }
     }
 
     private static func runDitto(_ args: [String]) throws {
