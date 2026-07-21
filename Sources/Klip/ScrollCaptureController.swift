@@ -1,4 +1,5 @@
 import AppKit
+
 import ScreenCaptureKit
 import CoreGraphics
 
@@ -57,7 +58,8 @@ final class ScrollCaptureController: NSObject {
     /// Manual fallback cadence: how often we re-shoot while the USER scrolls, and how many
     /// consecutive unchanged shots mean "they have stopped".
     private static let manualPollDelay: Double = 0.45
-    private static let manualIdleTicks = 9        // ≈4 s of stillness
+    private static let manualIdleTicks = 9        // ≈4 s of stillness, AFTER they have scrolled once
+    private static let manualStartTicks = 60      // ≈27 s to get started (Cancel/⌥⇧S end it sooner)
     /// Hard canvas cap (~128 MB at a 2 000 px-wide region). Hitting it AUTO-FINISHES with what
     /// exists — a capture that can't be saved at all is the documented failure to avoid.
     private static let maxCanvasHeightPx = 16_000
@@ -202,17 +204,22 @@ final class ScrollCaptureController: NSObject {
         manualMode = true
         updateStatus()
         var idleTicks = 0
+        var everMoved = false
         while !finished {
             guard frameCount < Self.maxFrames, contentHeightPx < Self.maxCanvasHeightPx else { break }
             try? await Task.sleep(nanoseconds: UInt64(Self.manualPollDelay * 1_000_000_000))
             guard !finished else { return }
             guard let frame = await capture() else { break }
             if ingest(frame) == .appended {
+                everMoved = true
                 idleTicks = 0
             } else {
                 idleTicks += 1
-                // Still for long enough that the user is done scrolling — wrap up on our own.
-                if idleTicks >= Self.manualIdleTicks { break }
+                // BEFORE the first scroll the user still has to notice the pill, move to the window
+                // and start scrolling — counting stillness from second zero ended the session in ~4 s
+                // with a single frame, which looks exactly like "scrolling capture did nothing".
+                // Only once they HAVE scrolled does a short stillness mean they are done.
+                if idleTicks >= (everMoved ? Self.manualIdleTicks : Self.manualStartTicks) { break }
             }
         }
         finishNow()
