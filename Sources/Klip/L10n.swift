@@ -413,6 +413,7 @@ enum L10n {
         "scroll.needsAX.detail": "Si Klip ya aparece en la lista, desactívalo y vuelve a activarlo — macOS ata el permiso a cada versión compilada.",
         "scroll.needsAX.action": "Abrir ajustes",
         "scroll.status.manual": "Desplaza tú la página · %d capturas",
+        "scroll.status.rewind": "Subiendo al inicio de la página…",
     ]
 
     private static let en: [String: String] = [
@@ -809,6 +810,7 @@ enum L10n {
         "scroll.needsAX.detail": "If Klip already appears in the list, turn it OFF and ON again — macOS ties the permission to each build.",
         "scroll.needsAX.action": "Open settings",
         "scroll.status.manual": "Scroll the page yourself · %d captured",
+        "scroll.status.rewind": "Going to the top of the page…",
     ]
 
     // The translations below (fr/de/it/pt/zh/ja) are filled in by the translation workflow; any
@@ -1208,6 +1210,7 @@ enum L10n {
         "scroll.needsAX.detail": "Si Klip figure déjà dans la liste, désactivez-le puis réactivez-le — macOS lie l'autorisation à chaque version.",
         "scroll.needsAX.action": "Ouvrir les réglages",
         "scroll.status.manual": "Faites défiler vous-même · %d captures",
+        "scroll.status.rewind": "Retour en haut de la page…",
     ]
 
     private static let de: [String: String] = [
@@ -1605,6 +1608,7 @@ enum L10n {
         "scroll.needsAX.detail": "Wenn Klip bereits in der Liste steht, schalte es aus und wieder ein — macOS bindet die Berechtigung an jeden Build.",
         "scroll.needsAX.action": "Einstellungen öffnen",
         "scroll.status.manual": "Scrolle selbst · %d Aufnahmen",
+        "scroll.status.rewind": "Zum Seitenanfang…",
     ]
 
     private static let it: [String: String] = [
@@ -2002,6 +2006,7 @@ enum L10n {
         "scroll.needsAX.detail": "Se Klip è già nell’elenco, disattivalo e riattivalo — macOS lega il permesso a ogni build.",
         "scroll.needsAX.action": "Apri Impostazioni",
         "scroll.status.manual": "Scorri tu la pagina · %d catture",
+        "scroll.status.rewind": "Torno all’inizio della pagina…",
     ]
 
     private static let pt: [String: String] = [
@@ -2399,6 +2404,7 @@ enum L10n {
         "scroll.needsAX.detail": "Se o Klip já aparece na lista, desative e ative novamente — o macOS vincula a permissão a cada versão.",
         "scroll.needsAX.action": "Abrir ajustes",
         "scroll.status.manual": "Role a página você mesmo · %d capturas",
+        "scroll.status.rewind": "Voltando ao topo da página…",
     ]
 
     private static let zh: [String: String] = [
@@ -2796,6 +2802,7 @@ enum L10n {
         "scroll.needsAX.detail": "如果 Klip 已在列表中，请先关闭再打开 — macOS 会把权限绑定到每个构建版本。",
         "scroll.needsAX.action": "打开设置",
         "scroll.status.manual": "请自行滚动页面 · 已捕获 %d 张",
+        "scroll.status.rewind": "正在回到页面顶部…",
     ]
 
     private static let ja: [String: String] = [
@@ -3193,5 +3200,6 @@ enum L10n {
         "scroll.needsAX.detail": "Klip がすでに一覧にある場合は、オフにしてからオンに戻してください — macOS は権限をビルドごとに紐付けます。",
         "scroll.needsAX.action": "設定を開く",
         "scroll.status.manual": "自分でスクロールしてください · %d 枚",
+        "scroll.status.rewind": "ページの先頭へ移動中…",
     ]
 }

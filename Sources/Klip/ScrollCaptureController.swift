@@ -36,6 +36,10 @@ final class ScrollCaptureController: NSObject {
     /// One step is posted as several small wheel events a few ms apart — some apps clamp a single
     /// giant delta, and chunks ride the same smooth-scroll path a real trackpad flick does.
     private static let chunksPerStep = 3
+    /// Rewind: bigger strides than a capture step (we are not stitching these), with a cap so a
+    /// page that never stops moving — an infinite feed — can't stall the session forever.
+    private static let rewindChunks = 6
+    private static let maxRewindSteps = 40
     private static let chunkGapNs: UInt64 = 8_000_000
     /// Wait after posting a step before shooting: covers the target app's smooth-scroll animation
     /// and elastic bounce. Frames taken mid-animation stitch garbage.
@@ -95,6 +99,8 @@ final class ScrollCaptureController: NSObject {
     private var frameCount = 0
     /// True once auto-scroll proved impossible and the user is driving instead.
     private var manualMode = false
+    /// True while winding the page back to its top, before the first frame is taken.
+    private var rewinding = false
 
     private var started = false
     private var finished = false
@@ -171,6 +177,8 @@ final class ScrollCaptureController: NSObject {
 
         buildPanel()
         warpCursorToRegionCenter()
+        await rewindToTop()   // a full-page capture starts at the top, wherever the user left it
+        guard !finished else { return }
         guard let first = await capture(), ingest(first) == .appended else {
             finish(nil, .failed); return
         }
@@ -257,17 +265,41 @@ final class ScrollCaptureController: NSObject {
         Int((CGFloat(Int(chunkPoints) * Self.chunksPerStep) * screen.backingScaleFactor).rounded())
     }
 
-    private func postScrollStep() async {
+    private func postScrollStep(up: Bool = false, chunks: Int? = nil) async {
         guard let src = CGEventSource(stateID: .combinedSessionState) else { return }
         let center = regionCenterGlobal
-        for _ in 0..<Self.chunksPerStep {
-            // Negative wheel1 = scroll DOWN (view content further down), pixel (continuous) units.
+        // Negative wheel1 = scroll DOWN (content moves up), positive = UP. Pixel (continuous) units.
+        let delta: Int32 = up ? chunkPoints : -chunkPoints
+        for _ in 0..<(chunks ?? Self.chunksPerStep) {
             guard let e = CGEvent(scrollWheelEvent2Source: src, units: .pixel, wheelCount: 1,
-                                  wheel1: -chunkPoints, wheel2: 0, wheel3: 0) else { continue }
+                                  wheel1: delta, wheel2: 0, wheel3: 0) else { continue }
             e.location = center
             e.setIntegerValueField(.eventSourceUserData, value: Self.syntheticScrollTag)
             e.post(tap: .cghidEventTap)
             try? await Task.sleep(nanoseconds: Self.chunkGapNs)
+        }
+    }
+
+    /// Rewind the target to the TOP before the first frame. A "full page" capture that starts
+    /// wherever the user happened to leave the page isn't a full page — and if they left it at the
+    /// bottom there is nothing below, so the capture ended instantly with a single frame and a
+    /// success tick, which is exactly what "it just shows a check" looked like.
+    /// Scrolls up in big steps until the content stops changing (or the safety cap), then lets the
+    /// normal downward pass start from a real top.
+    private func rewindToTop() async {
+        rewinding = true
+        updateStatus()
+        defer { rewinding = false; updateStatus() }
+        var last: [Float] = []
+        for _ in 0..<Self.maxRewindSteps {
+            guard !finished else { return }
+            await postScrollStep(up: true, chunks: Self.rewindChunks)
+            try? await Task.sleep(nanoseconds: UInt64(Self.settleDelay * 1_000_000_000))
+            guard !finished, let frame = await capture(), let sig = rowSignature(of: frame) else { return }
+            // Two identical frames in a row = nothing moved = we are at the top.
+            if sig.count == last.count,
+               zip(sig, last).allSatisfy({ abs($0 - $1) < Self.identicalEps }) { return }
+            last = sig
         }
     }
 
@@ -416,6 +448,7 @@ final class ScrollCaptureController: NSObject {
 
     private func updateStatus() {
         // Manual mode has to SAY so — otherwise the user waits for a scroll that will never come.
+        if rewinding { statusField?.stringValue = L10n.t("scroll.status.rewind"); return }
         statusField?.stringValue = manualMode
             ? String(format: L10n.t("scroll.status.manual"), frameCount)
             : String(format: L10n.t("scroll.status"), frameCount, contentHeightPx)
@@ -430,7 +463,8 @@ final class ScrollCaptureController: NSObject {
         // user most needs to read it.
         let autoSample = String(format: L10n.t("scroll.status"), 888, 88_888)
         let manualSample = String(format: L10n.t("scroll.status.manual"), 888)
-        let widest = manualSample.count > autoSample.count ? manualSample : autoSample
+        let widest = [autoSample, manualSample, L10n.t("scroll.status.rewind")]
+            .max(by: { $0.count < $1.count }) ?? autoSample
         let status = NSTextField(labelWithString: widest)
         status.font = .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
         status.textColor = .labelColor
