@@ -100,7 +100,7 @@ open "$DEST"
 
 echo ""
 echo "✓ Installed at $DEST"
-echo "  · Default shortcuts:  History ⌥⇧E · Voice ⌥⇧R · Annotate ⌥⇧D · OCR text ⌥⇧F · Upload ⌥⇧O · Record ⌥⇧V"
+echo "  · Default shortcuts:  History ⌥⇧E · Voice ⌥⇧R · Annotate ⌥⇧D · OCR text ⌥⇧F · Upload ⌥⇧O · Record ⌥⇧V · Scroll ⌥⇧S"
 echo "    (the exact ones are shown in the Klip menu and can be changed in Preferences › Shortcuts)"
 echo "  · Launch at login: registered automatically the first time."
 echo "    If Settings › General › Login Items asks for approval, enable it there."

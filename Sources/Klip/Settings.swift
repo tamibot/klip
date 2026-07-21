@@ -26,6 +26,7 @@ struct KeyCombo: Equatable {
     static let defaultUploadCombo = KeyCombo(keyCode: UInt32(kVK_ANSI_O), carbonModifiers: UInt32(optionKey | shiftKey))      // ⌥⇧O upload
     static let defaultMeetingCombo = KeyCombo(keyCode: UInt32(kVK_ANSI_M), carbonModifiers: UInt32(optionKey | shiftKey))     // ⌥⇧M meeting
     static let defaultScreenRecCombo = KeyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: UInt32(optionKey | shiftKey))   // ⌥⇧V video (screen recording)
+    static let defaultScrollCombo = KeyCombo(keyCode: UInt32(kVK_ANSI_S), carbonModifiers: UInt32(optionKey | shiftKey))      // ⌥⇧S scrolling capture
 
     // Previous ⌥⌘ defaults and the brief ⌥⇧ Y/R/T/G/E set — migrate anyone still on them onto the new set.
     static let prevOptCmdPanel   = KeyCombo(keyCode: UInt32(kVK_ANSI_Y), carbonModifiers: UInt32(cmdKey | optionKey))
@@ -169,6 +170,8 @@ final class Settings: ObservableObject {
         static let mods6      = "meetingHotKeyModifiers"
         static let keyCode7   = "screenRecHotKeyCode"
         static let mods7      = "screenRecHotKeyModifiers"
+        static let keyCode8   = "scrollCaptureHotKeyCode"
+        static let mods8      = "scrollCaptureHotKeyModifiers"
         static let uiLang     = "uiLanguage"
         static let s3Endpoint = "s3Endpoint"
         static let s3Region   = "s3Region"
@@ -234,6 +237,11 @@ final class Settings: ObservableObject {
         d.set(Int(screenRecCombo.keyCode), forKey: K.keyCode7)
         d.set(Int(screenRecCombo.carbonModifiers), forKey: K.mods7)
     } }
+    /// Global shortcut for a scrolling capture (long page → one stitched image).
+    @Published var scrollCombo: KeyCombo { didSet {
+        d.set(Int(scrollCombo.keyCode), forKey: K.keyCode8)
+        d.set(Int(scrollCombo.carbonModifiers), forKey: K.mods8)
+    } }
     // Share-link (S3-compatible) settings. The SECRET key lives in SecretStore, never in defaults.
     @Published var s3Endpoint: String   { didSet { d.set(s3Endpoint, forKey: K.s3Endpoint) } }
     @Published var s3Region: String     { didSet { d.set(s3Region, forKey: K.s3Region) } }
@@ -287,6 +295,8 @@ final class Settings: ObservableObject {
             K.mods6: Int(optionKey | shiftKey),
             K.keyCode7: Int(kVK_ANSI_V),
             K.mods7: Int(optionKey | shiftKey),
+            K.keyCode8: Int(kVK_ANSI_S),
+            K.mods8: Int(optionKey | shiftKey),
             K.uiLang: "en"   // English is the base/default UI language (open-source collaboration)
         ])
         maxItems = d.integer(forKey: K.maxItems)
@@ -320,6 +330,8 @@ final class Settings: ObservableObject {
                                 carbonModifiers: UInt32(d.integer(forKey: K.mods6)))
         screenRecCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode7)),
                                   carbonModifiers: UInt32(d.integer(forKey: K.mods7)))
+        scrollCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode8)),
+                               carbonModifiers: UInt32(d.integer(forKey: K.mods8)))
         s3Endpoint = d.string(forKey: K.s3Endpoint) ?? ""
         s3Region = d.string(forKey: K.s3Region) ?? "auto"
         s3Bucket = d.string(forKey: K.s3Bucket) ?? ""

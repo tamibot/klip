@@ -33,7 +33,8 @@ final class ClipboardManager: ObservableObject {
         if !items.isEmpty {
             storage.pruneOrphans(
                 referencedAudio: Set(items.compactMap { $0.audioFileName }),
-                referencedImages: Set(items.compactMap { $0.imageFileName }))
+                referencedImages: Set(items.compactMap { $0.imageFileName }),
+                referencedVideos: Set(items.compactMap { $0.videoFileName }))
         }
     }
 
@@ -281,6 +282,15 @@ final class ClipboardManager: ObservableObject {
         return item.id
     }
 
+    /// A finished screen recording, already moved into the store. Named like meeting notes so the
+    /// row reads as an event ("Recording — 21 Jul, 09:32"), renamable. Never auto-copies.
+    func addVideo(fileName: String, duration: Double?, name: String) {
+        let item = ClipboardItem(kind: .video, preview: name, name: name,
+                                 videoFileName: fileName, videoDuration: duration)
+        items.insert(item, at: 0)
+        trimAndSave()
+    }
+
     /// Fills in a voice note's audio duration once it's read off the main thread. In-memory only — the
     /// imminent transcription result (finishVoiceNote/failVoiceNote) persists it, so no extra save here.
     func setVoiceNoteDuration(id: UUID, duration: Double) {
@@ -384,6 +394,7 @@ final class ClipboardManager: ObservableObject {
             if trimmable.count > allowed {
                 for it in trimmable[allowed...] {
                     if it.kind == .image, let f = it.imageFileName { storage.deleteImage(fileName: f) }
+                    if it.kind == .video, let f = it.videoFileName { storage.deleteVideo(fileName: f) }
                     if let af = it.audioFileName { AudioPlayer.shared.stopIfPlaying(af); storage.deleteAudio(fileName: af) }
                 }
                 trimmable = Array(trimmable.prefix(allowed))
@@ -411,6 +422,12 @@ final class ClipboardManager: ObservableObject {
         case .image:
             guard let f = item.imageFileName, let img = storage.loadImage(fileName: f) else { return false }
             pb.clearContents(); pb.writeObjects([img])
+        case .video:
+            // The FILE, not pixels: pasting a recording into Finder/Slack/mail should drop the movie.
+            guard let f = item.videoFileName else { return false }
+            let url = storage.videoURL(for: f)
+            guard FileManager.default.fileExists(atPath: url.path) else { return false }
+            pb.clearContents(); pb.writeObjects([url as NSURL])
         }
         lastChangeCount = pb.changeCount
         NotificationCenter.default.post(name: .klipDidCopy, object: nil)
@@ -496,6 +513,7 @@ final class ClipboardManager: ObservableObject {
 
     func delete(_ item: ClipboardItem) {
         if item.kind == .image, let f = item.imageFileName { storage.deleteImage(fileName: f) }
+        if item.kind == .video, let f = item.videoFileName { storage.deleteVideo(fileName: f) }
         if let af = item.audioFileName { AudioPlayer.shared.stopIfPlaying(af); storage.deleteAudio(fileName: af) }
         voicePasteGuards.removeValue(forKey: item.id)
         items.removeAll { $0.id == item.id }

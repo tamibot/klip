@@ -124,6 +124,8 @@ enum MarkdownExporter {
                 }
             case .image:
                 out += "![image](images/\(item.imageFileName ?? "image.png"))\n\n"
+            case .video:
+                out += "🎬 \(item.name ?? item.preview) — `videos/\(item.videoFileName ?? "recording.mov")`\n\n"
             }
         }
         return out

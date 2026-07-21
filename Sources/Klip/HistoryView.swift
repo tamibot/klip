@@ -4,17 +4,19 @@ import AppKit
 enum HistoryFilter: String, CaseIterable, Identifiable {
     // Display order. Favorites sits right after All: at the end of the row it scrolls out of sight,
     // and it's the filter that answers "where did my starred clip go?" (stars don't float to the top).
-    case all, pinned, text, link, image, voice, credential
+    case all, pinned, text, link, image, video, voice, credential
     var id: String { rawValue }
     var labelKey: String {
         switch self {
         case .all: "filter.all"; case .text: "filter.text"; case .link: "filter.link"; case .image: "filter.image"
+        case .video: "filter.video"
         case .voice: "filter.voice"; case .credential: "filter.cred"; case .pinned: "filter.pinned"
         }
     }
     var icon: String {
         switch self {
         case .all: "square.grid.2x2"; case .text: "doc.text"; case .link: "link"; case .image: "photo"
+        case .video: "video"
         case .voice: "waveform"; case .credential: "key.fill"; case .pinned: "star.fill"
         }
     }
@@ -85,6 +87,7 @@ struct HistoryView: View {
         case .text: return item.kind == .text && item.isVoiceNote != true && item.isCredential != true
         case .link: return item.linkURL != nil
         case .image: return item.kind == .image
+        case .video: return item.kind == .video
         case .voice: return item.isVoiceNote == true
         case .credential: return item.isCredential == true
         case .pinned: return item.pinned
@@ -697,6 +700,7 @@ struct ItemRow: View {
     private var canDrag: Bool {
         guard !isCredential else { return false }
         if item.kind == .image { return item.imageFileName != nil }
+        if item.kind == .video { return item.videoFileName != nil }
         if voiceAudioFile != nil { return true }
         return item.linkURL != nil || hasText
     }
@@ -706,6 +710,9 @@ struct ItemRow: View {
     private func makeDragProvider() -> NSItemProvider {
         if item.kind == .image, let fn = item.imageFileName {
             return NSItemProvider(contentsOf: Storage.shared.imageURL(for: fn)) ?? NSItemProvider()
+        }
+        if item.kind == .video, let fn = item.videoFileName {
+            return NSItemProvider(contentsOf: Storage.shared.videoURL(for: fn)) ?? NSItemProvider()
         }
         if let af = voiceAudioFile {
             return NSItemProvider(contentsOf: Storage.shared.audioURL(for: af)) ?? NSItemProvider()
@@ -717,11 +724,26 @@ struct ItemRow: View {
     /// Uploads this clip to the user's own bucket (Preferences → Sharing) and puts the public
     /// link on the clipboard. Strictly per-item and per-click — nothing is ever auto-uploaded.
     /// Credentials never reach here: the menu only offers the action on image/text branches.
+    /// GIF conversion for a recording row — same streamed transcode the finish-toast offers.
+    private func convertToGIF(_ url: URL) {
+        Task { @MainActor in
+            do {
+                let gif = try await ScreenRecorder.exportGIF(from: url)
+                SoundFX.play(.save); ToastHUD.show(L10n.t("toast.gifSaved"), detail: gif.lastPathComponent)
+            } catch {
+                SoundFX.error(); ToastHUD.show(L10n.t("toast.gifFailed"), style: .failure)
+            }
+        }
+    }
+
     private func shareLink() {
         let payload: (data: Data, ext: String, type: String)?
         if item.kind == .image, let f = item.imageFileName,
            let d = try? Data(contentsOf: Storage.shared.imageURL(for: f)) {
             payload = (d, "png", "image/png")
+        } else if item.kind == .video, let f = item.videoFileName,
+                  let d = try? Data(contentsOf: Storage.shared.videoURL(for: f)) {
+            payload = (d, "mov", "video/quicktime")
         } else if let t = item.text, !t.isEmpty {
             payload = (Data(t.utf8), "txt", "text/plain; charset=utf-8")
         } else { payload = nil }
@@ -922,6 +944,8 @@ struct ItemRow: View {
             return Text(Image(systemName: "key.fill")).foregroundColor(.orange) + Text("  ") + body
         } else if item.isVoiceNote == true && hasText {
             return Text(Image(systemName: "waveform")).foregroundColor(.purple) + Text("  ") + body
+        } else if item.kind == .video {
+            return Text(Image(systemName: "video.fill")).foregroundColor(.accentColor) + Text("  ") + body
         }
         return body
     }
@@ -979,6 +1003,21 @@ struct ItemRow: View {
             Button { onOCR() } label: { Label(L10n.t("row.ocr"), systemImage: "text.viewfinder") }
             if S3Uploader.isConfigured, item.imageFileName != nil {
                 Button { shareLink() } label: { Label(L10n.t("row.copylink"), systemImage: "link") }
+            }
+        } else if item.kind == .video {
+            if let fn = item.videoFileName {
+                let url = Storage.shared.videoURL(for: fn)
+                Button { NSWorkspace.shared.open(url) } label: { Label(L10n.t("row.play"), systemImage: "play.circle") }
+                Button { NSWorkspace.shared.activateFileViewerSelecting([url]) } label: { Label(L10n.t("toast.reveal"), systemImage: "folder") }
+                Button {
+                    if let out = try? Storage.shared.exportCopyToDownloads(from: url, ext: "mov", base: item.name) {
+                        SoundFX.play(.save); ToastHUD.show(L10n.t("toast.recSaved.title"), detail: out.lastPathComponent)
+                    } else { SoundFX.error() }
+                } label: { Label(L10n.t("row.save"), systemImage: "square.and.arrow.down") }
+                Button { convertToGIF(url) } label: { Label(L10n.t("toast.recSaved.action"), systemImage: "photo.stack") }
+                if S3Uploader.isConfigured {
+                    Button { shareLink() } label: { Label(L10n.t("row.copylink"), systemImage: "link") }
+                }
             }
         } else if isCredential {
             Button { manager.toggleCredential(item) } label: { Label(L10n.t("row.unmarkcred"), systemImage: "key.slash") }

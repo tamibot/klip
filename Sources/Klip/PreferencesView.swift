@@ -60,6 +60,7 @@ struct PreferencesView: View {
     var onTextCaptureHotKeyChange: (KeyCombo) -> Void
     var onMeetingHotKeyChange: (KeyCombo) -> Void
     var onScreenRecHotKeyChange: (KeyCombo) -> Void
+    var onScrollHotKeyChange: (KeyCombo) -> Void
     // Kept for the AppDelegate wiring but intentionally never called: trimming on every
     // Stepper click deleted history (and media) per click. History self-trims on the next
     // capture via trimAndSave, so the new limit applies as new items arrive.
@@ -194,6 +195,7 @@ struct PreferencesView: View {
                 shortcutRow(L10n.t("prefs.sc.upload"), $settings.uploadCombo, onUploadHotKeyChange)
                 shortcutRow(L10n.t("prefs.sc.meeting"), $settings.meetingCombo, onMeetingHotKeyChange)
                 shortcutRow(L10n.t("prefs.sc.record"), $settings.screenRecCombo, onScreenRecHotKeyChange)
+                shortcutRow(L10n.t("prefs.sc.scroll"), $settings.scrollCombo, onScrollHotKeyChange)
                 Text(L10n.t("prefs.sc.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -328,6 +330,25 @@ struct PreferencesView: View {
 
             Section(header: sectionHeader("prefs.share.section")) {
                 Text(L10n.t("prefs.share.help")).font(.caption).foregroundStyle(.secondary)
+                // Inline 5-minute recipe: the six fields are trivial to fill once you know WHERE
+                // each value lives in the provider's dashboard — that map is the whole tutorial.
+                DisclosureGroup(L10n.t("prefs.share.how")) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L10n.t("prefs.share.how.r2")).font(.caption).bold()
+                        Text(L10n.t("prefs.share.how.1")).font(.caption)
+                        Text(L10n.t("prefs.share.how.2")).font(.caption)
+                        Text(L10n.t("prefs.share.how.3")).font(.caption)
+                        Text(L10n.t("prefs.share.how.4")).font(.caption)
+                        Text(L10n.t("prefs.share.how.others")).font(.caption).foregroundStyle(.secondary)
+                        Button(L10n.t("prefs.share.how.open")) {
+                            NSWorkspace.shared.open(URL(string: "https://dash.cloudflare.com/?to=/:account/r2")!)
+                        }
+                        .buttonStyle(.link).font(.caption)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+                }
+                .font(.caption)
                 TextField(L10n.t("prefs.share.endpoint"), text: $settings.s3Endpoint,
                           prompt: Text(verbatim: "https://<account>.r2.cloudflarestorage.com"))
                     .textFieldStyle(.roundedBorder).autocorrectionDisabled()

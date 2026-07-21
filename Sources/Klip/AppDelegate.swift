@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var textCaptureHotKey: HotKey?
     private var meetingHotKey: HotKey?
     private var screenRecHotKey: HotKey?
+    private var scrollHotKey: HotKey?
     private var lastGoodCombo = Settings.shared.combo
     private var lastGoodVoiceCombo = Settings.shared.voiceCombo
     private var lastGoodCaptureCombo = Settings.shared.captureCombo
@@ -33,9 +34,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastGoodTextCaptureCombo = Settings.shared.textCaptureCombo
     private var lastGoodMeetingCombo = Settings.shared.meetingCombo
     private var lastGoodScreenRecCombo = Settings.shared.screenRecCombo
+    private var lastGoodScrollCombo = Settings.shared.scrollCombo
     private let meetingRecorder = MeetingRecorder()
     private let screenRecorder = ScreenRecorder()
     private var recOverlay: CaptureOverlayController?
+    private var scrollOverlay: CaptureOverlayController?
+    private var scrollCapture: ScrollCaptureController?
     private var meetingItem: NSMenuItem?
     private var meetingHUD: NSPanel?
     private var prefsController: PreferencesWindowController?
@@ -102,18 +106,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.buildMenu()
             }
             .store(in: &cancellables)
-        screenRecorder.onFinished = { [weak self] url in
-            guard self != nil else { return }
-            guard let url else {
+        screenRecorder.onFinished = { [weak self] tempURL, duration in
+            guard let self else { return }
+            guard let tempURL, let stored = Storage.shared.importVideo(from: tempURL) else {
+                if let tempURL { try? FileManager.default.removeItem(at: tempURL) }
                 SoundFX.error(); ToastHUD.show(L10n.t("rec.screen.failed"), style: .failure)
                 return
             }
+            // The recording LIVES in the history (like every other clip): playable, shareable,
+            // exportable from its row. Named like meeting notes so the row reads as an event.
+            let name = "\(L10n.t("video.name")) — \(Self.meetingDF.string(from: Date()))"
+            self.manager.addVideo(fileName: stored, duration: duration, name: name)
+            self.panelController.show()   // same "it flew into Klip" reveal as a capture
+            let storedURL = Storage.shared.videoURL(for: stored)
             SoundFX.play(.success)
-            ToastHUD.show(L10n.t("toast.recSaved.title"), detail: url.lastPathComponent,
+            ToastHUD.show(L10n.t("toast.recSaved.title"), detail: name,
                           actionTitle: L10n.t("toast.recSaved.action")) {
                 Task {
                     do {
-                        let gif = try await ScreenRecorder.exportGIF(from: url)
+                        let gif = try await ScreenRecorder.exportGIF(from: storedURL)
                         await MainActor.run {
                             SoundFX.play(.save)
                             ToastHUD.show(L10n.t("toast.gifSaved"), detail: gif.lastPathComponent)
@@ -282,6 +293,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         combo: Settings.shared.textCaptureCombo)
         addShortcutItem(menu, title: L10n.t(screenRecorder.isRecording ? "menu.recordScreen.stop" : "menu.recordScreen"),
                         action: #selector(toggleScreenRecording), combo: Settings.shared.screenRecCombo)
+        if !screenRecorder.isRecording {
+            menu.addItem(withTitle: L10n.t("menu.recordScreenFull"), action: #selector(recordFullScreen), keyEquivalent: "")
+        }
+        addShortcutItem(menu, title: L10n.t("menu.scrollCapture"), action: #selector(startScrollCapture),
+                        combo: Settings.shared.scrollCombo)
         addShortcutItem(menu, title: L10n.t("act.upload"), action: #selector(startUpload),
                         combo: Settings.shared.uploadCombo)
         menu.addItem(.separator())
@@ -348,9 +364,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.toggleMeetingRecording()
         }
     }
+    /// Records the ENTIRE display under the cursor — no region selection. Same engine, full frame.
+    @objc private func recordFullScreen() {
+        guard !screenRecorder.isRecording, !screenRecorder.isStarting, recOverlay == nil else { return }
+        guard ScreenCapturer.hasPermission() else { snapController.promptForPermission(); return }
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main
+        guard let screen else { return }
+        screenRecorder.begin(screen: screen,
+                             region: CGRect(origin: .zero, size: screen.frame.size))
+    }
+
     private func makeScreenRecHotKey(_ c: KeyCombo) {
         screenRecHotKey = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: 7) { [weak self] in
             self?.toggleScreenRecording()
+        }
+    }
+    private func makeScrollHotKey(_ c: KeyCombo) {
+        scrollHotKey = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: 8) { [weak self] in
+            self?.startScrollCapture()
+        }
+    }
+
+    /// Scrolling capture: pick the CONTENT region (avoid sticky headers/scrollbars), scroll the
+    /// target app yourself, press Done — one long stitched image lands in history + clipboard.
+    @objc private func startScrollCapture() {
+        guard scrollCapture == nil, scrollOverlay == nil, recOverlay == nil else { return }
+        guard ScreenCapturer.hasPermission() else { snapController.promptForPermission(); return }
+        let mouse = NSEvent.mouseLocation
+        Task { @MainActor in
+            do {
+                let shot = try await ScreenCapturer.captureDisplay(containing: mouse)
+                guard self.scrollOverlay == nil, self.scrollCapture == nil else { return }   // re-check after the await
+                let overlay = CaptureOverlayController(shot: shot) { [weak self] screen, region in
+                    guard let self else { return }
+                    self.scrollOverlay = nil
+                    guard let region else { return }   // Esc / empty drag = cancelled
+                    let ctrl = ScrollCaptureController(screen: screen, region: region) { [weak self] image in
+                        guard let self else { return }
+                        self.scrollCapture = nil
+                        guard let image else { return }   // cancel is silent, like the capture overlay
+                        self.manager.addAnnotatedScreenshot(image, copyToClipboard: true)
+                        self.panelController.show()
+                    }
+                    self.scrollCapture = ctrl
+                    ctrl.start()
+                }
+                self.scrollOverlay = overlay
+                overlay.present()
+            } catch {
+                SoundFX.error(); ToastHUD.show(L10n.t("capture.failed"), style: .failure)
+            }
         }
     }
 
@@ -397,6 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .textCapture: makeTextCaptureHotKey(c)
         case .meeting: makeMeetingHotKey(c)
         case .screenRec: makeScreenRecHotKey(c)
+        case .scroll: makeScrollHotKey(c)
         }
     }
     private func hotKeyLive(_ kind: ShortcutKind) -> Bool {
@@ -408,6 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .textCapture: return textCaptureHotKey != nil
         case .meeting: return meetingHotKey != nil
         case .screenRec: return screenRecHotKey != nil
+        case .scroll: return scrollHotKey != nil
         }
     }
     /// After moving a LIVE shortcut, make sure it actually registered; if the OS rejected the combo (another
@@ -477,6 +543,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 ensureLiveRegistered(.screenRec, avoiding: used7) { s.screenRecCombo = $0; lastGoodScreenRecCombo = $0 }
             }
         }
+        let used8 = used7 + [s.screenRecCombo]
+        if used8.contains(s.scrollCombo) {
+            let fixed = free(used8, .defaultScrollCombo); s.scrollCombo = fixed; lastGoodScrollCombo = fixed
+            if scrollHotKey != nil {
+                makeScrollHotKey(fixed)
+                ensureLiveRegistered(.scroll, avoiding: used8) { s.scrollCombo = $0; lastGoodScrollCombo = $0 }
+            }
+        }
     }
 
     private func setupHotKeys() {
@@ -488,6 +562,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         makeTextCaptureHotKey(Settings.shared.textCaptureCombo)
         makeMeetingHotKey(Settings.shared.meetingCombo)
         makeScreenRecHotKey(Settings.shared.screenRecCombo)
+        makeScrollHotKey(Settings.shared.scrollCombo)
         // If a persisted combination collides with another at startup (HotKey.init returns nil), the
         // shortcut would stay dead for the whole session. Recover with its default shortcut so it isn't lost.
         if hotKey == nil, Settings.shared.combo != .defaultCombo {
@@ -562,6 +637,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if screenRecHotKey != nil { Settings.shared.screenRecCombo = s; lastGoodScreenRecCombo = s; break }
             }
         }
+        // Scrolling capture recovers quietly too (also reachable from the menu bar).
+        if scrollHotKey == nil, Settings.shared.scrollCombo != .defaultScrollCombo {
+            Settings.shared.scrollCombo = .defaultScrollCombo; lastGoodScrollCombo = .defaultScrollCombo
+            makeScrollHotKey(.defaultScrollCombo)
+        }
+        if scrollHotKey == nil {
+            let taken = [Settings.shared.combo, Settings.shared.voiceCombo, Settings.shared.captureCombo,
+                         Settings.shared.uploadCombo, Settings.shared.textCaptureCombo,
+                         Settings.shared.meetingCombo, Settings.shared.screenRecCombo]
+            for s in KeyCombo.suggestions where !taken.contains(s) {
+                makeScrollHotKey(s)
+                if scrollHotKey != nil { Settings.shared.scrollCombo = s; lastGoodScrollCombo = s; break }
+            }
+        }
         // The suggestion-recovery loops above can land one shortcut on a sibling's combo (they don't all
         // exclude every sibling). Run dedup once more — now it re-registers what it moves — so no two
         // shortcuts share a combo (which would fire two actions on one keypress).
@@ -576,6 +665,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if textCaptureHotKey == nil { makeTextCaptureHotKey(Settings.shared.textCaptureCombo) }
         if meetingHotKey == nil { makeMeetingHotKey(Settings.shared.meetingCombo) }
         if screenRecHotKey == nil { makeScreenRecHotKey(Settings.shared.screenRecCombo) }
+        if scrollHotKey == nil { makeScrollHotKey(Settings.shared.scrollCombo) }
         // If the panel/voice shortcuts are STILL dead after all recovery (another app globally owns even
         // the default combo), tell the user instead of leaving a silently-inert shortcut (deferred so it
         // doesn't block launch).
@@ -587,7 +677,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         buildMenu()
     }
 
-    private enum ShortcutKind { case panel, voice, capture, upload, textCapture, meeting, screenRec }
+    private enum ShortcutKind { case panel, voice, capture, upload, textCapture, meeting, screenRec, scroll }
 
     /// Catch a combo already used by another of OUR shortcuts before touching Carbon: pre-empting the
     /// registration keeps the sibling's hotkey intact and shows the right "in use" wording.
@@ -595,13 +685,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let s = Settings.shared
         let others: [KeyCombo]
         switch kind {
-        case .panel:       others = [s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo]
-        case .voice:       others = [s.combo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo]
-        case .capture:     others = [s.combo, s.voiceCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo]
-        case .upload:      others = [s.combo, s.voiceCombo, s.captureCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo]
-        case .textCapture: others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.meetingCombo, s.screenRecCombo]
-        case .meeting:     others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.screenRecCombo]
-        case .screenRec:   others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo]
+        case .panel:       others = [s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo, s.scrollCombo]
+        case .voice:       others = [s.combo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo, s.scrollCombo]
+        case .capture:     others = [s.combo, s.voiceCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo, s.scrollCombo]
+        case .upload:      others = [s.combo, s.voiceCombo, s.captureCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo, s.scrollCombo]
+        case .textCapture: others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.meetingCombo, s.screenRecCombo, s.scrollCombo]
+        case .meeting:     others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.screenRecCombo, s.scrollCombo]
+        case .screenRec:   others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.scrollCombo]
+        case .scroll:      others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo]
         }
         return others.contains(combo)
     }
@@ -694,6 +785,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         else { ok = screenRecHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
         if ok { lastGoodScreenRecCombo = combo }
         else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.screenRecCombo = lastGoodScreenRecCombo }
+        buildMenu()
+    }
+
+    private func applyScrollHotKey(_ combo: KeyCombo) {
+        if collidesWithOtherShortcut(combo, .scroll) {
+            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
+            Settings.shared.scrollCombo = lastGoodScrollCombo; buildMenu(); return
+        }
+        let ok: Bool
+        if scrollHotKey == nil { makeScrollHotKey(combo); ok = (scrollHotKey != nil) }
+        else { ok = scrollHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
+        if ok { lastGoodScrollCombo = combo }
+        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.scrollCombo = lastGoodScrollCombo }
         buildMenu()
     }
 
@@ -927,6 +1031,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 onTextCaptureHotKeyChange: { [weak self] combo in self?.applyTextCaptureHotKey(combo) },
                 onMeetingHotKeyChange: { [weak self] combo in self?.applyMeetingHotKey(combo) },
                 onScreenRecHotKeyChange: { [weak self] combo in self?.applyScreenRecHotKey(combo) },
+                onScrollHotKeyChange: { [weak self] combo in self?.applyScrollHotKey(combo) },
                 onMaxItemsChange: { [weak self] in self?.manager.applyMaxItems() })
         }
         prefsController?.show()

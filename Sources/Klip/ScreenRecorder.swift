@@ -24,8 +24,9 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
     private var startTask: Task<Void, Never>?
     private(set) var startedAt: Date?
 
-    /// The finished recording, already moved to ~/Downloads. nil = failed (an error toast is the caller's job).
-    var onFinished: ((URL?) -> Void)?
+    /// The finished recording, still at its TEMP location, plus its wall-clock duration. The caller
+    /// owns the move (into the history store) and the toasts. nil URL = failed.
+    var onFinished: ((URL?, Double?) -> Void)?
 
     private var stream: SCStream?
     private var videoWriter: VideoWriter?
@@ -69,6 +70,13 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.showsCursor = true
         config.queueDepth = 6
+        // SYSTEM audio (what's playing — a video, a call) muxed into the movie. Klip's own cues are
+        // excluded so a toast never lands in the recording. Mic capture is a separate feature (it
+        // needs its own permission + pipeline) — the meeting recorder owns that path.
+        config.capturesAudio = true
+        config.excludesCurrentProcessAudio = true
+        config.sampleRate = 48_000
+        config.channelCount = 2
 
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("klip-rec-\(UUID().uuidString).mov")
@@ -79,6 +87,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
         // display-sleep assertion is held forever. MeetingRecorder handles it the same way.
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(writer, type: .screen, sampleHandlerQueue: writer.queue)
+        try stream.addStreamOutput(writer, type: .audio, sampleHandlerQueue: writer.queue)
         do { try await stream.startCapture() } catch {
             _ = await writer.finish()   // cancels the writer and deletes the orphaned temp file
             throw error
@@ -104,9 +113,9 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
         Task { @MainActor in await self.stop() }
     }
 
-    /// Stops, finalizes and moves the file to ~/Downloads. Safe to call redundantly. A stop that
-    /// lands during the spin-up window waits for the start to settle, then tears it down — so a
-    /// fast double-press cancels cleanly instead of being swallowed.
+    /// Stops and finalizes. Safe to call redundantly. A stop that lands during the spin-up window
+    /// waits for the start to settle, then tears it down — so a fast double-press cancels cleanly
+    /// instead of being swallowed.
     func stop() async {
         if let pending = startTask { await pending.value }
         guard isRecording, let stream, let writer = videoWriter else { return }
@@ -115,13 +124,11 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
         self.videoWriter = nil
         if sleepAssertion != 0 { IOPMAssertionRelease(sleepAssertion); sleepAssertion = 0 }
 
+        let duration = startedAt.map { Date().timeIntervalSince($0) }
         try? await stream.stopCapture()
         let tempURL = await writer.finish()
         startedAt = nil
-        guard let tempURL else { onFinished?(nil); return }
-        let exported = try? Storage.shared.exportFileToDownloads(from: tempURL, ext: "mov")
-        if exported == nil { try? FileManager.default.removeItem(at: tempURL) }
-        onFinished?(exported)
+        onFinished?(tempURL, duration)
     }
 
     // MARK: - GIF export
@@ -203,6 +210,7 @@ private final class VideoWriter: NSObject, SCStreamOutput, @unchecked Sendable {
     let queue = DispatchQueue(label: "klip.screenrec.video")
     private let writer: AVAssetWriter
     private let input: AVAssetWriterInput
+    private let audioInput: AVAssetWriterInput
     private let url: URL
     private var sessionStarted = false
 
@@ -217,27 +225,47 @@ private final class VideoWriter: NSObject, SCStreamOutput, @unchecked Sendable {
             AVVideoHeightKey: height,
         ])
         i.expectsMediaDataInRealTime = true
-        guard w.canAdd(i) else { throw ScreenRecorder.RecordingError.startFailed }
+        // System-audio track (AAC, same recipe as MeetingRecorder's SystemAudioWriter).
+        let a = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 48_000,
+            AVNumberOfChannelsKey: 2,
+            AVEncoderBitRateKey: 128_000,
+        ])
+        a.expectsMediaDataInRealTime = true
+        guard w.canAdd(i), w.canAdd(a) else { throw ScreenRecorder.RecordingError.startFailed }
         w.add(i)
+        w.add(a)
         guard w.startWriting() else { throw ScreenRecorder.RecordingError.startFailed }
-        writer = w; input = i
+        writer = w; input = i; audioInput = a
         super.init()
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .screen, sampleBuffer.isValid, CMSampleBufferDataIsReady(sampleBuffer) else { return }
-        // ScreenCaptureKit delivers status frames (idle/blank) too — only append complete ones.
-        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
-                as? [[SCStreamFrameInfo: Any]],
-              let statusRaw = attachments.first?[.status] as? Int,
-              SCFrameStatus(rawValue: statusRaw) == .complete else { return }
-        // Session starts at the FIRST sample's PTS, never .zero — a mismatch freezes the opening
-        // frames of the movie.
-        if !sessionStarted {
-            writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
-            sessionStarted = true
+        guard sampleBuffer.isValid, CMSampleBufferDataIsReady(sampleBuffer) else { return }
+        switch type {
+        case .screen:
+            // ScreenCaptureKit delivers status frames (idle/blank) too — only append complete ones.
+            guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
+                    as? [[SCStreamFrameInfo: Any]],
+                  let statusRaw = attachments.first?[.status] as? Int,
+                  SCFrameStatus(rawValue: statusRaw) == .complete else { return }
+            // Session starts at the FIRST sample's PTS (video or audio, whichever lands first),
+            // never .zero — a mismatch freezes the opening frames of the movie.
+            startSessionIfNeeded(at: sampleBuffer.presentationTimeStamp)
+            if input.isReadyForMoreMediaData { input.append(sampleBuffer) }   // realtime: drop when back-pressured
+        case .audio:
+            startSessionIfNeeded(at: sampleBuffer.presentationTimeStamp)
+            if audioInput.isReadyForMoreMediaData { audioInput.append(sampleBuffer) }
+        default:
+            return   // .microphone (macOS 15+) and any future outputs are not registered
         }
-        if input.isReadyForMoreMediaData { input.append(sampleBuffer) }   // realtime: drop when back-pressured
+    }
+
+    private func startSessionIfNeeded(at pts: CMTime) {
+        guard !sessionStarted else { return }
+        writer.startSession(atSourceTime: pts)
+        sessionStarted = true
     }
 
     /// Finalizes the file. Returns nil when nothing usable was captured.
@@ -251,6 +279,7 @@ private final class VideoWriter: NSObject, SCStreamOutput, @unchecked Sendable {
                     return
                 }
                 self.input.markAsFinished()
+                self.audioInput.markAsFinished()
                 self.writer.finishWriting {
                     cont.resume(returning: self.writer.status == .completed ? self.url : nil)
                 }

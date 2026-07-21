@@ -4,6 +4,7 @@ import Foundation
 enum ClipboardKind: String, Codable {
     case text
     case image
+    case video   // screen recording — the movie lives in the store's videos/ dir
 }
 
 /// An item in the clipboard history (text or image).
@@ -27,6 +28,8 @@ struct ClipboardItem: Identifiable, Codable, Equatable {
     var audioDuration: Double?    // audio duration in seconds (for display and the progress bar)
     var name: String?             // user-set label (searchable title; applies to any item)
     var collection: String?       // name of the collection it belongs to (groups batches of context)
+    var videoFileName: String?    // screen recording: movie file in the store (videos/)
+    var videoDuration: Double?    // recording duration in seconds (for the row subtitle)
 
     init(id: UUID = UUID(),
          kind: ClipboardKind,
@@ -44,7 +47,9 @@ struct ClipboardItem: Identifiable, Codable, Equatable {
          audioFileName: String? = nil,
          audioDuration: Double? = nil,
          name: String? = nil,
-         collection: String? = nil) {
+         collection: String? = nil,
+         videoFileName: String? = nil,
+         videoDuration: Double? = nil) {
         self.id = id
         self.kind = kind
         self.text = text
@@ -62,6 +67,8 @@ struct ClipboardItem: Identifiable, Codable, Equatable {
         self.audioDuration = audioDuration
         self.name = name
         self.collection = collection
+        self.videoFileName = videoFileName
+        self.videoDuration = videoDuration
     }
 
     /// The clip as a web URL if it's exactly a single http(s) link — used by the Links filter and the
@@ -87,5 +94,6 @@ struct ClipboardItem: Identifiable, Codable, Equatable {
             && lhs.imageFileName == rhs.imageFileName && lhs.audioFileName == rhs.audioFileName
             && lhs.audioDuration == rhs.audioDuration   // drives the voice-note progress bar UI
             && lhs.name == rhs.name && lhs.collection == rhs.collection
+            && lhs.videoFileName == rhs.videoFileName && lhs.videoDuration == rhs.videoDuration
     }
 }

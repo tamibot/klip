@@ -53,7 +53,8 @@ Text & image history · **native capture + annotation** · **fast OCR capture** 
 - Also from the 📷 button in the panel or the menu-bar menu.
 - **Fast text capture** (`⌥⇧F`): snip a region and its **text is OCR'd straight to the clipboard** (and history) — skips the editor when you just need the text.
 - **Upload audio/video** (`⌥⇧O`): drop or pick files; each one's transcription appears right in the window as it finishes, with a per-upload language override.
-- **Screen recording** (`⌥⇧V`): select a region and record it to an **MP4-compatible video (H.264 .mov)** — press `⌥⇧V` again to stop. The file lands in **Downloads** with a one-tap **Convert to GIF** (10 fps, chat-friendly). Crash-safe (fragmented movie) and Klip's own windows never appear in the recording.
+- **Screen recording** (`⌥⇧V` region · menu for full screen): records **video + system audio** (H.264 + AAC; Klip's own sounds excluded). Press `⌥⇧V` again to stop — the recording **lands in your history** like any clip: play it, drag it out, save it to Downloads, **convert to GIF** or copy a share link, all from its row. Crash-safe (fragmented movie) and Klip's windows never appear in the footage.
+- **Scrolling capture** (`⌥⇧S`): select the content area, scroll the page yourself, press Done — Klip live-stitches one long screenshot straight into history (and the clipboard), OCR-searchable like any capture.
 
 ### 🖼️ Images
 - Large preview (cached thumbnails for smooth scrolling), **open large** and **save to file**.
@@ -96,7 +97,7 @@ Text & image history · **native capture + annotation** · **fast OCR capture** 
 
 ### 🔗 Share links — your own cloud
 - **Copy a public link** to any clip (image or text) from its row menu: it uploads to **your own S3-compatible bucket** — Cloudflare R2, AWS S3, Backblaze B2, MinIO… — and the link lands on your clipboard.
-- Configure it in **Preferences → Share links** (endpoint, bucket, keys, public URL) with a **Test connection** button. Pure-Swift SigV4 signing, no SDK.
+- Configure it in **Preferences → Share links** (endpoint, bucket, keys, public URL) with a **Test connection** button and a built-in **5-minute setup guide** for Cloudflare R2. Pure-Swift SigV4 signing, no SDK.
 - **Strictly opt-in per click** — nothing is ever uploaded automatically, and there is no hosted middleman: the storage is yours.
 
 ### 💾 Backup
@@ -122,13 +123,14 @@ Global shortcuts use **⌥⇧ (Option+Shift)** + a letter, grouped by function o
 | `⌥⇧F` | **F**ast text capture: snip a region → OCR straight to the clipboard, no editor |
 | `⌥⇧O` | **O**pen the "upload audio/video to transcribe" window |
 | `⌥⇧M` | Record a **m**eeting (mic + system audio) — press again to stop |
-| `⌥⇧V` | Record a screen region to **v**ideo/GIF — press again to stop |
+| `⌥⇧V` | Record a screen region to **v**ideo/GIF (with system audio) — press again to stop |
+| `⌥⇧S` | **S**crolling capture: select, scroll, Done → one long stitched image |
 | `↑` / `↓` · `Enter` | Navigate and pick an item |
 | `⌘↩` | Copy the selected item as a code block (``` ```) |
 | `Esc` | Close the panel |
 | `⌘⇧⌃4` | *(macOS)* screenshot to clipboard → also lands in Klip |
 
-> All seven global shortcuts are **configurable** in Preferences › Shortcuts.
+> All eight global shortcuts are **configurable** in Preferences › Shortcuts.
 
 ## 🧰 Requirements
 
@@ -218,7 +220,8 @@ Open **Preferences** (`⌘,` from the Klip menu):
 | `Recorder.swift` / `AudioPlayer.swift` | Recording, background transcription and voice-note playback. |
 | `MediaAudioExtractor.swift` | Extracts a **video's** audio track (AVAssetReader→Writer, 16 kHz mono AAC) for transcription. |
 | `MeetingRecorder.swift` | **Meeting notes**: mic + system audio (ScreenCaptureKit), local mix, Me/Them dual-track transcription. |
-| `ScreenRecorder.swift` | **Screen recording**: region → H.264 video (SCStream → AVAssetWriter) + streamed GIF export. |
+| `ScreenRecorder.swift` | **Screen recording**: region/full screen → H.264 + system-audio AAC (SCStream → AVAssetWriter) + GIF export. |
+| `ScrollCaptureController.swift` | **Scrolling capture**: manual scroll + live stitching (row-signature correlation) into one tall image. |
 | `S3Uploader.swift` | **Share links**: SigV4-signed PUT to the user's own S3-compatible bucket (pure CryptoKit). |
 | `OpenAIClient.swift` / `GeminiClient.swift` / `LocalTranscriber.swift` | Transcription via OpenAI, Google Gemini or on-device WhisperKit. |
 | `L10n.swift` | Lightweight localization (8 languages). |

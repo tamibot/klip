@@ -9,6 +9,7 @@ final class Storage {
     let baseURL: URL
     let imagesURL: URL
     let audioBaseURL: URL
+    let videosURL: URL
     private let itemsURL: URL
 
     init() {
@@ -28,13 +29,16 @@ final class Storage {
         baseURL = newBase
         imagesURL = baseURL.appendingPathComponent("images", isDirectory: true)
         audioBaseURL = baseURL.appendingPathComponent("audio", isDirectory: true)
+        videosURL = baseURL.appendingPathComponent("videos", isDirectory: true)
         itemsURL = baseURL.appendingPathComponent("items.json")
         try? fm.createDirectory(at: imagesURL, withIntermediateDirectories: true)
         try? fm.createDirectory(at: audioBaseURL, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: videosURL, withIntermediateDirectories: true)
         // Same as items.json (0600): the store contains personal data (text, voice, images).
         Self.restrict(baseURL.path, 0o700)
         Self.restrict(imagesURL.path, 0o700)
         Self.restrict(audioBaseURL.path, 0o700)
+        Self.restrict(videosURL.path, 0o700)
     }
 
     /// Restricts a file/folder to the owner (privacy consistent with items.json).
@@ -178,6 +182,15 @@ final class Storage {
         return url
     }
 
+    /// Copy variant of exportFileToDownloads, for files that must STAY in the store (a history
+    /// video being exported keeps living in its row).
+    func exportCopyToDownloads(from src: URL, ext: String, base: String? = nil) throws -> URL {
+        let staging = FileManager.default.temporaryDirectory
+            .appendingPathComponent("klip-export-\(UUID().uuidString).\(ext)")
+        try FileManager.default.copyItem(at: src, to: staging)
+        return try exportFileToDownloads(from: staging, ext: ext, base: base)
+    }
+
     func exportPNGToDownloads(_ png: Data) throws -> URL { try exportToDownloads(png, ext: "png") }
 
     func deleteImage(fileName: String) {
@@ -214,6 +227,23 @@ final class Storage {
 
     func audioURL(for fileName: String) -> URL { audioBaseURL.appendingPathComponent(fileName) }
     func deleteAudio(fileName: String) { try? FileManager.default.removeItem(at: audioURL(for: fileName)) }
+
+    // MARK: - Videos (screen recordings)
+
+    func videoURL(for fileName: String) -> URL { videosURL.appendingPathComponent(fileName) }
+    func deleteVideo(fileName: String) { try? FileManager.default.removeItem(at: videoURL(for: fileName)) }
+
+    /// Moves a finished recording from its temp location into the store (recordings are large:
+    /// always move, never load into memory). Returns the stored file name, nil on failure.
+    func importVideo(from url: URL) -> String? {
+        let name = "\(UUID().uuidString).mov"
+        let dest = videoURL(for: name)
+        do {
+            try FileManager.default.moveItem(at: url, to: dest)
+            Self.restrict(dest.path, 0o600)
+            return name
+        } catch { return nil }
+    }
     func audioExists(fileName: String) -> Bool { FileManager.default.fileExists(atPath: audioURL(for: fileName).path) }
 
     /// Restricts a voice note audio file to 0600 (AVAudioRecorder creates it with the default umask).
@@ -233,9 +263,10 @@ final class Storage {
     }
 
     /// Deletes audio/image files no longer referenced by any item (orphaned by a crash, etc.).
-    func pruneOrphans(referencedAudio: Set<String>, referencedImages: Set<String>) {
+    func pruneOrphans(referencedAudio: Set<String>, referencedImages: Set<String>, referencedVideos: Set<String>) {
         prune(dir: audioBaseURL, keep: referencedAudio)
         prune(dir: imagesURL, keep: referencedImages)
+        prune(dir: videosURL, keep: referencedVideos)
     }
 
     private func prune(dir: URL, keep: Set<String>) {
@@ -263,6 +294,9 @@ final class Storage {
         }
         if fm.fileExists(atPath: audioBaseURL.path) {
             try fm.copyItem(at: audioBaseURL, to: stage.appendingPathComponent("audio"))
+        }
+        if fm.fileExists(atPath: videosURL.path) {
+            try fm.copyItem(at: videosURL, to: stage.appendingPathComponent("videos"))
         }
         try? fm.removeItem(at: dest)
         try Self.runDitto(["-c", "-k", "--keepParent", stage.path, dest.path])
@@ -295,12 +329,14 @@ final class Storage {
 
         let newImages = root.appendingPathComponent("images")
         let newAudio = root.appendingPathComponent("audio")
+        let newVideos = root.appendingPathComponent("videos")
         // Backups with a unique name per attempt → leftovers from an aborted import never collide
         // with the moveItem below (avoids restoring a stale .bak over the intact original).
         let token = UUID().uuidString
         let bakItems = baseURL.appendingPathComponent("items.json.\(token).importbak")
         let bakImages = baseURL.appendingPathComponent("images.\(token).importbak")
         let bakAudio = baseURL.appendingPathComponent("audio.\(token).importbak")
+        let bakVideos = baseURL.appendingPathComponent("videos.\(token).importbak")
         // Clean up leftovers from earlier aborted imports — but NEVER this attempt's own backups (skip our
         // token), so an overlapping import can't delete the backup we're about to rely on for rollback.
         if let leftovers = try? fm.contentsOfDirectory(at: baseURL, includingPropertiesForKeys: nil) {
@@ -321,23 +357,28 @@ final class Storage {
             if fm.fileExists(atPath: itemsURL.path)     { try fm.moveItem(at: itemsURL, to: bakItems) }
             if fm.fileExists(atPath: imagesURL.path)    { try fm.moveItem(at: imagesURL, to: bakImages) }
             if fm.fileExists(atPath: audioBaseURL.path) { try fm.moveItem(at: audioBaseURL, to: bakAudio) }
+            if fm.fileExists(atPath: videosURL.path)    { try fm.moveItem(at: videosURL, to: bakVideos) }
             // Put the new data in place.
             try fm.copyItem(at: newItemsFile, to: itemsURL)
             if fm.fileExists(atPath: newImages.path) { try fm.copyItem(at: newImages, to: imagesURL) }
             else { try fm.createDirectory(at: imagesURL, withIntermediateDirectories: true) }
             if fm.fileExists(atPath: newAudio.path) { try fm.copyItem(at: newAudio, to: audioBaseURL) }
             else { try fm.createDirectory(at: audioBaseURL, withIntermediateDirectories: true) }
+            if fm.fileExists(atPath: newVideos.path) { try fm.copyItem(at: newVideos, to: videosURL) }
+            else { try fm.createDirectory(at: videosURL, withIntermediateDirectories: true) }
         } catch {
             restore(itemsURL, bakItems)        // rollback: leaves the history as it was
             restore(imagesURL, bakImages)
             restore(audioBaseURL, bakAudio)
+            restore(videosURL, bakVideos)
             throw error
         }
 
-        [bakItems, bakImages, bakAudio].forEach { try? fm.removeItem(at: $0) }   // success: clean up backups
+        [bakItems, bakImages, bakAudio, bakVideos].forEach { try? fm.removeItem(at: $0) }   // success: clean up backups
         Self.restrict(itemsURL.path, 0o600)
         Self.restrict(imagesURL.path, 0o700)
         Self.restrict(audioBaseURL.path, 0o700)
+        Self.restrict(videosURL.path, 0o700)
         imageCache.removeAllObjects()
         let result = decryptCredentials(decoded)   // creds in the imported items.json are encrypted on disk
         // importBackup runs OFF the main thread. If any imported credential will need sealing on the next
@@ -386,7 +427,7 @@ final class Storage {
             guard !isSymlink(url), !escapes(url) else { throw Self.err(L10n.t("backup.err.notBackup")) }
         }
 
-        for name in ["items.json", "images", "audio"] {
+        for name in ["items.json", "images", "audio", "videos"] {
             let entry = root.appendingPathComponent(name)
             // Absent is fine (an old backup may have no media). isSymlink catches a DANGLING link, which
             // fileExists — which follows the link — would report as missing.
