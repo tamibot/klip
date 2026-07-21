@@ -63,7 +63,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panelController = PanelController(manager: manager, statusItem: statusItem)
         panelController.onOpenPreferences = { [weak self] in self?.openPreferences() }
         snapController = SnapController(manager: manager)
-        snapController.onCaptured = { [weak self] in self?.panelController.show() }
         panelController.onCaptureAnnotate = { [weak self] in self?.snapController.start() }
         // Meeting recording (mic + system audio → one mixed voice note in the history).
         meetingRecorder.isMicBusy = { [weak self] in self?.panelController.isVoiceRecording ?? false }
@@ -423,7 +422,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         self.scrollIndicator.hide()
                         if let image {
                             self.manager.addAnnotatedScreenshot(image, copyToClipboard: true)
-                            self.panelController.show()
+                            // Toast only — a scrolling capture is a separate errand from browsing
+                            // the history, and popping the panel over the page you just captured
+                            // is the interruption this flow exists to avoid.
+                            SoundFX.play(.success)
+                            ToastHUD.show(L10n.t("toast.copied"))
                             return
                         }
                         switch failure {

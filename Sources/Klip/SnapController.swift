@@ -8,9 +8,6 @@ final class SnapController {
     private var editor: SnapEditorController?
     private var inProgress = false
 
-    /// Invoked after adding a capture to the history (to reveal the panel: the item "flies" to Klip).
-    var onCaptured: (() -> Void)?
-
     /// What to do with the selected region: open the annotation editor, or OCR it straight to the clipboard.
     enum Mode { case annotate, text }
 
@@ -65,7 +62,6 @@ final class SnapController {
                 if Settings.shared.captureDestination == "clipboard" {
                     self.manager.addAnnotatedScreenshot(image)
                     ToastHUD.show(L10n.t("toast.copied"))
-                    self.onCaptured?()
                 } else {
                     SoundFX.play(.pop)   // region captured → editor opening
                     self.openEditor(with: image)
@@ -96,7 +92,6 @@ final class SnapController {
                 self.manager.addCapturedText(Self.collapsingHardWraps(text))
                 ToastHUD.show(L10n.t("toast.copied"))
             }
-            self.onCaptured?()
         }
     }
 
@@ -112,7 +107,10 @@ final class SnapController {
             self?.editor = nil
             guard let self, let result else { return }   // nil = closed without saving
             self.manager.addAnnotatedScreenshot(result, copyToClipboard: true)
-            self.onCaptured?()
+            // The toast IS the confirmation now: capture flows no longer pop the history panel open
+            // (they are their own thing — you were aiming at another app, not browsing clips), so
+            // without this the editor's copy would land with no feedback at all.
+            ToastHUD.show(L10n.t("toast.copied"))
         }
         self.editor = editor
         editor.present()
