@@ -162,10 +162,12 @@ private final class CaptureOverlayView: NSView {
     /// A black outline around a white core stays ≥25% on white, light, mid-grey and near-black, and
     /// the extra size makes it readable without hunting. The centre gap keeps the target pixel clear.
     private static let crosshairCursor: NSCursor = {
-        // Sized to sit alongside the system cursors rather than tower over them: 28 read as
-        // oversized in use. The stroke widths do NOT scale down with it — they are what carry the
-        // contrast, so they stay near their measured values.
-        let size: CGFloat = 20, ring: CGFloat = 3.5, gap: CGFloat = 2
+        // Proportions matter as much as size here. With a 3pt stroke on a 3.5pt-radius ring the
+        // stroke was nearly as wide as the ring itself — it closed up into a heavy dot and swallowed
+        // the inner half of the arms, so the whole thing read as "a circle" rather than a crosshair.
+        // Thin ring, and the arm gap now sits OUTSIDE the ring's outer edge (3.5 + 0.75) so the four
+        // arms are fully visible and dominate, as they do in the system cursor.
+        let size: CGFloat = 20, ring: CGFloat = 3.5, gap: CGFloat = 4.5
         let c = size / 2
         let img = NSImage(size: NSSize(width: size, height: size))
         img.lockFocus()
@@ -189,8 +191,8 @@ private final class CaptureOverlayView: NSView {
             circle.lineWidth = width
             circle.stroke()
         }
-        paint(width: 3.0, color: .white)
-        paint(width: 1.25, color: .black)
+        paint(width: 1.5, color: .white)
+        paint(width: 0.75, color: .black)
         img.unlockFocus()
         // Symmetric image, so the hotspot is the centre in either coordinate convention.
         return NSCursor(image: img, hotSpot: NSPoint(x: c, y: c))
