@@ -424,8 +424,14 @@ final class ScrollCaptureController: NSObject {
     /// Passive progress + one Cancel. ToastHUD's exact action-button recipe — the shipped,
     /// known-clickable combination of nonactivating borderless panel + plain target/action button.
     private func buildPanel() {
-        // Sized against the widest realistic status so the pill never grows mid-capture.
-        let status = NSTextField(labelWithString: String(format: L10n.t("scroll.status"), 888, 88_888))
+        // Sized against the widest realistic status so the pill never grows mid-capture — and that
+        // means BOTH modes: the manual-fallback string is the longer one in most languages, and
+        // sizing only for the automatic one truncated it to "Desplaza tú la pá…" exactly when the
+        // user most needs to read it.
+        let autoSample = String(format: L10n.t("scroll.status"), 888, 88_888)
+        let manualSample = String(format: L10n.t("scroll.status.manual"), 888)
+        let widest = manualSample.count > autoSample.count ? manualSample : autoSample
+        let status = NSTextField(labelWithString: widest)
         status.font = .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
         status.textColor = .labelColor
         status.lineBreakMode = .byTruncatingTail
