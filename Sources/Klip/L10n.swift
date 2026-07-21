@@ -409,7 +409,9 @@ enum L10n {
         "prefs.sc.scroll": "Captura con scroll:",
         "scroll.status": "%d capturas · alto ≈ %d px",
         "rec.screen.stop": "Detener",
-        "scroll.needsAX": "La captura con scroll necesita Accesibilidad (como el auto-pegado) para desplazar la página por ti",
+        "scroll.needsAX": "La captura con scroll necesita permiso de Accesibilidad",
+        "scroll.needsAX.detail": "Si Klip ya aparece en la lista, desactívalo y vuelve a activarlo — macOS ata el permiso a cada versión compilada.",
+        "scroll.needsAX.action": "Abrir ajustes",
     ]
 
     private static let en: [String: String] = [
@@ -802,7 +804,9 @@ enum L10n {
         "prefs.sc.scroll": "Scrolling capture:",
         "scroll.status": "%d captures · height ≈ %d px",
         "rec.screen.stop": "Stop",
-        "scroll.needsAX": "Scrolling capture needs Accessibility (like auto-paste) to scroll the page for you",
+        "scroll.needsAX": "Scrolling capture needs Accessibility permission",
+        "scroll.needsAX.detail": "If Klip already appears in the list, turn it OFF and ON again — macOS ties the permission to each build.",
+        "scroll.needsAX.action": "Open settings",
     ]
 
     // The translations below (fr/de/it/pt/zh/ja) are filled in by the translation workflow; any
@@ -1198,7 +1202,9 @@ enum L10n {
         "prefs.sc.scroll": "Capture défilante :",
         "scroll.status": "%d captures · hauteur ≈ %d px",
         "rec.screen.stop": "Arrêter",
-        "scroll.needsAX": "La capture défilante nécessite l'Accessibilité (comme le collage auto) pour faire défiler la page",
+        "scroll.needsAX": "La capture défilante nécessite l'autorisation d'Accessibilité",
+        "scroll.needsAX.detail": "Si Klip figure déjà dans la liste, désactivez-le puis réactivez-le — macOS lie l'autorisation à chaque version.",
+        "scroll.needsAX.action": "Ouvrir les réglages",
     ]
 
     private static let de: [String: String] = [
@@ -1592,7 +1598,9 @@ enum L10n {
         "prefs.sc.scroll": "Scroll-Aufnahme:",
         "scroll.status": "%d Aufnahmen · Höhe ≈ %d px",
         "rec.screen.stop": "Stopp",
-        "scroll.needsAX": "Die Scroll-Aufnahme braucht Bedienungshilfen (wie Auto-Einfügen), um die Seite für dich zu scrollen",
+        "scroll.needsAX": "Die Scroll-Aufnahme braucht die Bedienungshilfen-Berechtigung",
+        "scroll.needsAX.detail": "Wenn Klip bereits in der Liste steht, schalte es aus und wieder ein — macOS bindet die Berechtigung an jeden Build.",
+        "scroll.needsAX.action": "Einstellungen öffnen",
     ]
 
     private static let it: [String: String] = [
@@ -1986,7 +1994,9 @@ enum L10n {
         "prefs.sc.scroll": "Cattura con scorrimento:",
         "scroll.status": "%d catture · altezza ≈ %d px",
         "rec.screen.stop": "Stop",
-        "scroll.needsAX": "La cattura con scorrimento richiede Accessibilità (come l'incolla automatico) per scorrere la pagina",
+        "scroll.needsAX": "La cattura con scorrimento richiede il permesso Accessibilità",
+        "scroll.needsAX.detail": "Se Klip è già nell’elenco, disattivalo e riattivalo — macOS lega il permesso a ogni build.",
+        "scroll.needsAX.action": "Apri Impostazioni",
     ]
 
     private static let pt: [String: String] = [
@@ -2380,7 +2390,9 @@ enum L10n {
         "prefs.sc.scroll": "Captura com rolagem:",
         "scroll.status": "%d capturas · altura ≈ %d px",
         "rec.screen.stop": "Parar",
-        "scroll.needsAX": "A captura com rolagem precisa de Acessibilidade (como o colar automático) para rolar a página por você",
+        "scroll.needsAX": "A captura com rolagem precisa da permissão de Acessibilidade",
+        "scroll.needsAX.detail": "Se o Klip já aparece na lista, desative e ative novamente — o macOS vincula a permissão a cada versão.",
+        "scroll.needsAX.action": "Abrir ajustes",
     ]
 
     private static let zh: [String: String] = [
@@ -2774,7 +2786,9 @@ enum L10n {
         "prefs.sc.scroll": "滚动截屏：",
         "scroll.status": "%d 张 · 高度 ≈ %d px",
         "rec.screen.stop": "停止",
-        "scroll.needsAX": "滚动截屏需要辅助功能权限（与自动粘贴相同）来替你滚动页面",
+        "scroll.needsAX": "滚动截屏需要辅助功能权限",
+        "scroll.needsAX.detail": "如果 Klip 已在列表中，请先关闭再打开 — macOS 会把权限绑定到每个构建版本。",
+        "scroll.needsAX.action": "打开设置",
     ]
 
     private static let ja: [String: String] = [
@@ -3168,6 +3182,8 @@ enum L10n {
         "prefs.sc.scroll": "スクロールキャプチャ:",
         "scroll.status": "%d 枚 · 高さ ≈ %d px",
         "rec.screen.stop": "停止",
-        "scroll.needsAX": "スクロールキャプチャには（自動ペーストと同じ）アクセシビリティ権限が必要です",
+        "scroll.needsAX": "スクロールキャプチャにはアクセシビリティ権限が必要です",
+        "scroll.needsAX.detail": "Klip がすでに一覧にある場合は、オフにしてからオンに戻してください — macOS は権限をビルドごとに紐付けます。",
+        "scroll.needsAX.action": "設定を開く",
     ]
 }

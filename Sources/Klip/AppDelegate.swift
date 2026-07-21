@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let recIndicator = RecordingIndicator()
     private var scrollOverlay: CaptureOverlayController?
     private var scrollCapture: ScrollCaptureController?
+    private let scrollIndicator = RecordingIndicator()
     /// Modifier-less Esc, registered ONLY while a scroll-capture session runs. A local monitor never
     /// worked — Klip isn't the active app during the capture; a Carbon hotkey is delivery-independent.
     private var scrollEscHotKey: HotKey?
@@ -419,6 +420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         guard let self else { return }
                         self.scrollCapture = nil
                         self.scrollEscHotKey = nil   // release the session-scoped Esc
+                        self.scrollIndicator.hide()
                         if let image {
                             self.manager.addAnnotatedScreenshot(image, copyToClipboard: true)
                             self.panelController.show()
@@ -426,9 +428,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         }
                         switch failure {
                         case .needsAccessibility:
-                            // Same permission auto-paste uses; the system prompt takes over.
-                            Paster.ensureAccessibilityPermission(prompt: true)
-                            ToastHUD.show(L10n.t("scroll.needsAX"), style: .failure)
+                            // The list can SHOW Klip enabled while macOS still refuses: the entry is
+                            // bound to the previous build's signature, so every reinstall staleness it.
+                            // Say exactly that, and open the pane — the fix is toggling it off and on.
+                            SoundFX.error()
+                            ToastHUD.show(L10n.t("scroll.needsAX"),
+                                          detail: L10n.t("scroll.needsAX.detail"),
+                                          style: .failure,
+                                          actionTitle: L10n.t("scroll.needsAX.action")) {
+                                Paster.ensureAccessibilityPermission(prompt: true)
+                                if let u = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                    NSWorkspace.shared.open(u)
+                                }
+                            }
                         case .failed:
                             SoundFX.error(); ToastHUD.show(L10n.t("capture.failed"), style: .failure)
                         case nil:
@@ -436,6 +448,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         }
                     }
                     self.scrollCapture = ctrl
+                    // Same floating frame the recorder uses, in the accent color: marks WHAT is being
+                    // captured while Klip scrolls the page itself.
+                    self.scrollIndicator.showFrame(screen: screen, region: region)
                     // Esc cancels from ANY app while the session runs; released in the callback above.
                     self.scrollEscHotKey = HotKey(keyCode: UInt32(kVK_Escape), modifiers: 0, id: 9) { [weak self] in
                         self?.scrollCapture?.cancel()

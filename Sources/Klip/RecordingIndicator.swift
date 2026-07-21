@@ -13,29 +13,20 @@ final class RecordingIndicator {
     private var elapsedLabel: NSTextField?
     private var onStop: (() -> Void)?
 
+    /// Frame only, no pill — for flows that draw their own controls (scrolling capture shows its
+    /// own progress pill, so a second one would be redundant).
+    func showFrame(screen: NSScreen, region: CGRect, color: NSColor = .controlAccentColor) {
+        hide()
+        installBorder(screen: screen, region: region, color: color)
+    }
+
     /// `region` in TOP-LEFT display-local points (the recorder's coordinate space).
     func show(screen: NSScreen, region: CGRect, onStop: @escaping () -> Void) {
         hide()
         self.onStop = onStop
         startedAt = Date()
 
-        // Convert to global Cocoa (bottom-left) and put the stroke OUTSIDE the recorded area, so
-        // the frame marks the region without sitting on its edge pixels.
-        let frame = NSRect(x: screen.frame.minX + region.minX,
-                           y: screen.frame.maxY - region.maxY,
-                           width: region.width, height: region.height)
-            .insetBy(dx: -3, dy: -3)
-
-        let border = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        border.isOpaque = false
-        border.backgroundColor = .clear
-        border.hasShadow = false
-        border.level = .floating
-        border.ignoresMouseEvents = true   // pure decoration: clicks go to the app being recorded
-        border.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        border.contentView = BorderView(frame: NSRect(origin: .zero, size: frame.size))
-        border.orderFrontRegardless()
-        borderWindow = border
+        let frame = installBorder(screen: screen, region: region, color: .systemRed)
 
         // Control pill below the region (above when there's no room), never overlapping it.
         let pillSize = NSSize(width: 148, height: 34)
@@ -100,6 +91,27 @@ final class RecordingIndicator {
         }
     }
 
+    /// Convert to global Cocoa (bottom-left) and put the stroke OUTSIDE the marked area, so the
+    /// frame marks the region without sitting on its edge pixels. Returns the (inset) frame.
+    @discardableResult
+    private func installBorder(screen: NSScreen, region: CGRect, color: NSColor) -> NSRect {
+        let frame = NSRect(x: screen.frame.minX + region.minX,
+                           y: screen.frame.maxY - region.maxY,
+                           width: region.width, height: region.height)
+            .insetBy(dx: -3, dy: -3)
+        let border = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        border.isOpaque = false
+        border.backgroundColor = .clear
+        border.hasShadow = false
+        border.level = .floating
+        border.ignoresMouseEvents = true   // pure decoration: clicks go to the app underneath
+        border.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        border.contentView = BorderView(frame: NSRect(origin: .zero, size: frame.size), color: color)
+        border.orderFrontRegardless()
+        borderWindow = border
+        return frame
+    }
+
     @objc private func stopTapped() { onStop?() }
 
     func hide() {
@@ -113,11 +125,18 @@ final class RecordingIndicator {
     /// 3pt red rounded stroke with a white hairline just outside it, so the frame stays visible
     /// over both dark and light content.
     private final class BorderView: NSView {
+        private let color: NSColor
+        init(frame: NSRect, color: NSColor) {
+            self.color = color
+            super.init(frame: frame)
+        }
+        required init?(coder: NSCoder) { fatalError() }
+
         override func draw(_ dirtyRect: NSRect) {
             let inner = bounds.insetBy(dx: 1.5, dy: 1.5)
             let path = NSBezierPath(roundedRect: inner, xRadius: 5, yRadius: 5)
             path.lineWidth = 3
-            NSColor.systemRed.setStroke()
+            color.setStroke()
             path.stroke()
             let halo = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25), xRadius: 6, yRadius: 6)
             halo.lineWidth = 0.5

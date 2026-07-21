@@ -8,7 +8,7 @@ private final class ShieldWindow: NSWindow {
     override var canBecomeMain: Bool { true }
 }
 
-/// Borderless full-screen window that shows the frozen, dimmed capture and lets
+/// Borderless full-screen window that shows the frozen capture (undimmed, ⌘⇧4-style) and lets
 /// the user drag out a region. On release, it crops and returns an NSImage of the chosen area.
 final class CaptureOverlayController {
     private var window: NSWindow?
@@ -128,7 +128,9 @@ final class CaptureOverlayController {
     }
 }
 
-/// View that draws the frozen capture, the dimming, the selection, and the dimensions badge.
+/// View that draws the frozen capture, the selection, and the dimensions badge.
+/// Visual target is the system's ⌘⇧4 marquee: the screen is NOT darkened, the selection is a
+/// light translucent wash inside a hairline border, and the readouts are dark capsules.
 private final class CaptureOverlayView: NSView {
     private let shot: DisplayShot
     private let onSelect: (NSRect) -> Void
@@ -141,9 +143,6 @@ private final class CaptureOverlayView: NSView {
     private var optionHeld = false              // Option = resize from the press point (center)
     private var spaceHeld = false               // Space = move the in-progress selection
     private let bgImage: NSImage
-    /// Marching-ants phase: advanced by a timer while a selection exists (skipped under Reduce Motion).
-    private var antsPhase: CGFloat = 0
-    private var antsTimer: Timer?
     /// Mouse position while roaming (before the drag): drives the x,y crosshair badge.
     private var hoverPoint: NSPoint?
     /// 1 → 0 white flash over the selection right after mouse-up, confirming the capture.
@@ -159,9 +158,6 @@ private final class CaptureOverlayView: NSView {
         super.init(frame: NSRect(origin: .zero, size: shot.screen.frame.size))
     }
     required init?(coder: NSCoder) { fatalError() }
-
-    // Esc mid-drag tears the window down without a mouseUp — stop the ants with the view.
-    deinit { antsTimer?.invalidate() }
 
     override var acceptsFirstResponder: Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
@@ -193,29 +189,12 @@ private final class CaptureOverlayView: NSView {
         needsDisplay = true
     }
 
-    /// The classic animated dashed border. Runs only while a selection exists.
-    private func setAnts(running: Bool) {
-        if running, antsTimer == nil, !reduceMotion {
-            let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] timer in
-                MainActor.assumeIsolated {
-                    // Esc mid-drag dismisses without mouseUp: self-invalidate once the view is
-                    // gone (same pattern as the flash timer) so the timer can't leak.
-                    guard let self else { timer.invalidate(); return }
-                    self.antsPhase += 0.6
-                    self.needsDisplay = true
-                }
-            }
-            RunLoop.main.add(t, forMode: .common)
-            antsTimer = t
-        } else if !running {
-            antsTimer?.invalidate(); antsTimer = nil
-        }
-    }
-
     override func draw(_ dirtyRect: NSRect) {
-        // Background: the frozen capture — kept fully legible (Shottr-style). Blacking the whole
-        // screen out made every capture feel like a modal interruption; the crosshair + hint pill
-        // already signal the mode.
+        // Background: the frozen capture, drawn 1:1. bgImage is built at `screen.frame.size` POINTS
+        // from a bitmap captured at `points × backingScaleFactor` PIXELS (see ScreenCapturer), and
+        // `bounds` is that same point size on a backing store of that same scale — so this is an
+        // identity blit, no resampling. That exactness is load-bearing now that nothing is dimmed:
+        // any scaling here would show up as a blurry "screen" the moment the overlay appears.
         bgImage.draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
 
         guard currentRect.width > 0, currentRect.height > 0 else {
@@ -224,25 +203,29 @@ private final class CaptureOverlayView: NSView {
             return
         }
 
-        // Once a drag starts, a SOFT outside dim makes the selection pop without hiding the screen.
-        NSColor.black.withAlphaComponent(0.18).setFill()
-        bounds.fill()
+        // NO outside dim. ⌘⇧4 never darkens the screen, and neither do we — the wash + border below
+        // is the whole signal. (The old 18% black veil is what users read as "the screen went dark".)
 
-        // "Hole": repaint the selected area without dimming.
-        bgImage.draw(in: currentRect, from: pixelSourceRect(for: currentRect), operation: .copy, fraction: 1)
+        // Selection interior: a light translucent wash. Light rather than dark keeps the content
+        // underneath readable, which is the point — you're aiming at something you can still see.
+        NSColor.white.withAlphaComponent(0.14).setFill()
+        currentRect.fill(using: .sourceOver)
 
-        // Selection border: a solid hairline underneath + animated marching ants on top,
-        // so the marquee reads on any background and feels alive (Shottr-style).
-        let borderRect = currentRect.insetBy(dx: -0.5, dy: -0.5)
-        NSColor.white.withAlphaComponent(0.9).setStroke()
-        let base = NSBezierPath(rect: borderRect)
-        base.lineWidth = 1.5
-        base.stroke()
-        NSColor.controlAccentColor.setStroke()
-        let ants = NSBezierPath(rect: borderRect)
-        ants.lineWidth = 1.5
-        ants.setLineDash([6, 4], count: 2, phase: antsPhase)
-        ants.stroke()
+        // Border: two ONE-DEVICE-PIXEL strokes — a dark hairline immediately outside, a white line
+        // immediately inside — so the edge reads on white desktops and dark ones alike.
+        // currentRect is already snapped to the device-pixel grid (see pixelSnapped), so insetting by
+        // half a device pixel puts each stroke's centerline through the middle of one physical pixel
+        // row: crisp, never straddling two. ponytail: no marching ants. Undimmed, an animated accent
+        // dash reads as noise on top of live-looking content, and it cost a 30 Hz full-screen redraw.
+        let px = 1 / max(shot.scale, 1)
+        NSColor.black.withAlphaComponent(0.45).setStroke()
+        let outer = NSBezierPath(rect: currentRect.insetBy(dx: -px / 2, dy: -px / 2))
+        outer.lineWidth = px
+        outer.stroke()
+        NSColor.white.withAlphaComponent(0.95).setStroke()
+        let inner = NSBezierPath(rect: currentRect.insetBy(dx: px / 2, dy: px / 2))
+        inner.lineWidth = px
+        inner.stroke()
 
         // Capture-confirm flash: a brief white pulse over the region right after mouse-up.
         if flashAlpha > 0 {
@@ -253,10 +236,7 @@ private final class CaptureOverlayView: NSView {
         drawDimensionBadge(for: currentRect)
     }
 
-    /// Source rect (in image points, bottom-left origin) corresponding to the view area.
-    private func pixelSourceRect(for rect: NSRect) -> NSRect { rect }
-
-    /// Centered hint shown while the user hasn't dragged anything yet (so the overlay is self-explanatory).
+    /// Hint bar shown while the user hasn't dragged anything yet (so the overlay is self-explanatory).
     private func drawHint() {
         let text = L10n.t("capture.hint") as NSString
         let attrs: [NSAttributedString.Key: Any] = [
@@ -269,8 +249,11 @@ private final class CaptureOverlayView: NSView {
         let padX: CGFloat = 16, padY: CGFloat = 12
         let contentW = max(size.width, legend.width)
         let contentH = size.height + lineGap + legend.height
+        // Bottom-anchored, not centered. With nothing dimmed the screen has to read as untouched
+        // before the drag, and a dark block parked in the middle of the user's content is the one
+        // thing left that doesn't. Down here it's a hint bar, out of the way of what you're aiming at.
         let pill = NSRect(x: bounds.midX - (contentW + padX * 2) / 2,
-                          y: bounds.midY - (contentH + padY * 2) / 2,
+                          y: bounds.minY + 64,
                           width: contentW + padX * 2, height: contentH + padY * 2)
         NSColor.black.withAlphaComponent(0.7).setFill()
         // Two lines make this a block, not a chip: a full-capsule radius (right when the hint was one
@@ -376,9 +359,10 @@ private final class CaptureOverlayView: NSView {
         if badge.minY < bounds.minY { badge.origin.y = rect.minY + 6 }
         badge.origin.x = max(bounds.minX, min(badge.origin.x, bounds.maxX - badge.width))
 
-        // Active-selection readout: solid accent fill + white content, tying it to the accent
-        // marching ants (design language rule 1: selection = solid accent).
-        NSColor.controlAccentColor.setFill()
+        // Dark translucent capsule + white monospaced digits, same recipe as the x,y readout.
+        // Was a solid accent fill to match the accent marching ants; those are gone, and against an
+        // undimmed screen a saturated chip shouted louder than the region it was measuring.
+        NSColor.black.withAlphaComponent(0.7).setFill()
         NSBezierPath(roundedRect: badge, xRadius: 6, yRadius: 6).fill()
         (label as NSString).draw(at: NSPoint(x: badge.minX + pad, y: badge.minY + pad / 2), withAttributes: attrs)
     }
@@ -392,7 +376,6 @@ private final class CaptureOverlayView: NSView {
         optionHeld = event.modifierFlags.contains(.option)
         currentRect = .zero
         hoverPoint = nil
-        setAnts(running: true)
         needsDisplay = true
     }
 
@@ -460,7 +443,6 @@ private final class CaptureOverlayView: NSView {
         let rect = currentRect
         startPoint = nil
         lastDragPoint = nil
-        setAnts(running: false)
         guard rect.width >= 4, rect.height >= 4 else { onCancel(); return }
         guard !reduceMotion else { onSelect(rect); return }
         // Confirm visually before handing off: a ~120ms white pulse over the captured region.

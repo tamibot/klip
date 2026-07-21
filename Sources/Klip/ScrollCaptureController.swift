@@ -136,6 +136,8 @@ final class ScrollCaptureController: NSObject {
         }
         // Same privilege class as auto-paste (Paster): posting CGEvents needs Accessibility.
         // Distinct failure so the caller can prompt instead of showing a generic error.
+        try? "AXIsProcessTrusted=\(Paster.hasAccessibilityPermission) bundle=\(Bundle.main.bundlePath)\n"
+            .write(toFile: "/tmp/klip_ax.log", atomically: true, encoding: .utf8)
         guard Paster.hasAccessibilityPermission else { finish(nil, .needsAccessibility); return }
         do {
             let content = try await SCShareableContent
