@@ -8,7 +8,7 @@ import Foundation
 /// history). For real encryption, sign with a Developer ID and switch back to the Keychain.
 enum SecretStore {
     /// Each provider stores its key in a separate file (0600) in the app's directory.
-    enum Key: String { case openai = "openai.key", gemini = "gemini.key" }
+    enum Key: String { case openai = "openai.key", gemini = "gemini.key", s3 = "s3.key" }
 
     private static func fileURL(_ k: Key) -> URL {
         Storage.shared.baseURL.appendingPathComponent(k.rawValue)

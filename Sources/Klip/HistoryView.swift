@@ -714,6 +714,33 @@ struct ItemRow: View {
         return NSItemProvider(object: (item.text ?? "") as NSString)
     }
 
+    /// Uploads this clip to the user's own bucket (Preferences → Sharing) and puts the public
+    /// link on the clipboard. Strictly per-item and per-click — nothing is ever auto-uploaded.
+    /// Credentials never reach here: the menu only offers the action on image/text branches.
+    private func shareLink() {
+        let payload: (data: Data, ext: String, type: String)?
+        if item.kind == .image, let f = item.imageFileName,
+           let d = try? Data(contentsOf: Storage.shared.imageURL(for: f)) {
+            payload = (d, "png", "image/png")
+        } else if let t = item.text, !t.isEmpty {
+            payload = (Data(t.utf8), "txt", "text/plain; charset=utf-8")
+        } else { payload = nil }
+        guard let payload else { return }
+        Task { @MainActor in
+            do {
+                let url = try await S3Uploader.upload(data: payload.data, ext: payload.ext,
+                                                      contentType: payload.type)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                SoundFX.play(.success)
+                ToastHUD.show(L10n.t("toast.linkCopied"), detail: url.host ?? "")
+            } catch {
+                SoundFX.error()
+                ToastHUD.show(L10n.t("toast.linkFailed"), detail: error.localizedDescription, style: .failure)
+            }
+        }
+    }
+
     // MARK: - VoiceOver
 
     /// What VoiceOver reads for the row: type, then the user's name for the clip or its preview, then
@@ -950,6 +977,9 @@ struct ItemRow: View {
             Button { onAnnotate(item) } label: { Label(L10n.t("row.annotate"), systemImage: "pencil.tip.crop.circle") }
             Button { onSaveImage(item) } label: { Label(L10n.t("row.save"), systemImage: "square.and.arrow.down") }
             Button { onOCR() } label: { Label(L10n.t("row.ocr"), systemImage: "text.viewfinder") }
+            if S3Uploader.isConfigured, item.imageFileName != nil {
+                Button { shareLink() } label: { Label(L10n.t("row.copylink"), systemImage: "link") }
+            }
         } else if isCredential {
             Button { manager.toggleCredential(item) } label: { Label(L10n.t("row.unmarkcred"), systemImage: "key.slash") }
         } else {
@@ -962,6 +992,9 @@ struct ItemRow: View {
             }
             Button { onCopyMarkdown(item) } label: { Label(L10n.t("row.markdown"), systemImage: "doc.richtext") }
             Button { onSaveAsFile(item) } label: { Label(L10n.t("row.savefile"), systemImage: "square.and.arrow.down") }
+            if S3Uploader.isConfigured, hasText {
+                Button { shareLink() } label: { Label(L10n.t("row.copylink"), systemImage: "link") }
+            }
             Button { manager.toggleCredential(item) } label: { Label(L10n.t("row.markcred"), systemImage: "key") }
         }
         Divider()

@@ -74,6 +74,10 @@ struct PreferencesView: View {
     @State private var launchAtLogin = LoginItem.shared.isEnabledOrPending
     @State private var loginError: String?
     @State private var accessibilityGranted = Paster.hasAccessibilityPermission
+    @StateObject private var s3Key = APIKeyModel(.s3)
+    @State private var draftS3Secret = ""
+    @State private var showS3Secret = false
+    @State private var s3TestState: String? = nil   // nil / "testing" / "ok" / error text
 
     private let models = ["gpt-4o-mini-transcribe", "whisper-1"]
     // Gemini models. The "-latest" aliases avoid 404s from deprecation; pinned
@@ -322,6 +326,57 @@ struct PreferencesView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            Section(header: sectionHeader("prefs.share.section")) {
+                Text(L10n.t("prefs.share.help")).font(.caption).foregroundStyle(.secondary)
+                TextField(L10n.t("prefs.share.endpoint"), text: $settings.s3Endpoint,
+                          prompt: Text(verbatim: "https://<account>.r2.cloudflarestorage.com"))
+                    .textFieldStyle(.roundedBorder).autocorrectionDisabled()
+                HStack {
+                    TextField(L10n.t("prefs.share.region"), text: $settings.s3Region,
+                              prompt: Text(verbatim: "auto"))
+                        .textFieldStyle(.roundedBorder).autocorrectionDisabled()
+                    TextField(L10n.t("prefs.share.bucket"), text: $settings.s3Bucket,
+                              prompt: Text(verbatim: "my-bucket"))
+                        .textFieldStyle(.roundedBorder).autocorrectionDisabled()
+                }
+                TextField(L10n.t("prefs.share.accessKey"), text: $settings.s3AccessKey)
+                    .textFieldStyle(.roundedBorder).autocorrectionDisabled()
+                keyStatus(s3Key)
+                HStack {
+                    if showS3Secret {
+                        TextField(L10n.t("prefs.share.secretKey"), text: $draftS3Secret)
+                            .textFieldStyle(.roundedBorder).onSubmit { saveS3Secret() }
+                    } else {
+                        SecureField(L10n.t("prefs.share.secretKey"), text: $draftS3Secret)
+                            .textFieldStyle(.roundedBorder).onSubmit { saveS3Secret() }
+                    }
+                    Button { showS3Secret.toggle() } label: { Image(systemName: showS3Secret ? "eye.slash" : "eye") }
+                        .buttonStyle(PressableButtonStyle()).foregroundStyle(.secondary)
+                }
+                TextField(L10n.t("prefs.share.publicBase"), text: $settings.s3PublicBase,
+                          prompt: Text(verbatim: "https://pub-xxxx.r2.dev"))
+                    .textFieldStyle(.roundedBorder).autocorrectionDisabled()
+                HStack {
+                    Button(L10n.t("common.save")) { saveS3Secret() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(draftS3Secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(L10n.t("common.delete"), role: .destructive) { s3Key.delete() }
+                        .buttonStyle(.bordered).disabled(!s3Key.isConfigured)
+                    Button(L10n.t("prefs.share.test")) { testS3() }
+                        .buttonStyle(.bordered)
+                        .disabled(!S3Uploader.isConfigured || s3TestState == "testing")
+                    if s3TestState == "testing" { ProgressView().controlSize(.small) }
+                    else if s3TestState == "ok" {
+                        Label(L10n.t("prefs.share.testOK"), systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green).font(.caption)
+                    }
+                }
+                if let t = s3TestState, t != "testing", t != "ok" {
+                    Text(t).font(.caption).foregroundStyle(.red)
+                }
+                if let err = s3Key.errorMessage { Text(err).font(.caption).foregroundStyle(.red) }
+            }
+
             Section(header: sectionHeader("prefs.excluded.section")) {
                 if settings.excludedBundleIDs.isEmpty {
                     Text(L10n.t("prefs.excluded.none"))
@@ -385,6 +440,24 @@ struct PreferencesView: View {
     private func commitFocusedField() {
         if let window = NSApp.keyWindow {
             window.makeFirstResponder(nil)   // endEditing → flushes the text to the binding
+        }
+    }
+
+    private func saveS3Secret() {
+        commitFocusedField()
+        DispatchQueue.main.async {
+            if s3Key.save(draftS3Secret) { SoundFX.play(.success); draftS3Secret = ""; showS3Secret = false }
+        }
+    }
+
+    /// A real PUT + DELETE against the configured bucket, so a bad credential fails here
+    /// instead of on the first shared clip.
+    private func testS3() {
+        guard let config = S3Uploader.configured else { return }
+        s3TestState = "testing"
+        Task { @MainActor in
+            do { try await S3Uploader.testConnection(config); s3TestState = "ok"; SoundFX.play(.success) }
+            catch { s3TestState = error.localizedDescription; SoundFX.error() }
         }
     }
 

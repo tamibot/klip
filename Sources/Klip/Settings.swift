@@ -170,6 +170,11 @@ final class Settings: ObservableObject {
         static let keyCode7   = "screenRecHotKeyCode"
         static let mods7      = "screenRecHotKeyModifiers"
         static let uiLang     = "uiLanguage"
+        static let s3Endpoint = "s3Endpoint"
+        static let s3Region   = "s3Region"
+        static let s3Bucket   = "s3Bucket"
+        static let s3AccessKey = "s3AccessKey"
+        static let s3PublicBase = "s3PublicBase"
     }
 
     @Published var maxItems: Int          { didSet { d.set(maxItems, forKey: K.maxItems) } }
@@ -229,6 +234,12 @@ final class Settings: ObservableObject {
         d.set(Int(screenRecCombo.keyCode), forKey: K.keyCode7)
         d.set(Int(screenRecCombo.carbonModifiers), forKey: K.mods7)
     } }
+    // Share-link (S3-compatible) settings. The SECRET key lives in SecretStore, never in defaults.
+    @Published var s3Endpoint: String   { didSet { d.set(s3Endpoint, forKey: K.s3Endpoint) } }
+    @Published var s3Region: String     { didSet { d.set(s3Region, forKey: K.s3Region) } }
+    @Published var s3Bucket: String     { didSet { d.set(s3Bucket, forKey: K.s3Bucket) } }
+    @Published var s3AccessKey: String  { didSet { d.set(s3AccessKey, forKey: K.s3AccessKey) } }
+    @Published var s3PublicBase: String { didSet { d.set(s3PublicBase, forKey: K.s3PublicBase) } }
     @Published var uiLanguage: String     { didSet {
         d.set(uiLanguage, forKey: K.uiLang)
         // Keep the audio language following the platform language, but ONLY while the user hasn't
@@ -309,6 +320,11 @@ final class Settings: ObservableObject {
                                 carbonModifiers: UInt32(d.integer(forKey: K.mods6)))
         screenRecCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode7)),
                                   carbonModifiers: UInt32(d.integer(forKey: K.mods7)))
+        s3Endpoint = d.string(forKey: K.s3Endpoint) ?? ""
+        s3Region = d.string(forKey: K.s3Region) ?? "auto"
+        s3Bucket = d.string(forKey: K.s3Bucket) ?? ""
+        s3AccessKey = d.string(forKey: K.s3AccessKey) ?? ""
+        s3PublicBase = d.string(forKey: K.s3PublicBase) ?? ""
         uiLanguage = d.string(forKey: K.uiLang) ?? "en"
 
         // One-time migration: the capture default changed from ⌘⇧2 to ⌘⇧U (⌘⇧2 was hijacked by apps like Loom).
