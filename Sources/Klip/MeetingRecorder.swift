@@ -107,7 +107,8 @@ final class MeetingRecorder: NSObject, ObservableObject, SCStreamDelegate, AVAud
             activity.touch()
             isRecording = true
             startTimer()
-            SoundFX.play(.recordStart)
+            // No start chime on purpose: the mic track is already recording, so the cue would be baked
+            // into the head of the meeting note. The meeting HUD signals the start.
         }
     }
 

@@ -57,6 +57,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // isBusy (recording OR async starting OR stopping) closes the startup window where a voice
         // recording could grab the mic while the meeting's streams are still coming up.
         panelController.isMeetingRecording = { [weak self] in self?.meetingRecorder.isBusy ?? false }
+        // Mute the interface cues while a mic is hot: they play out of the speakers and would be picked
+        // up by the voice-note / meeting recorder (no echo cancellation) and transcribed with the note.
+        SoundFX.micIsLive = { [weak self] in
+            guard let self else { return false }
+            return self.meetingRecorder.isBusy || self.panelController.isVoiceRecording
+        }
         meetingRecorder.onMeetingReady = { [weak self] fileName, duration in
             guard let self else { return nil }
             let id = self.manager.beginVoiceNote(audioFileName: fileName, duration: duration, allowAutoCopy: false)

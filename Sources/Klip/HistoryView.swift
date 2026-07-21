@@ -298,13 +298,23 @@ struct HistoryView: View {
         selecting.toggle()
         if !selecting { selectedBatch = []; batchAnchor = nil }
     }
+    /// Move the KEYBOARD cursor to a row the mouse just acted on. Batch mode otherwise keeps two
+    /// independent "current row" markers — `batchAnchor` (mouse) and `selection.selectedIndex`
+    /// (keyboard, which draws the focus ring and is what Return/↑/↓ act on) — and they diverge the
+    /// moment the mouse is used: click row 5, press Return, and row 0 gets checked instead.
+    /// Indexed against `visibleIDs`, the array `selectedIndex` actually indexes.
+    private func focusRow(_ id: UUID) {
+        if let i = selection.visibleIDs.firstIndex(of: id) { selection.selectedIndex = i }
+    }
     private func toggleCheck(_ id: UUID) {
+        focusRow(id)
         if selectedBatch.contains(id) { selectedBatch.remove(id) } else { selectedBatch.insert(id) }
         batchAnchor = id
     }
     /// Cmd-click on a row outside batch mode: the Finder-style shortcut into multi-select, with that
     /// row already checked — otherwise the only way in is the header button.
     private func commandSelect(_ id: UUID) {
+        focusRow(id)
         selecting = true
         selectedBatch = [id]
         batchAnchor = id
@@ -313,6 +323,7 @@ struct HistoryView: View {
     /// row in FILTERED order — what the user sees is what gets checked. The clicked end decides the
     /// direction, so Shift-clicking a checked row clears the run instead of re-checking it.
     private func rangeSelect(_ id: UUID) {
+        focusRow(id)
         let ids = filtered.map(\.id)
         guard let to = ids.firstIndex(of: id) else { return }
         let from = batchAnchor.flatMap { ids.firstIndex(of: $0) } ?? to

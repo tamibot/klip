@@ -630,6 +630,10 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     private func updateDraft() {
         guard var d = draft, let anchor = draftAnchor, let p = lastDraftPoint,
               d.tool != .pencil, d.tool != .marker else { return }
+        // No drag yet: don't promote the 1-point draft to a pair. flagsChanged also lands here, so
+        // tapping ⇧/⌥ on a press with no movement would otherwise satisfy mouseUp's `points.count > 1`
+        // and commit a zero-extent annotation (plus an undo step) for what was just a click.
+        guard d.points.count > 1 || p != anchor else { return }
         var dx = p.x - anchor.x
         var dy = p.y - anchor.y
         switch d.tool {

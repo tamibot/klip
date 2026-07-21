@@ -34,8 +34,18 @@ enum SoundFX {
         }
     }
 
+    /// True while a microphone recording is live. Our cues leave the default OUTPUT device, and the
+    /// voice-note / meeting AVAudioRecorder has no echo cancellation — so anything played while the mic
+    /// is hot gets picked up acoustically and baked into the stored, transcribed note.
+    /// (ScreenCaptureKit's `excludesCurrentProcessAudio` only covers the SYSTEM-audio tap, not the mic.)
+    /// Wired in AppDelegate, mirroring the existing isMicBusy / isMeetingRecording closures.
+    static var micIsLive: () -> Bool = { false }
+
     static func play(_ event: Event) {
         guard Settings.shared.soundEffects else { return }
+        // .recordStop is exempt: it fires as the recording ends and is the user's audible confirmation
+        // (the recorder can still report busy while it finalizes).
+        if event != .recordStop, micIsLive() { return }
         let now = Date()
         if let last = lastRequested[event], now.timeIntervalSince(last) < dedupeWindow { return }
         lastRequested[event] = now

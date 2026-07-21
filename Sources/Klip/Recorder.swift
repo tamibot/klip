@@ -131,7 +131,8 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
                 startRequested = false
                 startMeterTimer()
                 installDeviceListener()
-                SoundFX.play(.recordStart)
+                // No start chime on purpose: rec.record() is already live above, so the cue would be
+                // picked up by the mic and baked into the head of the note. The HUD signals the start.
             } catch {
                 state = .error(error.localizedDescription); startRequested = false
             }
