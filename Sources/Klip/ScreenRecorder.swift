@@ -21,6 +21,9 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
     /// treat that window as "recording" — otherwise a stop press during it reopens the picker while
     /// the first recording runs on unnoticed.
     private(set) var isStarting = false
+    /// Where the live recording is happening — the floating indicator draws its frame from these.
+    private(set) var activeScreen: NSScreen?
+    private(set) var activeRegion: CGRect?
     private var startTask: Task<Void, Never>?
     private(set) var startedAt: Date?
 
@@ -96,6 +99,8 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
         self.stream = stream
         self.videoWriter = writer
         self.startedAt = Date()
+        self.activeScreen = screen
+        self.activeRegion = region
         self.isStarting = false
         self.isRecording = true
 
@@ -124,6 +129,8 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
         self.videoWriter = nil
         if sleepAssertion != 0 { IOPMAssertionRelease(sleepAssertion); sleepAssertion = 0 }
 
+        activeScreen = nil
+        activeRegion = nil
         let duration = startedAt.map { Date().timeIntervalSince($0) }
         try? await stream.stopCapture()
         let tempURL = await writer.finish()

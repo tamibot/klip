@@ -38,8 +38,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let meetingRecorder = MeetingRecorder()
     private let screenRecorder = ScreenRecorder()
     private var recOverlay: CaptureOverlayController?
+    private let recIndicator = RecordingIndicator()
     private var scrollOverlay: CaptureOverlayController?
     private var scrollCapture: ScrollCaptureController?
+    /// Modifier-less Esc, registered ONLY while a scroll-capture session runs. A local monitor never
+    /// worked — Klip isn't the active app during the capture; a Carbon hotkey is delivery-independent.
+    private var scrollEscHotKey: HotKey?
     private var meetingItem: NSMenuItem?
     private var meetingHUD: NSPanel?
     private var prefsController: PreferencesWindowController?
@@ -101,9 +105,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Screen recording: red icon while live + menu title toggle, and the finished-file toast
         // with its one-tap GIF conversion.
         screenRecorder.$isRecording.dropFirst().receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.updateStatusIcon()
-                self?.buildMenu()
+            .sink { [weak self] rec in
+                guard let self else { return }
+                // The floating frame + stop pill live exactly as long as the recording does.
+                if rec, let screen = self.screenRecorder.activeScreen, let region = self.screenRecorder.activeRegion {
+                    self.recIndicator.show(screen: screen, region: region) { [weak self] in
+                        self?.toggleScreenRecording()
+                    }
+                } else {
+                    self.recIndicator.hide()
+                }
+                self.updateStatusIcon()
+                self.buildMenu()
             }
             .store(in: &cancellables)
         screenRecorder.onFinished = { [weak self] tempURL, duration in
@@ -389,6 +402,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Scrolling capture: pick the CONTENT region (avoid sticky headers/scrollbars), scroll the
     /// target app yourself, press Done — one long stitched image lands in history + clipboard.
     @objc private func startScrollCapture() {
+        // Second ⌥⇧S while a session runs = "finish now with what you have".
+        if let live = scrollCapture, live.isActive { live.finishNow(); return }
         guard scrollCapture == nil, scrollOverlay == nil, recOverlay == nil else { return }
         guard ScreenCapturer.hasPermission() else { snapController.promptForPermission(); return }
         let mouse = NSEvent.mouseLocation
@@ -400,14 +415,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     guard let self else { return }
                     self.scrollOverlay = nil
                     guard let region else { return }   // Esc / empty drag = cancelled
-                    let ctrl = ScrollCaptureController(screen: screen, region: region) { [weak self] image in
+                    let ctrl = ScrollCaptureController(screen: screen, region: region) { [weak self] image, failure in
                         guard let self else { return }
                         self.scrollCapture = nil
-                        guard let image else { return }   // cancel is silent, like the capture overlay
-                        self.manager.addAnnotatedScreenshot(image, copyToClipboard: true)
-                        self.panelController.show()
+                        self.scrollEscHotKey = nil   // release the session-scoped Esc
+                        if let image {
+                            self.manager.addAnnotatedScreenshot(image, copyToClipboard: true)
+                            self.panelController.show()
+                            return
+                        }
+                        switch failure {
+                        case .needsAccessibility:
+                            // Same permission auto-paste uses; the system prompt takes over.
+                            Paster.ensureAccessibilityPermission(prompt: true)
+                            ToastHUD.show(L10n.t("scroll.needsAX"), style: .failure)
+                        case .failed:
+                            SoundFX.error(); ToastHUD.show(L10n.t("capture.failed"), style: .failure)
+                        case nil:
+                            break   // cancelled: silent, like the capture overlay
+                        }
                     }
                     self.scrollCapture = ctrl
+                    // Esc cancels from ANY app while the session runs; released in the callback above.
+                    self.scrollEscHotKey = HotKey(keyCode: UInt32(kVK_Escape), modifiers: 0, id: 9) { [weak self] in
+                        self?.scrollCapture?.cancel()
+                    }
                     ctrl.start()
                 }
                 self.scrollOverlay = overlay

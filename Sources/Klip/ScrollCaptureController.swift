@@ -1,238 +1,285 @@
 import AppKit
 import ScreenCaptureKit
+import CoreGraphics
 
-/// Scrolling-capture engine: the user scrolls the TARGET app themselves, Klip re-shoots the chosen
-/// region after every scroll settles and stitches the frames into one tall image.
+/// Why a scrolling capture ended without an image (`onFinished(nil, failure)`).
+/// nil failure + nil image = the user cancelled — the caller should stay SILENT (no error toast).
+enum ScrollCaptureFailure {
+    /// Synthetic scrolling needs Accessibility, same privilege as auto-paste. The caller should
+    /// prompt via `Paster.ensureAccessibilityPermission(prompt: true)` and explain.
+    case needsAccessibility
+    /// Setup or capture broke (no screen-recording permission, display vanished, nothing stitched).
+    case failed
+}
+
+/// Fully automatic scrolling capture: Klip scrolls the target app ITSELF — synthetic scroll-wheel
+/// events at the region's center — re-shoots the region after each step settles, and stitches the
+/// frames into one tall image. It finishes ON ITS OWN when the content stops moving (end of page)
+/// or a cap is hit; the user only ever needs the pill's Cancel (or the caller-wired hotkeys).
 ///
-/// Manual-first on purpose (CleanShot shipped manual 4 years before auto-scroll): synthesizing
-/// scroll events fights momentum, elastic bounce and per-app scroll speeds; watching the user's own
-/// scrolls sidesteps all of it. The caller runs the region-selection overlay and hands over
-/// `screen` + `region` (TOP-LEFT display-local points — SCStreamConfiguration.sourceRect's space,
-/// exactly what CaptureOverlayController's region mode returns).
+/// Stitching uses KNOWN-DELTA matching: we posted the scroll, so the expected pixel offset is
+/// known, and the search runs only in a narrow window around it. That kills the false matches a
+/// full-range search produced on repetitive content — and no seam is ever drawn: an unmatchable
+/// frame ends the capture with what exists instead of appending garbage.
 ///
-/// Ownership: keep the controller alive until `onFinished` fires (same contract as
-/// CaptureOverlayController). `onFinished(nil)` = cancelled or failed; otherwise the stitched image
-/// at full pixel resolution with the correct point size.
+/// `region` is TOP-LEFT display-local points (SCStreamConfiguration.sourceRect's space, exactly
+/// what CaptureOverlayController's region mode returns). Ownership: keep the controller alive
+/// until `onFinished` fires — it fires exactly once, on the main actor.
 @MainActor
 final class ScrollCaptureController: NSObject {
 
     // MARK: - Tuning
 
-    /// Wait this long after the LAST scroll event before shooting: momentum frames stitch garbage,
-    /// so a frame is only worth taking once the content has settled.
-    private static let settleDelay: TimeInterval = 0.25
-    /// Minimum rows two frames must share for an offset match to mean anything — below this the
-    /// "overlap" is noise and the search would happily match anything.
+    /// Scroll step as a fraction of the region height: 60% keeps a 40% overlap for matching.
+    private static let stepFraction: CGFloat = 0.6
+    /// One step is posted as several small wheel events a few ms apart — some apps clamp a single
+    /// giant delta, and chunks ride the same smooth-scroll path a real trackpad flick does.
+    private static let chunksPerStep = 3
+    private static let chunkGapNs: UInt64 = 8_000_000
+    /// Wait after posting a step before shooting: covers the target app's smooth-scroll animation
+    /// and elastic bounce. Frames taken mid-animation stitch garbage.
+    // ponytail: fixed 450 ms — an adaptive "wait until two consecutive shots match" loop is the
+    // upgrade if slow-animating apps (heavy web pages) misalign in practice.
+    private static let settleDelay: TimeInterval = 0.45
+    /// Half-width of the offset search window around the expected (posted) delta, in pixels.
+    /// Wide enough for scroll-speed wobble; partial last steps near the page bottom stay OUT of
+    /// it on purpose — the single full-range retry catches those.
+    private static let searchWindowPx = 120
+    /// Minimum rows two frames must share for an offset match to mean anything.
     private static let minOverlapPx = 60
-    /// A best offset smaller than this is the same content (sub-scroll jitter, elastic bounce):
-    /// skip the frame instead of stacking a near-duplicate.
+    /// A matched offset below this means the content didn't actually move — end of page.
     private static let minScrollPx = 8
-    /// Mean per-row luminance difference (0–255 scale) above which the best offset is a NO MATCH.
-    // ponytail: empirical threshold — antialiasing keeps real matches under ~3, unrelated content
-    // sits far above 10. Tune here if real pages misbehave; the failure mode is a visible seam,
-    // never an abort.
+    /// Mean per-row luminance difference (0–255 scale) above which a candidate offset is no match.
+    // ponytail: empirical — antialiased real matches sit under ~3, unrelated content far above 10.
     private static let matchThreshold: Float = 6.0
-    /// Hard canvas cap. 16 000 px × a ~2 000 px-wide region × 4 B/px ≈ 128 MB — the ceiling that
-    /// keeps a runaway capture from eating memory. On hitting it we STOP capturing and let Done
-    /// save what exists (a too-long capture that can't be saved at all is the documented complaint).
+    /// Two signatures within this per-row epsilon are the same frame (end-of-page detector).
+    private static let identicalEps: Float = 0.5
+    /// Hard canvas cap (~128 MB at a 2 000 px-wide region). Hitting it AUTO-FINISHES with what
+    /// exists — a capture that can't be saved at all is the documented failure to avoid.
     private static let maxCanvasHeightPx = 16_000
-    /// Frame cap for the same reason (each append is a full-region draw + signature pass).
     private static let maxFrames = 120
-    /// Horizontal downsample width for the per-row luminance signature. 64 samples per row is
-    /// plenty to discriminate rows while keeping the O(H²) offset search cheap.
+    /// Horizontal downsample width of the per-row luminance signature.
     private static let signatureWidth = 64
-    /// Height of the visible seam drawn when a frame could not be matched (degraded output beats
-    /// aborting — the spec is explicit).
-    private static let seamHeightPx = 2
+    /// eventSourceUserData tag on every synthetic scroll, so any Klip scroll monitor (none today)
+    /// can tell our events from the user's. "KLIP" in ASCII.
+    private static let syntheticScrollTag: Int64 = 0x4B4C_4950
 
     // MARK: - State
 
     private let screen: NSScreen
     private let region: CGRect                     // top-left display-local points
-    private let onFinished: (NSImage?) -> Void
+    private let onFinished: (NSImage?, ScrollCaptureFailure?) -> Void
 
     private var panel: NSPanel?
     private var statusField: NSTextField?
-    private var scrollMonitors: [Any] = []         // global + local scroll-wheel monitors
-    private var escMonitor: Any?
-    private var debounceTimer: Timer?
+    private var loopTask: Task<Void, Never>?
 
-    // Capture plumbing, resolved once in start() and reused for every frame.
     private var filter: SCContentFilter?
     private var config: SCStreamConfiguration?
-    private var isCapturing = false
-    /// A scroll settled while a capture was still in flight: re-shoot as soon as it lands, so the
-    /// final resting position is never missed.
-    private var recapturePending = false
 
-    // Stitching state. The canvas is a growing CGContext whose CONTENT occupies the top
-    // `contentHeightPx` rows; `lastFrameTop` is where the most recent frame was placed (offsets
-    // chain from frame to frame, not from the canvas bottom).
+    // Stitching state: the canvas content occupies the top `contentHeightPx` rows; offsets chain
+    // from the last appended frame's placement, not from the canvas bottom.
     private var canvas: CGContext?
     private var canvasCapacityPx = 0
     private var contentHeightPx = 0
     private var lastFrameTop = 0
     private var frameWidthPx = 0
     private var frameHeightPx = 0
-    /// Row signature of the last APPENDED frame (not the last captured one): tiny scrolls skip
-    /// frames without appending, and their offsets must keep accumulating against what is actually
-    /// on the canvas.
     private var prevSignature: [Float] = []
     private var frameCount = 0
-    private var capReached = false
 
     private var started = false
     private var finished = false
 
-    init(screen: NSScreen, region: CGRect, onFinished: @escaping (NSImage?) -> Void) {
+    /// True from start() until the callback fired — the caller's re-entry / toggle check
+    /// (⌥⇧S while active = finishNow()).
+    var isActive: Bool { started && !finished }
+
+    init(screen: NSScreen, region: CGRect, onFinished: @escaping (NSImage?, ScrollCaptureFailure?) -> Void) {
         self.screen = screen
         self.region = region
         self.onFinished = onFinished
     }
 
-    /// Shows the control pill, starts watching scrolls, and takes frame 0 immediately (the view
-    /// the user just framed IS the first slice — waiting for a scroll would lose the top).
+    /// Kicks off the automatic loop. All failure paths (permissions included) report through
+    /// `onFinished` asynchronously — never re-entrantly from inside this call.
     func start() {
         guard !started else { return }
         started = true
+        loopTask = Task { @MainActor in await self.run() }
+    }
+
+    /// User abort (pill button, caller-wired Esc): tears down and reports the SILENT nil/nil.
+    func cancel() { finish(nil, nil) }
+
+    /// Flattens what exists right now and finishes (caller-wired ⌥⇧S-again). With nothing stitched
+    /// yet it reports `.failed` so the caller can say so.
+    func finishNow() {
+        guard isActive else { return }
+        guard let canvas, contentHeightPx > 0, let full = canvas.makeImage(),
+              let cropped = full.cropping(to: CGRect(x: 0, y: 0, width: frameWidthPx,
+                                                     height: contentHeightPx))   // top rows = content
+        else { finish(nil, .failed); return }
+        // Full pixel resolution, point size = pixels / scale (the CaptureOverlayController rule) —
+        // wrong size here and the image pastes at 2× on Retina.
+        let scale = max(screen.backingScaleFactor, 1)
+        finish(NSImage(cgImage: cropped,
+                       size: NSSize(width: CGFloat(cropped.width) / scale,
+                                    height: CGFloat(cropped.height) / scale)), nil)
+    }
+
+    // MARK: - The loop
+
+    private func run() async {
         guard region.width >= 4, region.height >= 4, ScreenCapturer.hasPermission() else {
-            finish(nil); return
+            finish(nil, .failed); return
         }
+        // Same privilege class as auto-paste (Paster): posting CGEvents needs Accessibility.
+        // Distinct failure so the caller can prompt instead of showing a generic error.
+        guard Paster.hasAccessibilityPermission else { finish(nil, .needsAccessibility); return }
+        do {
+            let content = try await SCShareableContent
+                .excludingDesktopWindows(false, onScreenWindowsOnly: false)
+            guard !finished else { return }
+            guard let display = content.displays.first(where: { $0.displayID == screen.displayID })
+            else { finish(nil, .failed); return }
+            // Exclude Klip's own windows so the pill never appears in a frame — which is also why
+            // the pill's fallback placement over the region can't corrupt output.
+            let ownBundleID = Bundle.main.bundleIdentifier
+            let ownApps = content.applications.filter { $0.bundleIdentifier == ownBundleID }
+            filter = SCContentFilter(display: display, excludingApplications: ownApps,
+                                     exceptingWindows: [])
+            let cfg = SCStreamConfiguration()
+            cfg.sourceRect = region
+            let scale = screen.backingScaleFactor
+            cfg.width  = Int((region.width  * scale).rounded())
+            cfg.height = Int((region.height * scale).rounded())
+            cfg.showsCursor = false
+            cfg.scalesToFit = false
+            config = cfg
+        } catch { finish(nil, .failed); return }
+
         buildPanel()
-        installMonitors()
-        Task { @MainActor in
-            do {
-                let content = try await SCShareableContent
-                    .excludingDesktopWindows(false, onScreenWindowsOnly: false)
-                guard !self.finished else { return }
-                guard let display = content.displays.first(where: { $0.displayID == self.screen.displayID })
-                else { self.finish(nil); return }
-                // Exclude Klip's own windows so the control pill never appears in a frame — this is
-                // also why the pill overlapping the region (fallback placement) can't corrupt output.
-                let ownBundleID = Bundle.main.bundleIdentifier
-                let ownApps = content.applications.filter { $0.bundleIdentifier == ownBundleID }
-                self.filter = SCContentFilter(display: display, excludingApplications: ownApps,
-                                              exceptingWindows: [])
-                let config = SCStreamConfiguration()
-                config.sourceRect = self.region
-                let scale = self.screen.backingScaleFactor
-                config.width  = Int((self.region.width  * scale).rounded())
-                config.height = Int((self.region.height * scale).rounded())
-                config.showsCursor = false
-                config.scalesToFit = false
-                self.config = config
-                self.captureFrame()
-            } catch {
-                self.finish(nil)
-            }
+        warpCursorToRegionCenter()
+        guard let first = await capture(), ingest(first) == .appended else {
+            finish(nil, .failed); return
+        }
+
+        while !finished {
+            guard frameCount < Self.maxFrames, contentHeightPx < Self.maxCanvasHeightPx else { break }
+            await postScrollStep()
+            try? await Task.sleep(nanoseconds: UInt64(Self.settleDelay * 1_000_000_000))
+            guard !finished else { return }
+            guard let frame = await capture() else { break }   // a dead shot ends with what we have
+            if ingest(frame) == .endOfPage { break }
+        }
+        finishNow()   // the headline: end of page / cap reached → the image arrives on its own
+    }
+
+    private func capture() async -> CGImage? {
+        guard let filter, let config else { return nil }
+        return try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+    }
+
+    // MARK: - Synthetic scrolling
+
+    /// Region center in GLOBAL top-left (CG) coordinates: CGDisplayBounds is already that space,
+    /// and `region` is display-local top-left — a plain offset, no Y flip anywhere.
+    private var regionCenterGlobal: CGPoint {
+        let b = CGDisplayBounds(screen.displayID)
+        return CGPoint(x: b.origin.x + region.midX, y: b.origin.y + region.midY)
+    }
+
+    /// Scroll routing follows the CURSOR on macOS, not the event's location field — warp it into
+    /// the region once so the app under the region receives our wheel events.
+    private func warpCursorToRegionCenter() {
+        _ = CGWarpMouseCursorPosition(regionCenterGlobal)
+        // Warping detaches the cursor from mouse deltas until re-associated; leave the mouse usable.
+        _ = CGAssociateMouseAndMouseCursorPosition(1)
+    }
+
+    /// Points per wheel chunk; one step = `chunksPerStep` of these. Pixel-unit wheel events move
+    /// content 1 POINT per unit, so the expected image offset is the posted points × scale.
+    private var chunkPoints: Int32 {
+        Int32(max(1, Int(region.height * Self.stepFraction) / Self.chunksPerStep))
+    }
+
+    private var expectedOffsetPx: Int {
+        Int((CGFloat(Int(chunkPoints) * Self.chunksPerStep) * screen.backingScaleFactor).rounded())
+    }
+
+    private func postScrollStep() async {
+        guard let src = CGEventSource(stateID: .combinedSessionState) else { return }
+        let center = regionCenterGlobal
+        for _ in 0..<Self.chunksPerStep {
+            // Negative wheel1 = scroll DOWN (view content further down), pixel (continuous) units.
+            guard let e = CGEvent(scrollWheelEvent2Source: src, units: .pixel, wheelCount: 1,
+                                  wheel1: -chunkPoints, wheel2: 0, wheel3: 0) else { continue }
+            e.location = center
+            e.setIntegerValueField(.eventSourceUserData, value: Self.syntheticScrollTag)
+            e.post(tap: .cghidEventTap)
+            try? await Task.sleep(nanoseconds: Self.chunkGapNs)
         }
     }
 
-    // MARK: - Scroll watching
+    // MARK: - Stitching
 
-    private func installMonitors() {
-        // Global covers the target app (Klip is NOT active while the user scrolls it); the local
-        // twin covers the edge case where Klip itself is frontmost. Scroll/mouse global monitors
-        // need no extra permission — only keyboard globals do.
-        if let m = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] _ in
-            MainActor.assumeIsolated { self?.noteScroll() }
-        }) { scrollMonitors.append(m) }
-        if let m = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
-            MainActor.assumeIsolated { self?.noteScroll() }
-            return event
-        }) { scrollMonitors.append(m) }
+    private enum StitchOutcome { case appended, endOfPage }
 
-        // Esc = cancel. A LOCAL monitor: it only fires while Klip is active, so with the target app
-        // in front the Cancel button is the way out (same documented limit as the capture overlay —
-        // a global keyDown monitor would demand Input Monitoring permission for one key).
-        escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.keyCode == 53 {
-                MainActor.assumeIsolated { self?.cancelPressed() }
-                return nil
-            }
-            return event
-        }
-    }
+    /// Frame 0 anchors; every later frame is matched at its KNOWN delta first, one full-range
+    /// retry after, and otherwise ends the capture. Never a seam: unmatched = done, not degraded.
+    private func ingest(_ frame: CGImage) -> StitchOutcome {
+        guard !finished, let sig = rowSignature(of: frame) else { return .endOfPage }
 
-    /// Every scroll event — including each momentum frame — pushes the shot back: the capture
-    /// happens `settleDelay` after the LAST one, i.e. once the content stops moving.
-    private func noteScroll() {
-        guard !finished, !capReached else { return }
-        debounceTimer?.invalidate()
-        let t = Timer(timeInterval: Self.settleDelay, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.captureFrame() }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        debounceTimer = t
-    }
-
-    // MARK: - Frame capture
-
-    private func captureFrame() {
-        guard !finished, !capReached, let filter, let config else { return }
-        if isCapturing { recapturePending = true; return }
-        isCapturing = true
-        Task { @MainActor in
-            let cg = try? await SCScreenshotManager.captureImage(contentFilter: filter,
-                                                                 configuration: config)
-            self.isCapturing = false
-            guard !self.finished else { return }
-            // A single failed shot is not fatal — the next scroll retries. Only setup failures end the flow.
-            if let cg { self.ingest(cg) }
-            if self.recapturePending { self.recapturePending = false; self.captureFrame() }
-        }
-    }
-
-    /// Dedupe → offset match → append. All the stitching decisions live here.
-    private func ingest(_ frame: CGImage) {
-        guard !finished, !capReached else { return }
-        guard let sig = rowSignature(of: frame) else { return }
-
-        if prevSignature.isEmpty {                       // frame 0 anchors everything
+        if prevSignature.isEmpty {
             frameWidthPx = frame.width
             frameHeightPx = frame.height
-            guard ensureCanvas(heightPx: frameHeightPx) else { finish(nil); return }
+            guard ensureCanvas(heightPx: frameHeightPx) else { return .endOfPage }
             draw(frame, atTop: 0)
             contentHeightPx = frameHeightPx
             lastFrameTop = 0
             prevSignature = sig
             frameCount = 1
             updateStatus()
-            return
+            return .appended
         }
 
-        let match = bestOffset(prev: prevSignature, next: sig)
-        let newTop: Int
-        var seam = false
-        if match.error <= Self.matchThreshold {
-            // Offset 0 / tiny = the same content (an identical frame lands here too, with error ~0:
-            // the row signature doubles as the cheap dedupe hash). Skip, keep prevSignature — the
-            // next offset must still be measured against what's on the canvas.
-            guard match.offset >= Self.minScrollPx else { return }
-            newTop = lastFrameTop + match.offset
-        } else {
-            // NO MATCH (in-page animation, sticky elements, a scroll UP we don't search for):
-            // append below with a visible seam instead of aborting.
-            newTop = contentHeightPx + Self.seamHeightPx
-            seam = true
+        // Identical frame = the scroll moved nothing = END OF PAGE. This is the auto-finish
+        // trigger; the row signature doubles as the cheap digest.
+        if sig.count == prevSignature.count,
+           zip(sig, prevSignature).allSatisfy({ abs($0 - $1) < Self.identicalEps }) {
+            return .endOfPage
         }
 
-        guard newTop + frameHeightPx <= Self.maxCanvasHeightPx else { reachLimit(); return }
-        guard ensureCanvas(heightPx: newTop + frameHeightPx) else { finish(nil); return }
-        if seam { drawSeam(atTop: contentHeightPx) }
-        draw(frame, atTop: newTop)     // whole frame: the overlap rows overwrite identical content
+        let expected = expectedOffsetPx
+        var match = bestOffset(prev: prevSignature, next: sig,
+                               window: (expected - Self.searchWindowPx)...(expected + Self.searchWindowPx))
+        if match.error > Self.matchThreshold {
+            // Partial last step near the page bottom, or the user scrolled too: one full retry.
+            match = bestOffset(prev: prevSignature, next: sig, window: nil)
+        }
+        // Still nothing acceptable, or the content barely moved (blinking caret at the bottom):
+        // finish with what exists. minScrollPx applies to BOTH searches — an accepted near-zero
+        // offset would stack a duplicate.
+        guard match.error <= Self.matchThreshold, match.offset >= Self.minScrollPx else {
+            return .endOfPage
+        }
+
+        let newTop = lastFrameTop + match.offset
+        guard newTop + frameHeightPx <= Self.maxCanvasHeightPx,
+              ensureCanvas(heightPx: newTop + frameHeightPx) else { return .endOfPage }
+        draw(frame, atTop: newTop)     // whole frame: overlap rows overwrite identical content
         contentHeightPx = newTop + frameHeightPx
         lastFrameTop = newTop
         prevSignature = sig
         frameCount += 1
-        if frameCount >= Self.maxFrames { reachLimit() } else { updateStatus() }
+        updateStatus()
+        return .appended
     }
 
-    // MARK: - Row signature + offset search
-
     /// Per-row luminance signature: the frame drawn into a `signatureWidth`-wide grayscale bitmap
-    /// (Core Graphics does the luminance conversion AND the horizontal averaging in one pass), one
-    /// Float mean per row, top-down — the same row order as CGImage cropping space.
+    /// (Core Graphics does luminance conversion AND horizontal averaging in one pass), one Float
+    /// mean per row, top-down — the same row order as CGImage cropping space.
     private func rowSignature(of image: CGImage) -> [Float]? {
         let w = Self.signatureWidth
         let h = image.height
@@ -258,18 +305,20 @@ final class ScrollCaptureController: NSObject {
         return sig
     }
 
-    /// Finds the downward scroll offset that best aligns `next` under `prev`: for each candidate,
-    /// `next`'s top rows are compared against `prev`'s rows shifted by the offset, and the mean
-    /// absolute difference over the overlap wins. Ascending iteration + strict `<` prefers the
-    /// SMALLEST offset on ties (flat pages match many offsets equally; the conservative one stacks
-    /// the least garbage).
-    // ponytail: plain O(H²) loop, ~2M float ops for a 2000 px region — swap in vDSP if profiling
-    // ever shows this on the settle path.
-    private func bestOffset(prev: [Float], next: [Float]) -> (offset: Int, error: Float) {
+    /// Best downward offset aligning `next` under `prev`: mean absolute row difference over the
+    /// overlap, lowest wins; ascending iteration + strict `<` prefers the smallest offset on ties.
+    /// `window` restricts the search (known-delta pass); nil = full range (the retry).
+    // ponytail: plain O(H·W) loop — the windowed pass is ~240 offsets, the full retry is rare.
+    // Swap in vDSP if profiling ever shows this on the loop's critical path.
+    private func bestOffset(prev: [Float], next: [Float],
+                            window: ClosedRange<Int>?) -> (offset: Int, error: Float) {
         let h = min(prev.count, next.count)
         let maxOffset = max(0, h - Self.minOverlapPx)
+        let lo = max(0, window?.lowerBound ?? 0)
+        let hi = min(maxOffset, window?.upperBound ?? maxOffset)
         var best = (offset: 0, error: Float.greatestFiniteMagnitude)
-        for offset in 0...maxOffset {
+        guard lo <= hi else { return best }
+        for offset in lo...hi {
             let overlap = h - offset
             var sum: Float = 0
             for y in 0..<overlap { sum += abs(next[y] - prev[y + offset]) }
@@ -282,11 +331,11 @@ final class ScrollCaptureController: NSObject {
     // MARK: - Canvas
 
     /// Grows the canvas (doubling, capped) so appends stay amortized-cheap. Content always sits at
-    /// the TOP of the context, which after `makeImage()` is CGImage row 0 — so the final crop is
+    /// the TOP of the context, which after `makeImage()` is CGImage row 0 — the final crop is
     /// simply the top `contentHeightPx` rows.
     private func ensureCanvas(heightPx needed: Int) -> Bool {
         if canvas != nil, needed <= canvasCapacityPx { return true }
-        // `max(cap, needed)` lets a single frame TALLER than the cap through (8K portrait region):
+        // `max(cap, needed)` lets a single frame taller than the cap through (8K portrait region):
         // frame 0 must always fit or there is nothing to save at all.
         let ceiling = max(Self.maxCanvasHeightPx, needed)
         let capacity = canvas == nil
@@ -308,70 +357,41 @@ final class ScrollCaptureController: NSObject {
         return true
     }
 
-    /// `top` is measured in pixels from the canvas TOP; CG contexts are bottom-up, hence the flip.
+    /// `top` is measured from the canvas TOP; CG contexts are bottom-up, hence the flip.
     private func draw(_ image: CGImage, atTop top: Int) {
         canvas?.draw(image, in: CGRect(x: 0, y: canvasCapacityPx - top - frameHeightPx,
                                        width: frameWidthPx, height: frameHeightPx))
     }
 
-    private func drawSeam(atTop top: Int) {
-        guard let canvas else { return }
-        // Red on purpose: the seam marks "the stitcher gave up here" and must be findable, not
-        // camouflaged into the page background.
-        canvas.setFillColor(CGColor(srgbRed: 1, green: 0.27, blue: 0.23, alpha: 1))
-        canvas.fill(CGRect(x: 0, y: canvasCapacityPx - top - Self.seamHeightPx,
-                           width: frameWidthPx, height: Self.seamHeightPx))
-    }
-
-    // MARK: - Limits / status
-
-    /// Height or frame cap hit: stop CAPTURING but keep the panel alive — Done still saves
-    /// everything stitched so far (saving nothing at the cap is the documented failure).
-    private func reachLimit() {
-        capReached = true
-        for m in scrollMonitors { NSEvent.removeMonitor(m) }
-        scrollMonitors.removeAll()
-        debounceTimer?.invalidate(); debounceTimer = nil
-        statusField?.stringValue = L10n.t("scroll.maxReached")
-    }
+    // MARK: - Progress pill
 
     private func updateStatus() {
         statusField?.stringValue = String(format: L10n.t("scroll.status"), frameCount, contentHeightPx)
     }
 
-    // MARK: - Control pill
-
+    /// Passive progress + one Cancel. ToastHUD's exact action-button recipe — the shipped,
+    /// known-clickable combination of nonactivating borderless panel + plain target/action button.
     private func buildPanel() {
-        // Sized against the WIDEST realistic status ("888 captures · ≈ 88888 px") so the panel
-        // never has to grow mid-capture: it's placed once, next to the region, and stays put.
+        // Sized against the widest realistic status so the pill never grows mid-capture.
         let status = NSTextField(labelWithString: String(format: L10n.t("scroll.status"), 888, 88_888))
         status.font = .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
         status.textColor = .labelColor
         status.lineBreakMode = .byTruncatingTail
 
-        let hint = NSTextField(labelWithString: L10n.t("scroll.hint"))
-        hint.font = .systemFont(ofSize: 11)
-        hint.textColor = .secondaryLabelColor
-        hint.lineBreakMode = .byTruncatingTail
-
         let cancel = NSButton(title: L10n.t("common.cancel"), target: self,
                               action: #selector(cancelPressed))
-        cancel.bezelStyle = .rounded
-        let done = NSButton(title: L10n.t("sel.done"), target: self, action: #selector(donePressed))
-        done.bezelStyle = .rounded
-        // Return-key styling makes Done the prominent (accent-filled) button. The panel is never
-        // key, so this is visual hierarchy, not an actual hotkey.
-        done.keyEquivalent = "\r"
+        cancel.isBordered = false
+        cancel.controlSize = .small
+        // Inline text action reads as an accent link (design language): borderless, accent, semibold.
+        cancel.attributedTitle = NSAttributedString(string: L10n.t("common.cancel"), attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: NSColor.controlAccentColor,
+        ])
 
-        let buttons = NSStackView(views: [cancel, done])
-        buttons.orientation = .horizontal
-        buttons.spacing = 8
-
-        let stack = NSStackView(views: [status, hint, buttons])
+        let stack = NSStackView(views: [status, cancel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
-        stack.setCustomSpacing(10, after: hint)
 
         // Apple's panel recipe (backdrop + sheen + rim), same as ToastHUD.
         let fx = GlassPanelView(frame: .zero, radius: 12)
@@ -382,17 +402,17 @@ final class ScrollCaptureController: NSObject {
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: contentBox.leadingAnchor, constant: 14),
             stack.trailingAnchor.constraint(equalTo: contentBox.trailingAnchor, constant: -14),
-            stack.topAnchor.constraint(equalTo: contentBox.topAnchor, constant: 10),
-            stack.bottomAnchor.constraint(equalTo: contentBox.bottomAnchor, constant: -10),
+            stack.topAnchor.constraint(equalTo: contentBox.topAnchor, constant: 9),
+            stack.bottomAnchor.constraint(equalTo: contentBox.bottomAnchor, constant: -9),
         ])
         fx.setContent(contentBox)
 
         let fit = contentBox.fittingSize
-        let size = NSSize(width: max(fit.width, 220), height: fit.height)
-        status.stringValue = "…"          // real count arrives with frame 0, a beat after start()
+        let size = NSSize(width: max(fit.width, 200), height: fit.height)
+        status.stringValue = "…"          // real numbers arrive with frame 0, a beat later
 
-        // .nonactivatingPanel is the load-bearing choice: the user must keep scrolling the TARGET
-        // app, so clicking Done/Cancel must never move focus to Klip.
+        // .nonactivatingPanel is load-bearing: the capture scrolls the TARGET app, so a click on
+        // Cancel must never pull focus to Klip.
         let p = NSPanel(contentRect: panelFrame(for: size),
                         styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: false)
@@ -400,9 +420,10 @@ final class ScrollCaptureController: NSObject {
         p.backgroundColor = .clear
         p.hasShadow = true
         p.level = .floating
+        p.ignoresMouseEvents = false           // the Cancel button must take the click
         p.becomesKeyOnlyIfNeeded = true
         // NSPanel hides itself when the app deactivates BY DEFAULT — and Klip is inactive for this
-        // whole flow. Without this line the pill vanishes the moment the user clicks the target app.
+        // whole flow. Without this the pill vanishes the moment the target app is frontmost.
         p.hidesOnDeactivate = false
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.contentView = fx
@@ -411,10 +432,9 @@ final class ScrollCaptureController: NSObject {
         statusField = status
     }
 
-    /// Below the region → above → beside (right, then left) → bottom-right of the screen. The pill
-    /// must never cover the region; the last fallback (region ≈ whole screen) can't avoid it
-    /// on-screen, but the content filter already keeps Klip out of the frames, so only the user's
-    /// VIEW of the region is grazed — never the output.
+    /// Below the region → above → beside (right, then left) → bottom-right of the screen. The last
+    /// fallback (region ≈ whole screen) can overlap the region visually, but never the OUTPUT —
+    /// the content filter already excludes Klip's windows from every frame.
     private func panelFrame(for size: NSSize) -> NSRect {
         let sf = screen.frame
         let vis = screen.visibleFrame
@@ -440,39 +460,21 @@ final class ScrollCaptureController: NSObject {
                       width: size.width, height: size.height)
     }
 
+    @objc private func cancelPressed() { cancel() }
+
     // MARK: - Finish
 
-    @objc private func donePressed() {
-        guard !finished else { return }
-        guard let canvas, contentHeightPx > 0, let full = canvas.makeImage(),
-              let cropped = full.cropping(to: CGRect(x: 0, y: 0, width: frameWidthPx,
-                                                     height: contentHeightPx))   // top rows = content
-        else { finish(nil); return }
-        // Full pixel resolution, point size = pixels / scale (the CaptureOverlayController rule):
-        // wrong size here and the image pastes at 2× on Retina.
-        let scale = screen.backingScaleFactor
-        let image = NSImage(cgImage: cropped,
-                            size: NSSize(width: CGFloat(cropped.width) / max(scale, 1),
-                                         height: CGFloat(cropped.height) / max(scale, 1)))
-        finish(image)
-    }
-
-    @objc private func cancelPressed() { finish(nil) }
-
-    /// Single exit: idempotent teardown (monitors removed exactly once, timer dead, panel closed),
-    /// then the callback — fired exactly once, nil for cancel/failure.
-    private func finish(_ image: NSImage?) {
+    /// Single exit: idempotent teardown (loop cancelled, panel closed, buffers dropped), then the
+    /// callback — exactly once. (nil, nil) = silent cancel.
+    private func finish(_ image: NSImage?, _ failure: ScrollCaptureFailure?) {
         guard !finished else { return }
         finished = true
-        for m in scrollMonitors { NSEvent.removeMonitor(m) }
-        scrollMonitors.removeAll()
-        if let m = escMonitor { NSEvent.removeMonitor(m); escMonitor = nil }
-        debounceTimer?.invalidate(); debounceTimer = nil
+        loopTask?.cancel(); loopTask = nil
         panel?.orderOut(nil)
         panel = nil
         statusField = nil
         canvas = nil
         prevSignature = []
-        onFinished(image)
+        onFinished(image, failure)
     }
 }

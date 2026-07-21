@@ -407,9 +407,9 @@ enum L10n {
         "prefs.share.how.open": "Abrir Cloudflare R2",
         "menu.scrollCapture": "Captura con scroll",
         "prefs.sc.scroll": "Captura con scroll:",
-        "scroll.hint": "Desplázate por el contenido y pulsa Hecho",
         "scroll.status": "%d capturas · alto ≈ %d px",
-        "scroll.maxReached": "Altura máxima — pulsa Hecho para guardar",
+        "rec.screen.stop": "Detener",
+        "scroll.needsAX": "La captura con scroll necesita Accesibilidad (como el auto-pegado) para desplazar la página por ti",
     ]
 
     private static let en: [String: String] = [
@@ -800,9 +800,9 @@ enum L10n {
         "prefs.share.how.open": "Open Cloudflare R2",
         "menu.scrollCapture": "Scrolling capture",
         "prefs.sc.scroll": "Scrolling capture:",
-        "scroll.hint": "Scroll the content, then press Done",
         "scroll.status": "%d captures · height ≈ %d px",
-        "scroll.maxReached": "Max height reached — press Done to save",
+        "rec.screen.stop": "Stop",
+        "scroll.needsAX": "Scrolling capture needs Accessibility (like auto-paste) to scroll the page for you",
     ]
 
     // The translations below (fr/de/it/pt/zh/ja) are filled in by the translation workflow; any
@@ -1196,9 +1196,9 @@ enum L10n {
         "prefs.share.how.open": "Ouvrir Cloudflare R2",
         "menu.scrollCapture": "Capture défilante",
         "prefs.sc.scroll": "Capture défilante :",
-        "scroll.hint": "Faites défiler le contenu, puis appuyez sur Terminé",
         "scroll.status": "%d captures · hauteur ≈ %d px",
-        "scroll.maxReached": "Hauteur max atteinte — appuyez sur Terminé pour sauvegarder",
+        "rec.screen.stop": "Arrêter",
+        "scroll.needsAX": "La capture défilante nécessite l'Accessibilité (comme le collage auto) pour faire défiler la page",
     ]
 
     private static let de: [String: String] = [
@@ -1590,9 +1590,9 @@ enum L10n {
         "prefs.share.how.open": "Cloudflare R2 öffnen",
         "menu.scrollCapture": "Scroll-Aufnahme",
         "prefs.sc.scroll": "Scroll-Aufnahme:",
-        "scroll.hint": "Scrolle den Inhalt und drücke dann Fertig",
         "scroll.status": "%d Aufnahmen · Höhe ≈ %d px",
-        "scroll.maxReached": "Maximale Höhe erreicht — mit Fertig sichern",
+        "rec.screen.stop": "Stopp",
+        "scroll.needsAX": "Die Scroll-Aufnahme braucht Bedienungshilfen (wie Auto-Einfügen), um die Seite für dich zu scrollen",
     ]
 
     private static let it: [String: String] = [
@@ -1984,9 +1984,9 @@ enum L10n {
         "prefs.share.how.open": "Apri Cloudflare R2",
         "menu.scrollCapture": "Cattura con scorrimento",
         "prefs.sc.scroll": "Cattura con scorrimento:",
-        "scroll.hint": "Scorri il contenuto, poi premi Fine",
         "scroll.status": "%d catture · altezza ≈ %d px",
-        "scroll.maxReached": "Altezza massima raggiunta — premi Fine per salvare",
+        "rec.screen.stop": "Stop",
+        "scroll.needsAX": "La cattura con scorrimento richiede Accessibilità (come l'incolla automatico) per scorrere la pagina",
     ]
 
     private static let pt: [String: String] = [
@@ -2378,9 +2378,9 @@ enum L10n {
         "prefs.share.how.open": "Abrir Cloudflare R2",
         "menu.scrollCapture": "Captura com rolagem",
         "prefs.sc.scroll": "Captura com rolagem:",
-        "scroll.hint": "Role o conteúdo e pressione Concluir",
         "scroll.status": "%d capturas · altura ≈ %d px",
-        "scroll.maxReached": "Altura máxima atingida — pressione Concluir para salvar",
+        "rec.screen.stop": "Parar",
+        "scroll.needsAX": "A captura com rolagem precisa de Acessibilidade (como o colar automático) para rolar a página por você",
     ]
 
     private static let zh: [String: String] = [
@@ -2772,9 +2772,9 @@ enum L10n {
         "prefs.share.how.open": "打开 Cloudflare R2",
         "menu.scrollCapture": "滚动截屏",
         "prefs.sc.scroll": "滚动截屏：",
-        "scroll.hint": "滚动内容，然后按 完成",
         "scroll.status": "%d 张 · 高度 ≈ %d px",
-        "scroll.maxReached": "已达最大高度 — 按 完成 保存",
+        "rec.screen.stop": "停止",
+        "scroll.needsAX": "滚动截屏需要辅助功能权限（与自动粘贴相同）来替你滚动页面",
     ]
 
     private static let ja: [String: String] = [
@@ -3166,8 +3166,8 @@ enum L10n {
         "prefs.share.how.open": "Cloudflare R2 を開く",
         "menu.scrollCapture": "スクロールキャプチャ",
         "prefs.sc.scroll": "スクロールキャプチャ:",
-        "scroll.hint": "内容をスクロールして「完了」を押してください",
         "scroll.status": "%d 枚 · 高さ ≈ %d px",
-        "scroll.maxReached": "最大の高さに達しました — 「完了」で保存",
+        "rec.screen.stop": "停止",
+        "scroll.needsAX": "スクロールキャプチャには（自動ペーストと同じ）アクセシビリティ権限が必要です",
     ]
 }
