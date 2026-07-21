@@ -52,19 +52,13 @@ final class CaptureOverlayController {
         }
         win.contentView = view
         win.setFrame(frame, display: true)
-        // Ease the overlay in instead of snapping the frozen frame onto the screen.
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        win.alphaValue = reduceMotion ? 1 : 0
+        // INSTANT, like ⌘⇧4. The overlay draws the frozen frame 1:1 and dims nothing, so it is
+        // pixel-identical to the live screen — fading it in animates nothing the eye can see and
+        // only delays the crosshair, which is the one thing that says "the tool is armed".
+        win.alphaValue = 1
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         win.makeFirstResponder(view)
-        if !reduceMotion {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.12
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                win.animator().alphaValue = 1
-            }
-        }
         self.window = win
 
         // Esc backup (keyCode 53) for when the contentView isn't first responder but Klip is still active.
@@ -112,18 +106,9 @@ final class CaptureOverlayController {
         if let m = escMonitor { NSEvent.removeMonitor(m); escMonitor = nil }
         let win = window
         window = nil
-        // A capture should feel instant (the flash already confirmed it): close immediately.
-        // A confirmed region (recording about to start) also closes immediately — only a true
-        // cancel eases out so the frozen frame doesn't just blink away.
-        if image == nil, pendingRegion == nil, let win, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.12
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                win.animator().alphaValue = 0
-            }, completionHandler: { win.orderOut(nil) })
-        } else {
-            win?.orderOut(nil)
-        }
+        // Always immediate — same reasoning as the appearance: an undimmed frozen frame looks
+        // exactly like the live screen, so a fade-out is 0.12 s of nothing but lag.
+        win?.orderOut(nil)
         if let onRegion { onRegion(shot.screen, pendingRegion) } else { onComplete(image) }
     }
 }
@@ -147,6 +132,10 @@ private final class CaptureOverlayView: NSView {
     private var hoverPoint: NSPoint?
     /// 1 → 0 white flash over the selection right after mouse-up, confirming the capture.
     private var flashAlpha: CGFloat = 0
+    /// The hint introduces the modifiers, then gets out of the way. Undimmed, a block that never
+    /// leaves reads as a floating button stuck on the user's screen.
+    private var hintAlpha: CGFloat = 1
+    private var hintTimer: Timer?
     private let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
 
     init(shot: DisplayShot, onSelect: @escaping (NSRect) -> Void, onCancel: @escaping () -> Void) {
@@ -189,6 +178,34 @@ private final class CaptureOverlayView: NSView {
         needsDisplay = true
     }
 
+    /// Arms the hint's auto-fade. Called once the view is on screen so the dwell starts when the
+    /// user can actually see it.
+    deinit { hintTimer?.invalidate() }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, hintTimer == nil else { return }
+        if reduceMotion { return }   // no timed motion: the hint just stays until the drag starts
+        hintTimer = Timer.scheduledTimer(withTimeInterval: 1.8, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.beginHintFade() }
+        }
+    }
+
+    private func beginHintFade() {
+        hintTimer?.invalidate()
+        hintTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.hintAlpha -= 0.055
+                if self.hintAlpha <= 0 {
+                    self.hintAlpha = 0
+                    self.hintTimer?.invalidate(); self.hintTimer = nil
+                }
+                self.needsDisplay = true
+            }
+        }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         // Background: the frozen capture, drawn 1:1. bgImage is built at `screen.frame.size` POINTS
         // from a bitmap captured at `points × backingScaleFactor` PIXELS (see ScreenCapturer), and
@@ -206,9 +223,12 @@ private final class CaptureOverlayView: NSView {
         // NO outside dim. ⌘⇧4 never darkens the screen, and neither do we — the wash + border below
         // is the whole signal. (The old 18% black veil is what users read as "the screen went dark".)
 
-        // Selection interior: a light translucent wash. Light rather than dark keeps the content
-        // underneath readable, which is the point — you're aiming at something you can still see.
-        NSColor.white.withAlphaComponent(0.14).setFill()
+        // Selection interior: a NEUTRAL GRAY veil. Measured, not guessed — white@0.14 (the first
+        // attempt) renders 0.0% luminance difference over a white page and 1.2% over a light chat
+        // background, i.e. invisible exactly where captures usually happen. Mid-gray at 0.25 reads
+        // ~13% on white, ~12% on a light chat, ~11% on a dark editor. Its one weak spot is a
+        // mid-gray backdrop (~1%), where the double-stroke border below carries the edge on its own.
+        NSColor(white: 0.5, alpha: 0.25).setFill()
         currentRect.fill(using: .sourceOver)
 
         // Border: two ONE-DEVICE-PIXEL strokes — a dark hairline immediately outside, a white line
@@ -241,7 +261,7 @@ private final class CaptureOverlayView: NSView {
         let text = L10n.t("capture.hint") as NSString
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-            .foregroundColor: NSColor.white
+            .foregroundColor: NSColor.white.withAlphaComponent(hintAlpha)
         ]
         let size = text.size(withAttributes: attrs)
         let legend = legendSize
@@ -255,7 +275,8 @@ private final class CaptureOverlayView: NSView {
         let pill = NSRect(x: bounds.midX - (contentW + padX * 2) / 2,
                           y: bounds.minY + 64,
                           width: contentW + padX * 2, height: contentH + padY * 2)
-        NSColor.black.withAlphaComponent(0.7).setFill()
+        guard hintAlpha > 0.01 else { return }
+        NSColor.black.withAlphaComponent(0.7 * hintAlpha).setFill()
         // Two lines make this a block, not a chip: a full-capsule radius (right when the hint was one
         // line tall) would bow the sides out around the text. Rounded rect, concentric with nothing else.
         NSBezierPath(roundedRect: pill, xRadius: 16, yRadius: 16).fill()
@@ -370,6 +391,7 @@ private final class CaptureOverlayView: NSView {
     // MARK: - Mouse
 
     override func mouseDown(with event: NSEvent) {
+        hintTimer?.invalidate(); hintTimer = nil; hintAlpha = 0   // dragging: the hint's job is done
         startPoint = convert(event.locationInWindow, from: nil)
         lastDragPoint = startPoint
         shiftHeld = event.modifierFlags.contains(.shift)

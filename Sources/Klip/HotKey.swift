@@ -9,7 +9,22 @@ final class HotKey {
     private let callback: () -> Void
 
     /// Static map so the C callback (which can't capture) can locate the instance.
-    private static var instances: [UInt32: HotKey] = [:]
+    ///
+    /// WEAK on purpose, and it is load-bearing twice over:
+    ///  1. A strong map keeps a HotKey alive after its owner drops it, so `deinit` — and with it
+    ///     `UnregisterEventHotKey` — never runs. The shortcut then stays registered with Carbon for
+    ///     the rest of the session and keeps SWALLOWING that key system-wide. For a session-scoped
+    ///     Esc that means Esc stops working in every other app until Klip quits.
+    ///  2. A strong map also crashes on re-registration: `instances[id] = self` releases the old
+    ///     instance *during* the dictionary's mutation, its deinit reads `instances[id]` back, and
+    ///     Swift traps on the overlapping exclusive access (EXC_CRASH in HotKey.deinit).
+    /// Boxing the weak reference keeps both problems away: replacing an entry only releases a box,
+    /// and deinit never touches the map at all.
+    private final class WeakBox {
+        weak var value: HotKey?
+        init(_ value: HotKey) { self.value = value }
+    }
+    private static var instances: [UInt32: WeakBox] = [:]
     private static var handlerInstalled = false
 
     /// - Parameters:
@@ -18,7 +33,7 @@ final class HotKey {
     init?(keyCode: UInt32, modifiers: UInt32, id: UInt32 = 1, callback: @escaping () -> Void) {
         self.id = id
         self.callback = callback
-        HotKey.instances[id] = self
+        HotKey.instances[id] = WeakBox(self)
 
         HotKey.installHandlerIfNeeded()
 
@@ -26,7 +41,7 @@ final class HotKey {
         let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID,
                                          GetApplicationEventTarget(), 0, &hotKeyRef)
         if status != noErr {
-            HotKey.instances[id] = nil
+            HotKey.instances[id] = nil   // box only: self is still on the stack, no deinit here
             return nil
         }
     }
@@ -46,7 +61,7 @@ final class HotKey {
                               MemoryLayout<EventHotKeyID>.size,
                               nil,
                               &hkID)
-            if let instance = HotKey.instances[hkID.id] {
+            if let instance = HotKey.instances[hkID.id]?.value {
                 DispatchQueue.main.async { instance.callback() }
             }
             return noErr
@@ -70,12 +85,11 @@ final class HotKey {
     }
 
     deinit {
+        // ONLY the Carbon unregister. Deliberately no `instances` access: the map is weak, so our
+        // slot's value nils itself, and touching the map here is exactly what trapped when a
+        // replacement assignment was the thing releasing us (see the note on `instances`).
+        // The Carbon event handler is a single process-lifetime global (installHandlerIfNeeded)
+        // shared by every instance — intentionally not removed per-instance.
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
-        // The Carbon event handler is a single process-lifetime global (installHandlerIfNeeded), shared by
-        // all HotKey instances via the static `instances` map — intentionally not removed per-instance.
-        // Only clear the slot if it still points at US: re-creating a hotkey under the same id stores the
-        // NEW instance first and deallocates the old one after — an unconditional nil here would clobber
-        // the new registration and kill its callback for the whole session.
-        if HotKey.instances[id] === self { HotKey.instances[id] = nil }
     }
 }
