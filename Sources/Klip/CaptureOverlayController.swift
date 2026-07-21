@@ -51,13 +51,20 @@ final class CaptureOverlayController {
             self?.dismiss(nil)
         }
         win.contentView = view
-        win.setFrame(frame, display: true)
+        win.setFrame(frame, display: false)
         // INSTANT, like ⌘⇧4. The overlay draws the frozen frame 1:1 and dims nothing, so it is
         // pixel-identical to the live screen — fading it in animates nothing the eye can see and
         // only delays the crosshair, which is the one thing that says "the tool is armed".
         win.alphaValue = 1
-        win.makeKeyAndOrderFront(nil)
+        // PAINT BEFORE SHOWING. Ordering a shield-level, full-screen, non-opaque window in first and
+        // letting it draw afterwards puts an unpainted frame on screen — which is exactly the
+        // "something pops up and then loads" flicker. Rendering into the backing store first makes
+        // the window's very first visible frame the finished one, so it reads as instant, not as a
+        // popup that resolves.
+        view.display()
+        win.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
+        win.makeKey()
         win.makeFirstResponder(view)
         self.window = win
 
@@ -149,7 +156,35 @@ private final class CaptureOverlayView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var acceptsFirstResponder: Bool { true }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
+    /// Our own crosshair instead of `NSCursor.crosshair`. The system one is a thin BLACK cross with
+    /// no outline: measured against backdrops it holds up on light content but collapses to ~9%
+    /// contrast on a dark editor or photo — you lose the cursor exactly when you are trying to aim.
+    /// A black outline around a white core stays ≥25% on white, light, mid-grey and near-black, and
+    /// the extra size makes it readable without hunting. The centre gap keeps the target pixel clear.
+    private static let crosshairCursor: NSCursor = {
+        let size: CGFloat = 28, gap: CGFloat = 3.5
+        let c = size / 2
+        let img = NSImage(size: NSSize(width: size, height: size))
+        img.lockFocus()
+        func arms(width: CGFloat, color: NSColor) {
+            color.setStroke()
+            let p = NSBezierPath()
+            p.lineWidth = width
+            p.lineCapStyle = .butt
+            p.move(to: NSPoint(x: 0, y: c));       p.line(to: NSPoint(x: c - gap, y: c))
+            p.move(to: NSPoint(x: c + gap, y: c)); p.line(to: NSPoint(x: size, y: c))
+            p.move(to: NSPoint(x: c, y: 0));       p.line(to: NSPoint(x: c, y: c - gap))
+            p.move(to: NSPoint(x: c, y: c + gap)); p.line(to: NSPoint(x: c, y: size))
+            p.stroke()
+        }
+        arms(width: 3.5, color: .black)   // outline first…
+        arms(width: 1.5, color: .white)   // …then the core on top of it
+        img.unlockFocus()
+        // Symmetric image, so the hotspot is the centre in either coordinate convention.
+        return NSCursor(image: img, hotSpot: NSPoint(x: c, y: c))
+    }()
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: Self.crosshairCursor) }
 
     /// Our own mouse-moved area, tracked so we can replace ONLY it on relayout.
     private var mouseArea: NSTrackingArea?
