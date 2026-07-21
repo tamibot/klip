@@ -39,7 +39,10 @@ final class ScrollCaptureController: NSObject {
     /// Rewind: bigger strides than a capture step (we are not stitching these), with a cap so a
     /// page that never stops moving — an infinite feed — can't stall the session forever.
     private static let rewindChunks = 6
-    private static let maxRewindSteps = 40
+    /// Rewind is bounded on purpose: 20 upward steps is enough to reach the top of a normal page,
+    /// and on an endless feed it means the capture starts from "20 screens up from here" instead of
+    /// winding forever. Either way the downward pass then runs from wherever it landed.
+    private static let maxRewindSteps = 20
     private static let chunkGapNs: UInt64 = 8_000_000
     /// Wait after posting a step before shooting: covers the target app's smooth-scroll animation
     /// and elastic bounce. Frames taken mid-animation stitch garbage.
@@ -68,6 +71,9 @@ final class ScrollCaptureController: NSObject {
     /// exists — a capture that can't be saved at all is the documented failure to avoid.
     private static let maxCanvasHeightPx = 16_000
     private static let maxFrames = 120
+    /// Downward pass: at most 50 scroll steps. Enough context for a long article without letting an
+    /// infinite feed run until the pixel cap.
+    private static let maxScrollDownSteps = 50
     /// Horizontal downsample width of the per-row luminance signature.
     private static let signatureWidth = 64
     /// eventSourceUserData tag on every synthetic scroll, so any Klip scroll monitor (none today)
@@ -184,9 +190,12 @@ final class ScrollCaptureController: NSObject {
         }
 
         var movedAtLeastOnce = false
+        var downSteps = 0
         while !finished {
-            guard frameCount < Self.maxFrames, contentHeightPx < Self.maxCanvasHeightPx else { break }
+            guard downSteps < Self.maxScrollDownSteps,
+                  frameCount < Self.maxFrames, contentHeightPx < Self.maxCanvasHeightPx else { break }
             await postScrollStep()
+            downSteps += 1
             try? await Task.sleep(nanoseconds: UInt64(Self.settleDelay * 1_000_000_000))
             guard !finished else { return }
             guard let frame = await capture() else { break }   // a dead shot ends with what we have
