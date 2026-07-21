@@ -367,9 +367,10 @@ struct HistoryView: View {
                 .buttonStyle(.link).font(.system(size: 11))
                 .disabled(filtered.isEmpty)
                 Spacer()
-                batchButton("doc.richtext", "PDF") { onCombinePDF(batchItems) }
-                batchButton("doc.zipper", "ZIP") { onExportZip(batchItems) }
-                batchButton("folder.badge.plus", L10n.t("sel.collection")) { onAssignCollection(batchItems) }
+                batchButton("doc.richtext", "PDF", L10n.t("sel.pdf.tip")) { onCombinePDF(batchItems) }
+                batchButton("doc.zipper", "ZIP", L10n.t("sel.zip.tip")) { onExportZip(batchItems) }
+                batchButton("folder.badge.plus", L10n.t("sel.collection"),
+                            L10n.t("sel.collection.tip")) { onAssignCollection(batchItems) }
                 // Through toggleSelecting(), not an inline reset: it is the one place that also drops
                 // batchAnchor, so a later Shift-click can't extend from a row checked in a past session.
                 Button(L10n.t("sel.done")) { toggleSelecting() }
@@ -383,13 +384,17 @@ struct HistoryView: View {
         .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))   // slides in via the container's animation on `selecting`
     }
 
-    private func batchButton(_ icon: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+    private func batchButton(_ icon: String, _ label: String, _ tip: String,
+                             _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) { Image(systemName: icon); Text(label).font(.system(size: 11)) }
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
         .disabled(selectedBatch.isEmpty)
+        // "PDF" and "ZIP" name a format, not what happens to the clips — the tooltip is where that
+        // gets said. .help survives the disabled state, so it also explains a button you cannot press yet.
+        .help(tip)
     }
 
     private var list: some View {
@@ -567,7 +572,13 @@ struct ItemRow: View {
     private var hasText: Bool { !(item.text?.isEmpty ?? true) }
     /// The row reads as "current" for two different reasons — the batch check and the keyboard cursor —
     /// and they are mutually exclusive by mode.
+    /// Accessibility/state notion of "this row is the selected one" — checked in batch mode, the
+    /// keyboard cursor otherwise. Kept separate from the FILL below, which batch mode no longer uses.
     private var isRowSelected: Bool { (selecting && isChecked) || (!selecting && isSelected) }
+    /// Only normal mode tints the row. In batch mode the checkmark carries the state on its own: a
+    /// wash behind every checked row turns a multi-selection into a wall of blue that buries the
+    /// content you are selecting BY.
+    private var showsSelectionFill: Bool { !selecting && isSelected }
     /// The hover strip also belongs to the keyboard cursor. No animation on the swap: this fires while
     /// the user arrows through the list, and an animated strip would settle the row's text sideways.
     private var showsActions: Bool { (hovering || (isSelected && keyboardActive)) && !selecting }
@@ -651,7 +662,7 @@ struct ItemRow: View {
         // panel's light glass.
         // Concentric with the panel (Apple: inner_radius = parent_radius - padding → 12 - 6).
         .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(isRowSelected ? Color.accentColor.opacity(0.20)
+            .fill(showsSelectionFill ? Color.accentColor.opacity(0.20)
                   : (hovering ? Color.primary.opacity(0.06) : Color.clear)))
         // In batch mode the fill belongs to the CHECK, so the keyboard cursor needs a mark of its own —
         // otherwise Return and the arrows act on a row nothing on screen points at. A ring, not a fill:

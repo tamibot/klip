@@ -414,6 +414,9 @@ enum L10n {
         "scroll.needsAX.action": "Abrir ajustes",
         "scroll.status.manual": "Desplaza tú la página · %d capturas",
         "scroll.status.rewind": "Subiendo al inicio de la página…",
+        "sel.pdf.tip": "Une los clips elegidos en un solo PDF (una página cada uno) en Descargas",
+        "sel.zip.tip": "Exporta los clips elegidos como .zip en Descargas",
+        "sel.collection.tip": "Agrupa los clips elegidos en una colección para filtrarlos",
     ]
 
     private static let en: [String: String] = [
@@ -811,6 +814,9 @@ enum L10n {
         "scroll.needsAX.action": "Open settings",
         "scroll.status.manual": "Scroll the page yourself · %d captured",
         "scroll.status.rewind": "Going to the top of the page…",
+        "sel.pdf.tip": "Combine the selected clips into one PDF (one page each) in Downloads",
+        "sel.zip.tip": "Export the selected clips as a .zip in Downloads",
+        "sel.collection.tip": "Group the selected clips into a collection you can filter by",
     ]
 
     // The translations below (fr/de/it/pt/zh/ja) are filled in by the translation workflow; any
@@ -1211,6 +1217,9 @@ enum L10n {
         "scroll.needsAX.action": "Ouvrir les réglages",
         "scroll.status.manual": "Faites défiler vous-même · %d captures",
         "scroll.status.rewind": "Retour en haut de la page…",
+        "sel.pdf.tip": "Regroupe les clips choisis en un seul PDF (une page chacun) dans Téléchargements",
+        "sel.zip.tip": "Exporte les clips choisis en .zip dans Téléchargements",
+        "sel.collection.tip": "Regroupe les clips choisis dans une collection filtrable",
     ]
 
     private static let de: [String: String] = [
@@ -1609,6 +1618,9 @@ enum L10n {
         "scroll.needsAX.action": "Einstellungen öffnen",
         "scroll.status.manual": "Scrolle selbst · %d Aufnahmen",
         "scroll.status.rewind": "Zum Seitenanfang…",
+        "sel.pdf.tip": "Fasst die gewählten Clips zu einem PDF zusammen (je eine Seite), in Downloads",
+        "sel.zip.tip": "Exportiert die gewählten Clips als .zip nach Downloads",
+        "sel.collection.tip": "Gruppiert die gewählten Clips in einer filterbaren Sammlung",
     ]
 
     private static let it: [String: String] = [
@@ -2007,6 +2019,9 @@ enum L10n {
         "scroll.needsAX.action": "Apri Impostazioni",
         "scroll.status.manual": "Scorri tu la pagina · %d catture",
         "scroll.status.rewind": "Torno all’inizio della pagina…",
+        "sel.pdf.tip": "Unisce i clip scelti in un unico PDF (una pagina ciascuno) in Download",
+        "sel.zip.tip": "Esporta i clip scelti come .zip in Download",
+        "sel.collection.tip": "Raggruppa i clip scelti in una raccolta filtrabile",
     ]
 
     private static let pt: [String: String] = [
@@ -2405,6 +2420,9 @@ enum L10n {
         "scroll.needsAX.action": "Abrir ajustes",
         "scroll.status.manual": "Role a página você mesmo · %d capturas",
         "scroll.status.rewind": "Voltando ao topo da página…",
+        "sel.pdf.tip": "Junta os clipes escolhidos num único PDF (uma página cada) em Transferências",
+        "sel.zip.tip": "Exporta os clipes escolhidos como .zip em Transferências",
+        "sel.collection.tip": "Agrupa os clipes escolhidos numa coleção para filtrar",
     ]
 
     private static let zh: [String: String] = [
@@ -2803,6 +2821,9 @@ enum L10n {
         "scroll.needsAX.action": "打开设置",
         "scroll.status.manual": "请自行滚动页面 · 已捕获 %d 张",
         "scroll.status.rewind": "正在回到页面顶部…",
+        "sel.pdf.tip": "把所选片段合并为一个 PDF（每项一页），保存到\"下载\"",
+        "sel.zip.tip": "把所选片段导出为 .zip，保存到\"下载\"",
+        "sel.collection.tip": "把所选片段归入一个可筛选的收藏集",
     ]
 
     private static let ja: [String: String] = [
@@ -3201,5 +3222,8 @@ enum L10n {
         "scroll.needsAX.action": "設定を開く",
         "scroll.status.manual": "自分でスクロールしてください · %d 枚",
         "scroll.status.rewind": "ページの先頭へ移動中…",
+        "sel.pdf.tip": "選択したクリップを1つのPDF（各1ページ）にまとめて「ダウンロード」へ",
+        "sel.zip.tip": "選択したクリップを .zip として「ダウンロード」へ書き出し",
+        "sel.collection.tip": "選択したクリップを、絞り込めるコレクションにまとめます",
     ]
 }
