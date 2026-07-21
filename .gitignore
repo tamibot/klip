@@ -16,3 +16,6 @@
 .agents/
 .claude/skills/
 skills-lock.json
+
+# Local security-audit reports (gstack) — stay on the machine, never pushed
+.gstack/
