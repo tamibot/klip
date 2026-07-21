@@ -54,6 +54,10 @@ final class ScrollCaptureController: NSObject {
     private static let matchThreshold: Float = 6.0
     /// Two signatures within this per-row epsilon are the same frame (end-of-page detector).
     private static let identicalEps: Float = 0.5
+    /// Manual fallback cadence: how often we re-shoot while the USER scrolls, and how many
+    /// consecutive unchanged shots mean "they have stopped".
+    private static let manualPollDelay: Double = 0.45
+    private static let manualIdleTicks = 9        // ≈4 s of stillness
     /// Hard canvas cap (~128 MB at a 2 000 px-wide region). Hitting it AUTO-FINISHES with what
     /// exists — a capture that can't be saved at all is the documented failure to avoid.
     private static let maxCanvasHeightPx = 16_000
@@ -87,6 +91,8 @@ final class ScrollCaptureController: NSObject {
     private var frameHeightPx = 0
     private var prevSignature: [Float] = []
     private var frameCount = 0
+    /// True once auto-scroll proved impossible and the user is driving instead.
+    private var manualMode = false
 
     private var started = false
     private var finished = false
@@ -134,11 +140,11 @@ final class ScrollCaptureController: NSObject {
         guard region.width >= 4, region.height >= 4, ScreenCapturer.hasPermission() else {
             finish(nil, .failed); return
         }
-        // Same privilege class as auto-paste (Paster): posting CGEvents needs Accessibility.
-        // Distinct failure so the caller can prompt instead of showing a generic error.
-        try? "AXIsProcessTrusted=\(Paster.hasAccessibilityPermission) bundle=\(Bundle.main.bundlePath)\n"
-            .write(toFile: "/tmp/klip_ax.log", atomically: true, encoding: .utf8)
-        guard Paster.hasAccessibilityPermission else { finish(nil, .needsAccessibility); return }
+        // DELIBERATELY NOT GATED on Paster.hasAccessibilityPermission. That flag is bound to the
+        // app's code signature, so a rebuilt/re-signed Klip reads false even while System Settings
+        // still lists it as enabled — refusing up front turned a working setup into a hard error.
+        // Instead: attempt the scroll, and judge by whether the CONTENT ACTUALLY MOVED. The flag is
+        // only consulted afterwards, to explain a failure we really observed.
         do {
             let content = try await SCShareableContent
                 .excludingDesktopWindows(false, onScreenWindowsOnly: false)
@@ -167,6 +173,7 @@ final class ScrollCaptureController: NSObject {
             finish(nil, .failed); return
         }
 
+        var movedAtLeastOnce = false
         while !finished {
             guard frameCount < Self.maxFrames, contentHeightPx < Self.maxCanvasHeightPx else { break }
             await postScrollStep()
@@ -174,8 +181,41 @@ final class ScrollCaptureController: NSObject {
             guard !finished else { return }
             guard let frame = await capture() else { break }   // a dead shot ends with what we have
             if ingest(frame) == .endOfPage { break }
+            movedAtLeastOnce = true
+        }
+        // Nothing EVER moved and we are not trusted for Accessibility: our synthetic scrolls went
+        // nowhere (CGEvent.post fails SILENTLY when untrusted). Rather than throw the session away,
+        // fall back to letting the USER scroll — the stitcher does not care who moved the content.
+        // This is what keeps scrolling capture usable on a Mac whose Accessibility entry has gone
+        // stale against a rebuilt binary, which is a state the user cannot even see.
+        if !movedAtLeastOnce, !Paster.hasAccessibilityPermission {
+            await runManualFallback()
+            return
         }
         finishNow()   // the headline: end of page / cap reached → the image arrives on its own
+    }
+
+    /// Manual mode: Klip stops driving and just watches. Keeps shooting the region while the user
+    /// scrolls it themselves, stitching every frame that actually moved, and finishes on its own
+    /// once the content has been still for a few seconds (or via Cancel / ⌥⇧S, as always).
+    private func runManualFallback() async {
+        manualMode = true
+        updateStatus()
+        var idleTicks = 0
+        while !finished {
+            guard frameCount < Self.maxFrames, contentHeightPx < Self.maxCanvasHeightPx else { break }
+            try? await Task.sleep(nanoseconds: UInt64(Self.manualPollDelay * 1_000_000_000))
+            guard !finished else { return }
+            guard let frame = await capture() else { break }
+            if ingest(frame) == .appended {
+                idleTicks = 0
+            } else {
+                idleTicks += 1
+                // Still for long enough that the user is done scrolling — wrap up on our own.
+                if idleTicks >= Self.manualIdleTicks { break }
+            }
+        }
+        finishNow()
     }
 
     private func capture() async -> CGImage? {
@@ -368,7 +408,10 @@ final class ScrollCaptureController: NSObject {
     // MARK: - Progress pill
 
     private func updateStatus() {
-        statusField?.stringValue = String(format: L10n.t("scroll.status"), frameCount, contentHeightPx)
+        // Manual mode has to SAY so — otherwise the user waits for a scroll that will never come.
+        statusField?.stringValue = manualMode
+            ? String(format: L10n.t("scroll.status.manual"), frameCount)
+            : String(format: L10n.t("scroll.status"), frameCount, contentHeightPx)
     }
 
     /// Passive progress + one Cancel. ToastHUD's exact action-button recipe — the shipped,

@@ -162,23 +162,32 @@ private final class CaptureOverlayView: NSView {
     /// A black outline around a white core stays ≥25% on white, light, mid-grey and near-black, and
     /// the extra size makes it readable without hunting. The centre gap keeps the target pixel clear.
     private static let crosshairCursor: NSCursor = {
-        let size: CGFloat = 28, gap: CGFloat = 3.5
+        let size: CGFloat = 28, ring: CGFloat = 5, gap: CGFloat = 2.5
         let c = size / 2
         let img = NSImage(size: NSSize(width: size, height: size))
         img.lockFocus()
-        func arms(width: CGFloat, color: NSColor) {
+        // Cross arms PLUS a ring at the centre — the system screenshot cursor's actual shape; the
+        // ring is what makes it read as a target rather than a plus sign. Painted twice: a wide
+        // WHITE pass, then a narrow BLACK core over it. That order matters — black core means it
+        // looks black on light content (as macOS's does), while the white outline underneath is
+        // what keeps it alive on a dark editor or photo.
+        func paint(width: CGFloat, color: NSColor) {
             color.setStroke()
-            let p = NSBezierPath()
-            p.lineWidth = width
-            p.lineCapStyle = .butt
-            p.move(to: NSPoint(x: 0, y: c));       p.line(to: NSPoint(x: c - gap, y: c))
-            p.move(to: NSPoint(x: c + gap, y: c)); p.line(to: NSPoint(x: size, y: c))
-            p.move(to: NSPoint(x: c, y: 0));       p.line(to: NSPoint(x: c, y: c - gap))
-            p.move(to: NSPoint(x: c, y: c + gap)); p.line(to: NSPoint(x: c, y: size))
-            p.stroke()
+            let arms = NSBezierPath()
+            arms.lineWidth = width
+            arms.lineCapStyle = .butt
+            arms.move(to: NSPoint(x: 0, y: c));       arms.line(to: NSPoint(x: c - gap, y: c))
+            arms.move(to: NSPoint(x: c + gap, y: c)); arms.line(to: NSPoint(x: size, y: c))
+            arms.move(to: NSPoint(x: c, y: 0));       arms.line(to: NSPoint(x: c, y: c - gap))
+            arms.move(to: NSPoint(x: c, y: c + gap)); arms.line(to: NSPoint(x: c, y: size))
+            arms.stroke()
+            let circle = NSBezierPath(ovalIn: NSRect(x: c - ring, y: c - ring,
+                                                     width: ring * 2, height: ring * 2))
+            circle.lineWidth = width
+            circle.stroke()
         }
-        arms(width: 3.5, color: .black)   // outline first…
-        arms(width: 1.5, color: .white)   // …then the core on top of it
+        paint(width: 3.0, color: .white)
+        paint(width: 1.25, color: .black)
         img.unlockFocus()
         // Symmetric image, so the hotspot is the centre in either coordinate convention.
         return NSCursor(image: img, hotSpot: NSPoint(x: c, y: c))
