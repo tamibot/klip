@@ -559,6 +559,7 @@ struct ItemRow: View {
     /// Counts every copy click. Rapid clicks must each get their own bounce + tick, and each pending
     /// revert must be able to tell whether it still owns the icon — a Bool can't express either.
     @State private var copyGeneration = 0
+    @State private var videoThumb: NSImage?
     /// The generation whose checkmark is on screen (0 = showing the copy glyph).
     @State private var shownCopyGeneration = 0
 
@@ -643,7 +644,7 @@ struct ItemRow: View {
                     .padding(.leading, 6)
             }
             Group {
-                if item.kind == .image { imageCard } else { standardRow }
+                if item.kind == .image { imageCard } else if item.kind == .video { videoCard } else { standardRow }
             }
         }
         // Single, clean selection: one rounded accent-tint fill — no border, no rail. Tuned for the
@@ -898,6 +899,60 @@ struct ItemRow: View {
             }
         }
         .padding(.vertical, 7).padding(.horizontal, RowMetrics.inset)
+    }
+
+    /// Same card language as imageCard — poster frame, ▶ glyph, duration badge — so a recording is
+    /// recognizable at a glance without playing it. The thumb generates once, off the row's paint.
+    private var videoCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack {
+                if let thumb = videoThumb {
+                    Image(nsImage: thumb).resizable().aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity).frame(height: 150)
+                } else {
+                    RoundedRectangle(cornerRadius: 8).fill(.quaternary)
+                        .frame(maxWidth: .infinity).frame(height: 150)
+                        .overlay(Image(systemName: "video").font(.system(size: 28)).foregroundStyle(.secondary))
+                }
+                // The universal "this is a video" affordance, over a dim wash so it reads on any frame.
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 34))
+                    .foregroundStyle(.white.opacity(0.92), .black.opacity(0.35))
+            }
+            .background(.quaternary)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.1)))
+            .overlay(alignment: .bottomTrailing) {
+                if let d = item.videoDuration, d > 0 {
+                    // Same readout badge as the image card (solid capsule, white monospaced).
+                    Text(Self.mmss(d))
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(.white)
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Color.black.opacity(0.7), in: Capsule())
+                        .padding(6)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                if let nm = customName {
+                    Text(nm).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                }
+                HStack(spacing: 6) {
+                    metadata
+                    Spacer(minLength: 4)
+                    if showsActions { actions } else if item.pinned { pinDot }
+                }
+            }
+        }
+        .padding(.vertical, 7).padding(.horizontal, RowMetrics.inset)
+        .task(id: item.videoFileName) {
+            guard item.kind == .video, let fn = item.videoFileName else { return }
+            videoThumb = await Storage.shared.generateVideoThumbnail(fileName: fn)
+        }
+    }
+
+    static func mmss(_ seconds: Double) -> String {
+        let s = Int(seconds.rounded())
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 
     private var standardRow: some View {

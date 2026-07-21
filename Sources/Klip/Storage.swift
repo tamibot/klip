@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import PDFKit
+import AVFoundation
 
 /// On-disk persistence: history metadata (JSON), images (PNG), and temporary audio (m4a).
 final class Storage {
@@ -232,6 +233,31 @@ final class Storage {
 
     func videoURL(for fileName: String) -> URL { videosURL.appendingPathComponent(fileName) }
     func deleteVideo(fileName: String) { try? FileManager.default.removeItem(at: videoURL(for: fileName)) }
+
+    private let videoThumbCache = NSCache<NSString, NSImage>()
+
+    /// Cache-only lookup for a recording's poster frame — sync-safe for menu building and row paint.
+    func cachedVideoThumbnail(fileName: String) -> NSImage? {
+        videoThumbCache.object(forKey: fileName as NSString)
+    }
+
+    /// Generates (once) and caches a poster frame. A slightly-in frame (10%) instead of frame 0:
+    /// screen recordings usually open on the static "before" state, and a beat in reads better.
+    func generateVideoThumbnail(fileName: String) async -> NSImage? {
+        if let hit = cachedVideoThumbnail(fileName: fileName) { return hit }
+        let url = videoURL(for: fileName)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let asset = AVURLAsset(url: url)
+        let gen = AVAssetImageGenerator(asset: asset)
+        gen.appliesPreferredTrackTransform = true
+        gen.maximumSize = CGSize(width: 640, height: 640)   // row/menu size — never decode 5K frames
+        guard let duration = try? await asset.load(.duration).seconds, duration > 0 else { return nil }
+        let at = CMTime(seconds: min(duration * 0.1, 3), preferredTimescale: 600)
+        guard let cg = try? await gen.image(at: at).image else { return nil }
+        let img = NSImage(cgImage: cg, size: NSSize(width: CGFloat(cg.width) / 2, height: CGFloat(cg.height) / 2))
+        videoThumbCache.setObject(img, forKey: fileName as NSString)
+        return img
+    }
 
     /// Moves a finished recording from its temp location into the store (recordings are large:
     /// always move, never load into memory). Returns the stored file name, nil on failure.

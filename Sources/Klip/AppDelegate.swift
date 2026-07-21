@@ -829,7 +829,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         for it in items {
             // Native menus use template symbol images, never emoji in titles.
-            let symbol = it.isVoiceNote == true ? "mic.fill" : (it.kind == .image ? "photo" : (it.isCredential == true ? "key.fill" : nil))
+            let symbol = it.isVoiceNote == true ? "mic.fill"
+                : (it.kind == .image ? "photo" : (it.kind == .video ? "video" : (it.isCredential == true ? "key.fill" : nil)))
             let body: String
             if let nm = it.name, !nm.isEmpty { body = String(nm.prefix(45)) }   // name set by the user
             else if it.isCredential == true { body = CredentialDetector.masked(it.text ?? "") }
@@ -844,6 +845,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let mi = NSMenuItem(title: "\(Self.recentsDF.string(from: it.createdAt))   \(body)",
                                 action: #selector(pasteRecent(_:)), keyEquivalent: "")
             if let symbol { mi.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+            // A recording shows its poster frame instead of the generic glyph — instantly readable
+            // as "that video". Cache-only here (menu building is sync); a miss kicks generation so
+            // the NEXT open has it.
+            if it.kind == .video, let fn = it.videoFileName {
+                if let thumb = Storage.shared.cachedVideoThumbnail(fileName: fn) {
+                    let sized = NSImage(size: NSSize(width: 34, height: 22))
+                    sized.lockFocus()
+                    thumb.draw(in: NSRect(x: 0, y: 0, width: 34, height: 22),
+                               from: .zero, operation: .sourceOver, fraction: 1)
+                    sized.unlockFocus()
+                    mi.image = sized
+                } else {
+                    Task.detached(priority: .utility) { _ = await Storage.shared.generateVideoThumbnail(fileName: fn) }
+                }
+            }
             mi.representedObject = it.id
             mi.target = self
             menu.addItem(mi)
