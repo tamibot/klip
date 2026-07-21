@@ -162,7 +162,10 @@ private final class CaptureOverlayView: NSView {
     /// A black outline around a white core stays ≥25% on white, light, mid-grey and near-black, and
     /// the extra size makes it readable without hunting. The centre gap keeps the target pixel clear.
     private static let crosshairCursor: NSCursor = {
-        let size: CGFloat = 28, ring: CGFloat = 5, gap: CGFloat = 2.5
+        // Sized to sit alongside the system cursors rather than tower over them: 28 read as
+        // oversized in use. The stroke widths do NOT scale down with it — they are what carry the
+        // contrast, so they stay near their measured values.
+        let size: CGFloat = 20, ring: CGFloat = 3.5, gap: CGFloat = 2
         let c = size / 2
         let img = NSImage(size: NSSize(width: size, height: size))
         img.lockFocus()
