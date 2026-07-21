@@ -25,6 +25,7 @@ struct KeyCombo: Equatable {
     static let defaultTextCaptureCombo = KeyCombo(keyCode: UInt32(kVK_ANSI_F), carbonModifiers: UInt32(optionKey | shiftKey)) // ⌥⇧F fast OCR
     static let defaultUploadCombo = KeyCombo(keyCode: UInt32(kVK_ANSI_O), carbonModifiers: UInt32(optionKey | shiftKey))      // ⌥⇧O upload
     static let defaultMeetingCombo = KeyCombo(keyCode: UInt32(kVK_ANSI_M), carbonModifiers: UInt32(optionKey | shiftKey))     // ⌥⇧M meeting
+    static let defaultScreenRecCombo = KeyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: UInt32(optionKey | shiftKey))   // ⌥⇧V video (screen recording)
 
     // Previous ⌥⌘ defaults and the brief ⌥⇧ Y/R/T/G/E set — migrate anyone still on them onto the new set.
     static let prevOptCmdPanel   = KeyCombo(keyCode: UInt32(kVK_ANSI_Y), carbonModifiers: UInt32(cmdKey | optionKey))
@@ -166,6 +167,8 @@ final class Settings: ObservableObject {
         static let mods5      = "textCaptureHotKeyModifiers"
         static let keyCode6   = "meetingHotKeyCode"
         static let mods6      = "meetingHotKeyModifiers"
+        static let keyCode7   = "screenRecHotKeyCode"
+        static let mods7      = "screenRecHotKeyModifiers"
         static let uiLang     = "uiLanguage"
     }
 
@@ -221,6 +224,11 @@ final class Settings: ObservableObject {
         d.set(Int(meetingCombo.keyCode), forKey: K.keyCode6)
         d.set(Int(meetingCombo.carbonModifiers), forKey: K.mods6)
     } }
+    /// Global shortcut to start/stop a screen recording (region → video/GIF).
+    @Published var screenRecCombo: KeyCombo { didSet {
+        d.set(Int(screenRecCombo.keyCode), forKey: K.keyCode7)
+        d.set(Int(screenRecCombo.carbonModifiers), forKey: K.mods7)
+    } }
     @Published var uiLanguage: String     { didSet {
         d.set(uiLanguage, forKey: K.uiLang)
         // Keep the audio language following the platform language, but ONLY while the user hasn't
@@ -266,6 +274,8 @@ final class Settings: ObservableObject {
             K.mods5: Int(optionKey | shiftKey),
             K.keyCode6: Int(kVK_ANSI_M),
             K.mods6: Int(optionKey | shiftKey),
+            K.keyCode7: Int(kVK_ANSI_V),
+            K.mods7: Int(optionKey | shiftKey),
             K.uiLang: "en"   // English is the base/default UI language (open-source collaboration)
         ])
         maxItems = d.integer(forKey: K.maxItems)
@@ -297,6 +307,8 @@ final class Settings: ObservableObject {
                                     carbonModifiers: UInt32(d.integer(forKey: K.mods5)))
         meetingCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode6)),
                                 carbonModifiers: UInt32(d.integer(forKey: K.mods6)))
+        screenRecCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode7)),
+                                  carbonModifiers: UInt32(d.integer(forKey: K.mods7)))
         uiLanguage = d.string(forKey: K.uiLang) ?? "en"
 
         // One-time migration: the capture default changed from ⌘⇧2 to ⌘⇧U (⌘⇧2 was hijacked by apps like Loom).

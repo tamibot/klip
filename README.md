@@ -53,6 +53,7 @@ Text & image history · **native capture + annotation** · **fast OCR capture** 
 - Also from the 📷 button in the panel or the menu-bar menu.
 - **Fast text capture** (`⌥⇧F`): snip a region and its **text is OCR'd straight to the clipboard** (and history) — skips the editor when you just need the text.
 - **Upload audio/video** (`⌥⇧O`): drop or pick files; each one's transcription appears right in the window as it finishes, with a per-upload language override.
+- **Screen recording** (`⌥⇧V`): select a region and record it to an **MP4-compatible video (H.264 .mov)** — press `⌥⇧V` again to stop. The file lands in **Downloads** with a one-tap **Convert to GIF** (10 fps, chat-friendly). Crash-safe (fragmented movie) and Klip's own windows never appear in the recording.
 
 ### 🖼️ Images
 - Large preview (cached thumbnails for smooth scrolling), **open large** and **save to file**.
@@ -116,12 +117,13 @@ Global shortcuts use **⌥⇧ (Option+Shift)** + a letter, grouped by function o
 | `⌥⇧F` | **F**ast text capture: snip a region → OCR straight to the clipboard, no editor |
 | `⌥⇧O` | **O**pen the "upload audio/video to transcribe" window |
 | `⌥⇧M` | Record a **m**eeting (mic + system audio) — press again to stop |
+| `⌥⇧V` | Record a screen region to **v**ideo/GIF — press again to stop |
 | `↑` / `↓` · `Enter` | Navigate and pick an item |
 | `⌘↩` | Copy the selected item as a code block (``` ```) |
 | `Esc` | Close the panel |
 | `⌘⇧⌃4` | *(macOS)* screenshot to clipboard → also lands in Klip |
 
-> All six global shortcuts are **configurable** in Preferences › Shortcuts.
+> All seven global shortcuts are **configurable** in Preferences › Shortcuts.
 
 ## 🧰 Requirements
 
@@ -211,6 +213,7 @@ Open **Preferences** (`⌘,` from the Klip menu):
 | `Recorder.swift` / `AudioPlayer.swift` | Recording, background transcription and voice-note playback. |
 | `MediaAudioExtractor.swift` | Extracts a **video's** audio track (AVAssetReader→Writer, 16 kHz mono AAC) for transcription. |
 | `MeetingRecorder.swift` | **Meeting notes**: mic + system audio (ScreenCaptureKit), local mix, Me/Them dual-track transcription. |
+| `ScreenRecorder.swift` | **Screen recording**: region → H.264 video (SCStream → AVAssetWriter) + streamed GIF export. |
 | `OpenAIClient.swift` / `GeminiClient.swift` / `LocalTranscriber.swift` | Transcription via OpenAI, Google Gemini or on-device WhisperKit. |
 | `L10n.swift` | Lightweight localization (8 languages). |
 | `SecretStore.swift` | API keys in local `0600` files (`openai.key`, `gemini.key`). |

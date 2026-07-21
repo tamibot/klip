@@ -370,6 +370,14 @@ enum L10n {
         "a11y.hint.batch": "Añade o quita este clip de la selección",
         "a11y.on": "marcado",
         "a11y.off": "sin marcar",
+        "menu.recordScreen": "Grabar sección de pantalla",
+        "menu.recordScreen.stop": "Detener grabación",
+        "prefs.sc.record": "Grabar pantalla",
+        "toast.recSaved.title": "Grabación guardada",
+        "toast.recSaved.action": "Convertir a GIF",
+        "toast.gifSaved": "GIF guardado",
+        "toast.gifFailed": "No se pudo convertir a GIF",
+        "rec.screen.failed": "La grabación de pantalla falló",
     ]
 
     private static let en: [String: String] = [
@@ -723,6 +731,14 @@ enum L10n {
         "a11y.hint.batch": "Adds or removes this clip from the selection",
         "a11y.on": "checked",
         "a11y.off": "unchecked",
+        "menu.recordScreen": "Record screen region",
+        "menu.recordScreen.stop": "Stop recording",
+        "prefs.sc.record": "Record screen",
+        "toast.recSaved.title": "Recording saved",
+        "toast.recSaved.action": "Convert to GIF",
+        "toast.gifSaved": "GIF saved",
+        "toast.gifFailed": "Couldn't convert to GIF",
+        "rec.screen.failed": "Screen recording failed",
     ]
 
     // The translations below (fr/de/it/pt/zh/ja) are filled in by the translation workflow; any
@@ -1079,6 +1095,14 @@ enum L10n {
         "a11y.hint.batch": "Ajoute ce clip à la sélection ou l'en retire",
         "a11y.on": "coché",
         "a11y.off": "décoché",
+        "menu.recordScreen": "Enregistrer une zone de l'écran",
+        "menu.recordScreen.stop": "Arrêter l'enregistrement",
+        "prefs.sc.record": "Enregistrer l'écran",
+        "toast.recSaved.title": "Enregistrement sauvegardé",
+        "toast.recSaved.action": "Convertir en GIF",
+        "toast.gifSaved": "GIF sauvegardé",
+        "toast.gifFailed": "Conversion en GIF impossible",
+        "rec.screen.failed": "Échec de l'enregistrement de l'écran",
     ]
 
     private static let de: [String: String] = [
@@ -1433,6 +1457,14 @@ enum L10n {
         "a11y.hint.batch": "Fügt diesen Clip der Auswahl hinzu oder entfernt ihn",
         "a11y.on": "aktiviert",
         "a11y.off": "deaktiviert",
+        "menu.recordScreen": "Bildschirmbereich aufnehmen",
+        "menu.recordScreen.stop": "Aufnahme beenden",
+        "prefs.sc.record": "Bildschirm aufnehmen",
+        "toast.recSaved.title": "Aufnahme gesichert",
+        "toast.recSaved.action": "In GIF umwandeln",
+        "toast.gifSaved": "GIF gesichert",
+        "toast.gifFailed": "GIF-Umwandlung fehlgeschlagen",
+        "rec.screen.failed": "Bildschirmaufnahme fehlgeschlagen",
     ]
 
     private static let it: [String: String] = [
@@ -1787,6 +1819,14 @@ enum L10n {
         "a11y.hint.batch": "Aggiunge o rimuove questa clip dalla selezione",
         "a11y.on": "selezionato",
         "a11y.off": "non selezionato",
+        "menu.recordScreen": "Registra un'area dello schermo",
+        "menu.recordScreen.stop": "Interrompi la registrazione",
+        "prefs.sc.record": "Registra schermo",
+        "toast.recSaved.title": "Registrazione salvata",
+        "toast.recSaved.action": "Converti in GIF",
+        "toast.gifSaved": "GIF salvata",
+        "toast.gifFailed": "Impossibile convertire in GIF",
+        "rec.screen.failed": "Registrazione dello schermo non riuscita",
     ]
 
     private static let pt: [String: String] = [
@@ -2141,6 +2181,14 @@ enum L10n {
         "a11y.hint.batch": "Adiciona ou remove este clipe da seleção",
         "a11y.on": "marcado",
         "a11y.off": "desmarcado",
+        "menu.recordScreen": "Gravar área da tela",
+        "menu.recordScreen.stop": "Parar gravação",
+        "prefs.sc.record": "Gravar tela",
+        "toast.recSaved.title": "Gravação salva",
+        "toast.recSaved.action": "Converter para GIF",
+        "toast.gifSaved": "GIF salvo",
+        "toast.gifFailed": "Não foi possível converter para GIF",
+        "rec.screen.failed": "A gravação da tela falhou",
     ]
 
     private static let zh: [String: String] = [
@@ -2495,6 +2543,14 @@ enum L10n {
         "a11y.hint.batch": "将此剪贴项加入或移出所选内容",
         "a11y.on": "已选中",
         "a11y.off": "未选中",
+        "menu.recordScreen": "录制屏幕区域",
+        "menu.recordScreen.stop": "停止录制",
+        "prefs.sc.record": "录制屏幕",
+        "toast.recSaved.title": "录制已保存",
+        "toast.recSaved.action": "转换为 GIF",
+        "toast.gifSaved": "GIF 已保存",
+        "toast.gifFailed": "无法转换为 GIF",
+        "rec.screen.failed": "屏幕录制失败",
     ]
 
     private static let ja: [String: String] = [
@@ -2849,5 +2905,13 @@ enum L10n {
         "a11y.hint.batch": "このクリップを選択に追加、または選択から外します",
         "a11y.on": "オン",
         "a11y.off": "オフ",
+        "menu.recordScreen": "画面の領域を録画",
+        "menu.recordScreen.stop": "録画を停止",
+        "prefs.sc.record": "画面を録画",
+        "toast.recSaved.title": "録画を保存しました",
+        "toast.recSaved.action": "GIF に変換",
+        "toast.gifSaved": "GIF を保存しました",
+        "toast.gifFailed": "GIF に変換できませんでした",
+        "rec.screen.failed": "画面録画に失敗しました",
     ]
 }

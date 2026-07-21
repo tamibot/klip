@@ -155,6 +155,29 @@ final class Storage {
         return url
     }
 
+    /// Same timestamped, collision-safe Downloads export, but MOVING an existing file instead of
+    /// writing a Data blob — a screen recording can be hundreds of MB and must never be loaded
+    /// into memory just to relocate it.
+    func exportFileToDownloads(from src: URL, ext: String, base: String? = nil) throws -> URL {
+        let dir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
+        let name: String
+        if let base, !base.isEmpty {
+            name = base.replacingOccurrences(of: "[/:\\\\]", with: "-", options: .regularExpression)
+        } else {
+            let df = DateFormatter()
+            df.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+            name = "Klip \(df.string(from: Date()))"
+        }
+        var url = dir.appendingPathComponent("\(name).\(ext)")
+        var n = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = dir.appendingPathComponent("\(name)-\(n).\(ext)"); n += 1
+        }
+        try FileManager.default.moveItem(at: src, to: url)
+        return url
+    }
+
     func exportPNGToDownloads(_ png: Data) throws -> URL { try exportToDownloads(png, ext: "png") }
 
     func deleteImage(fileName: String) {

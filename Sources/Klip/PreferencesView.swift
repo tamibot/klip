@@ -59,6 +59,7 @@ struct PreferencesView: View {
     var onUploadHotKeyChange: (KeyCombo) -> Void
     var onTextCaptureHotKeyChange: (KeyCombo) -> Void
     var onMeetingHotKeyChange: (KeyCombo) -> Void
+    var onScreenRecHotKeyChange: (KeyCombo) -> Void
     // Kept for the AppDelegate wiring but intentionally never called: trimming on every
     // Stepper click deleted history (and media) per click. History self-trims on the next
     // capture via trimAndSave, so the new limit applies as new items arrive.
@@ -188,6 +189,7 @@ struct PreferencesView: View {
                 shortcutRow(L10n.t("prefs.sc.captureText"), $settings.textCaptureCombo, onTextCaptureHotKeyChange)
                 shortcutRow(L10n.t("prefs.sc.upload"), $settings.uploadCombo, onUploadHotKeyChange)
                 shortcutRow(L10n.t("prefs.sc.meeting"), $settings.meetingCombo, onMeetingHotKeyChange)
+                shortcutRow(L10n.t("prefs.sc.record"), $settings.screenRecCombo, onScreenRecHotKeyChange)
                 Text(L10n.t("prefs.sc.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }

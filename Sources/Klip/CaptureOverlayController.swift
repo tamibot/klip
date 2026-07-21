@@ -14,12 +14,25 @@ final class CaptureOverlayController {
     private var window: NSWindow?
     private let shot: DisplayShot
     private let onComplete: (NSImage?) -> Void
+    /// Region mode (screen recording): instead of cropping the frozen bitmap, hand back the
+    /// selection as TOP-LEFT-origin display points — SCStreamConfiguration.sourceRect's space.
+    /// nil rect = cancelled. The frozen frame is still shown for picking; the recording that
+    /// follows captures the live screen.
+    private let onRegion: ((NSScreen, CGRect?) -> Void)?
+    private var pendingRegion: CGRect?
     private var resolved = false               // avoids double-dismiss / firing onComplete twice
     private var escMonitor: Any?               // Esc backup while Klip is active (see present() for the limit)
 
     init(shot: DisplayShot, onComplete: @escaping (NSImage?) -> Void) {
         self.shot = shot
         self.onComplete = onComplete
+        self.onRegion = nil
+    }
+
+    init(shot: DisplayShot, onRegion: @escaping (NSScreen, CGRect?) -> Void) {
+        self.shot = shot
+        self.onComplete = { _ in }
+        self.onRegion = onRegion
     }
 
     func present() {
@@ -68,6 +81,15 @@ final class CaptureOverlayController {
     private func finish(selectionInView rect: NSRect) {
         guard !resolved else { return }
         guard rect.width >= 4, rect.height >= 4 else { dismiss(nil); return }
+        if onRegion != nil {
+            // Flip Y only: view coords are bottom-left points of this display, sourceRect wants
+            // top-left points. No scale here — ScreenCaptureKit takes points and we set the
+            // pixel dimensions separately.
+            pendingRegion = CGRect(x: rect.minX, y: shot.screen.frame.height - rect.maxY,
+                                   width: rect.width, height: rect.height)
+            dismiss(nil)
+            return
+        }
         let scale = shot.scale
         let viewH = shot.screen.frame.height
         let imgBounds = CGRect(x: 0, y: 0, width: shot.cgImage.width, height: shot.cgImage.height)
@@ -91,8 +113,9 @@ final class CaptureOverlayController {
         let win = window
         window = nil
         // A capture should feel instant (the flash already confirmed it): close immediately.
-        // A cancel eases out so the frozen frame doesn't just blink away.
-        if image == nil, let win, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        // A confirmed region (recording about to start) also closes immediately — only a true
+        // cancel eases out so the frozen frame doesn't just blink away.
+        if image == nil, pendingRegion == nil, let win, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.12
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -101,7 +124,7 @@ final class CaptureOverlayController {
         } else {
             win?.orderOut(nil)
         }
-        onComplete(image)
+        if let onRegion { onRegion(shot.screen, pendingRegion) } else { onComplete(image) }
     }
 }
 

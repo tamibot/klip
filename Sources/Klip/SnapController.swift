@@ -121,7 +121,7 @@ final class SnapController {
     /// No Screen Recording permission. The FIRST time we only show the native system prompt
     /// (`requestPermission`); on later attempts (when the native prompt no longer reappears) we show
     /// our own guide with a shortcut to Settings. This way the two messages never overlap.
-    private func promptForPermission() {
+    func promptForPermission() {
         let askedKey = "klip.askedScreenRecording"
         if !UserDefaults.standard.bool(forKey: askedKey) {
             UserDefaults.standard.set(true, forKey: askedKey)
