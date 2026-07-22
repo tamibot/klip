@@ -7,7 +7,7 @@
 //
 // Regenerate (or switch kits) with:
 //   npm install @web-kits/audio node-web-audio-api
-//   node Tools/bake-sounds.mjs [--kit core] [--out Resources/Sounds]
+//   node Resources/Sounds/bake-sounds.mjs [--kit core] [--out Resources/Sounds]
 //
 // The kit JSON is fetched from the library's repo unless --kit points to a local .json file.
 

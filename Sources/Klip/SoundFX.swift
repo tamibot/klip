@@ -5,7 +5,7 @@ import AppKit
 /// The cues are rendered from the "core" kit of raphaelsalaja/audio
 /// (https://github.com/raphaelsalaja/audio, MIT © 2026 Raphael Salaja), a synthesis library whose
 /// kits define each sound as an oscillator+envelope patch rather than an audio file.
-/// Tools/bake-sounds.mjs renders them once to the WAVs in Resources/Sounds, and build.sh ships
+/// Resources/Sounds/bake-sounds.mjs renders them once to the WAVs in Resources/Sounds, and build.sh ships
 /// that folder into the app bundle exactly like AppIcon.icns. A bare `swift build` binary has no
 /// bundle → play() degrades to a silent no-op.
 @MainActor
