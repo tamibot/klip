@@ -5,7 +5,7 @@
 **The clipboard manager for vibe coders — native to Mac.**
 Everything you copy while building with AI — code, errors, screenshots, prompts and keys — one shortcut away.
 
-Text & image history · **native capture + annotation** · **fast OCR capture** · **voice & video → text** · **meeting notes (mic + system audio, no bot)** (on-device, or OpenAI/Gemini) · **copy as code block / for WhatsApp / for email** · **always-paste-clean** · **encrypted credential manager**. Lives in the menu bar: light, fast and private.
+Text & image history · **capture + annotation** · **scrolling capture** · **screen recording → video/GIF** · **fast OCR** · **voice & video → text** · **meeting notes (mic + system audio, no bot)** (on-device, or OpenAI/Gemini) · **share links from your own bucket** · **copy as code block / for WhatsApp / for email** · **always-paste-clean** · **encrypted credential manager**. Lives in the menu bar: light, fast and private.
 
 🆓 Free & open source (Apache 2.0) · 🔒 No telemetry · 🍎 Native Swift (no Electron)
 
