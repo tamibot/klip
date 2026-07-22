@@ -47,16 +47,27 @@ local-first/no-telemetry, and hosted clouds are the most-resented screenshot-app
 Rank-2 daily feature and the #1 documented reason people switch to CleanShot. v1 (manual scroll +
 seam-on-mismatch) failed user testing on both counts; v2 is what shipped:
 
-- `⌥⇧S` → drag the CONTENT region → Klip scrolls the page ITSELF: synthetic pixel-unit wheel
-  events at the region center (cursor warped once; same Accessibility privilege as auto-paste,
-  distinct failure → prompt), step = 60% of region height, ~450 ms settle per step.
+- `⌥⇧S` → drag the CONTENT region → Klip REWINDS THE PAGE TO ITS TOP, then scrolls down itself:
+  synthetic pixel-unit wheel events at the region center (cursor warped once), step = 60% of
+  region height, ~450 ms settle per step. Rewind matters more than it sounds: you scroll to FIND
+  what you want to capture, so without it the capture started mid-page and, at the bottom, ended
+  instantly with one frame and a success tick.
+- Bounded: 20 steps up, 50 down. On an endless feed that means "start ~20 screens up, take 50
+  screens", instead of winding forever.
+- Accessibility is NOT gated on up front. AXIsProcessTrusted() is bound to the code signature, so a
+  rebuilt app reads false while System Settings still shows it enabled — a state the user cannot
+  see. Klip attempts the scroll and judges by whether content MOVED; if it provably did not and we
+  are untrusted, it falls back to stitching while the USER scrolls (the stitcher does not care who
+  moved the content). `tccutil reset Accessibility <bundle>` is the real fix for a stale entry.
 - KNOWN-DELTA stitching: search only expected ± 120 px (kills the false matches that caused v1's
   seams); one full-range retry; still no match OR identical frame → END OF PAGE → auto-finish.
   NO seam lines ever — degraded overlap beats a visible artifact.
 - Caps (16 000 px / 120 frames) auto-finish with what exists — never a failed save.
 - Cancel: pill button, global Esc (session-scoped Carbon hotkey — a local monitor never fires
   because Klip isn't the active app), or ⌥⇧S again = finish-now.
-- Result → history + clipboard like any capture (OCR-searchable).
+- Result → history + clipboard like any capture (OCR-searchable), confirmed by a TOAST. Capture
+  flows (⌥⇧D/⌥⇧F/⌥⇧S) deliberately no longer reveal the history panel: they are their own errand,
+  and the panel landed on top of the thing just captured.
 - Still cut: horizontal, manual repositioning, multi-page print.
 
 ## Also cheap and loved (candidates)

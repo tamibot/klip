@@ -49,12 +49,12 @@ Text & image history · **native capture + annotation** · **fast OCR capture** 
 ### 📸 Native capture + annotation (Klip Snap)
 - Global shortcut **`⌥⇧D`** → snip a region of the screen (drag a selection over a dimmed *freeze-frame*, with a live dimension badge and correct Retina scale). Uses **ScreenCaptureKit** (not the deprecated API).
 - Built-in **annotation editor**: **select & move any annotation**, pencil, line, **arrow**, rectangle, ellipse, highlighter, **editable/movable/resizable text**, **blur/pixelate**, **spotlight**, **numbered counter badges**, color, stroke width, **undo/redo** and **pinch zoom** with a live percentage readout.
-- When you're done, the annotated capture lands in **history** (ready for **OCR** and search) and on the clipboard.
+- When you're done, the annotated capture lands in **history** (ready for **OCR** and search) and on the clipboard. Capture shortcuts confirm with a **notification**, never by opening the panel over what you just captured.
 - Also from the 📷 button in the panel or the menu-bar menu.
 - **Fast text capture** (`⌥⇧F`): snip a region and its **text is OCR'd straight to the clipboard** (and history) — skips the editor when you just need the text.
 - **Upload audio/video** (`⌥⇧O`): drop or pick files; each one's transcription appears right in the window as it finishes, with a per-upload language override.
 - **Screen recording** (`⌥⇧V` region · menu for full screen): records **video + system audio** (H.264 + AAC; Klip's own sounds excluded). Press `⌥⇧V` again to stop — the recording **lands in your history** like any clip: play it, drag it out, save it to Downloads, **convert to GIF** or copy a share link, all from its row. Crash-safe (fragmented movie) and Klip's windows never appear in the footage.
-- **Scrolling capture** (`⌥⇧S`): select the content area, scroll the page yourself, press Done — Klip live-stitches one long screenshot straight into history (and the clipboard), OCR-searchable like any capture.
+- **Scrolling capture** (`⌥⇧S`): select the content area and Klip does the rest — it winds the page back to the **top**, then scrolls and stitches its way down on its own, finishing when it reaches the end. One long screenshot straight into history (and the clipboard), OCR-searchable like any capture. Bounded at 20 steps up / 50 down so an endless feed can't run away. Needs Accessibility (the same permission auto-paste uses); without it Klip falls back to stitching while **you** scroll.
 
 ### 🖼️ Images
 - Large preview (cached thumbnails for smooth scrolling), **open large** and **save to file**.
@@ -124,7 +124,7 @@ Global shortcuts use **⌥⇧ (Option+Shift)** + a letter, grouped by function o
 | `⌥⇧O` | **O**pen the "upload audio/video to transcribe" window |
 | `⌥⇧M` | Record a **m**eeting (mic + system audio) — press again to stop |
 | `⌥⇧V` | Record a screen region to **v**ideo/GIF (with system audio) — press again to stop |
-| `⌥⇧S` | **S**crolling capture: select, scroll, Done → one long stitched image |
+| `⌥⇧S` | **S**crolling capture: select an area → Klip scrolls the whole page itself → one long image |
 | `↑` / `↓` · `Enter` | Navigate and pick an item |
 | `⌘↩` | Copy the selected item as a code block (``` ```) |
 | `Esc` | Close the panel |
@@ -221,7 +221,7 @@ Open **Preferences** (`⌘,` from the Klip menu):
 | `MediaAudioExtractor.swift` | Extracts a **video's** audio track (AVAssetReader→Writer, 16 kHz mono AAC) for transcription. |
 | `MeetingRecorder.swift` | **Meeting notes**: mic + system audio (ScreenCaptureKit), local mix, Me/Them dual-track transcription. |
 | `ScreenRecorder.swift` | **Screen recording**: region/full screen → H.264 + system-audio AAC (SCStream → AVAssetWriter) + GIF export. |
-| `ScrollCaptureController.swift` | **Scrolling capture**: manual scroll + live stitching (row-signature correlation) into one tall image. |
+| `ScrollCaptureController.swift` | **Scrolling capture**: rewind-to-top, synthetic scrolling, known-delta stitching (row-signature correlation), manual fallback. |
 | `S3Uploader.swift` | **Share links**: SigV4-signed PUT to the user's own S3-compatible bucket (pure CryptoKit). |
 | `OpenAIClient.swift` / `GeminiClient.swift` / `LocalTranscriber.swift` | Transcription via OpenAI, Google Gemini or on-device WhisperKit. |
 | `L10n.swift` | Lightweight localization (8 languages). |
