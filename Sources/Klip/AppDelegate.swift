@@ -4,6 +4,60 @@ import Carbon.HIToolbox
 import Combine
 import UniformTypeIdentifiers
 
+/// The eight global shortcuts as one table: everything that differs between them is a property here,
+/// so registration, dedup, recovery and the Preferences wiring are all written once.
+/// (The scroll-capture session Esc uses id 9 ad hoc — it isn't one of these.)
+enum ShortcutKind: CaseIterable {
+    case panel, voice, capture, upload, textCapture, meeting, screenRec, scroll
+
+    /// Carbon registration id. STABLE per shortcut: HotKey routes a keypress to the instance holding
+    /// this id, so renumbering silently hands a kind someone else's registration.
+    var carbonID: UInt32 {
+        switch self {
+        case .panel:       return 1
+        case .voice:       return 2
+        case .capture:     return 3
+        case .upload:      return 4
+        case .textCapture: return 5
+        case .meeting:     return 6
+        case .screenRec:   return 7
+        case .scroll:      return 8
+        }
+    }
+
+    /// Where this shortcut's combo is persisted.
+    var combo: ReferenceWritableKeyPath<Settings, KeyCombo> {
+        switch self {
+        case .panel:       return \.combo
+        case .voice:       return \.voiceCombo
+        case .capture:     return \.captureCombo
+        case .upload:      return \.uploadCombo
+        case .textCapture: return \.textCaptureCombo
+        case .meeting:     return \.meetingCombo
+        case .screenRec:   return \.screenRecCombo
+        case .scroll:      return \.scrollCombo
+        }
+    }
+
+    var defaultCombo: KeyCombo {
+        switch self {
+        case .panel:       return .defaultCombo
+        case .voice:       return .defaultVoiceCombo
+        case .capture:     return .defaultCaptureCombo
+        case .upload:      return .defaultUploadCombo
+        case .textCapture: return .defaultTextCaptureCombo
+        case .meeting:     return .defaultMeetingCombo
+        case .screenRec:   return .defaultScreenRecCombo
+        case .scroll:      return .defaultScrollCombo
+        }
+    }
+
+    /// Panel and voice are never silently remapped onto a free suggestion: they're the two the user
+    /// gets told about instead (the alert at the end of setupHotKeys). Every other shortcut is also
+    /// reachable from the menu bar, so a dead one recovers quietly.
+    var recoversViaSuggestions: Bool { self != .panel && self != .voice }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
@@ -19,22 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let manager = ClipboardManager()
     private var panelController: PanelController!
     private var snapController: SnapController!
-    private var hotKey: HotKey?
-    private var voiceHotKey: HotKey?
-    private var captureHotKey: HotKey?
-    private var uploadHotKey: HotKey?
-    private var textCaptureHotKey: HotKey?
-    private var meetingHotKey: HotKey?
-    private var screenRecHotKey: HotKey?
-    private var scrollHotKey: HotKey?
-    private var lastGoodCombo = Settings.shared.combo
-    private var lastGoodVoiceCombo = Settings.shared.voiceCombo
-    private var lastGoodCaptureCombo = Settings.shared.captureCombo
-    private var lastGoodUploadCombo = Settings.shared.uploadCombo
-    private var lastGoodTextCaptureCombo = Settings.shared.textCaptureCombo
-    private var lastGoodMeetingCombo = Settings.shared.meetingCombo
-    private var lastGoodScreenRecCombo = Settings.shared.screenRecCombo
-    private var lastGoodScrollCombo = Settings.shared.scrollCombo
+    /// A missing entry means "dead": HotKey.init returns nil when the OS refuses the combo.
+    private var hotKeys: [ShortcutKind: HotKey] = [:]
+    private var lastGood = Dictionary(uniqueKeysWithValues:
+        ShortcutKind.allCases.map { ($0, Settings.shared[keyPath: $0.combo]) })
     private let meetingRecorder = MeetingRecorder()
     private let screenRecorder = ScreenRecorder()
     private var recOverlay: CaptureOverlayController?
@@ -347,36 +389,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = menu
     }
 
-    private func makePanelHotKey(_ c: KeyCombo) {
-        hotKey = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: 1) { [weak self] in
-            self?.panelController.toggle()
+    /// (Re)creates the Carbon registration for one shortcut. A refused combo leaves the entry absent,
+    /// which is what every "is it dead?" check reads.
+    private func make(_ kind: ShortcutKind, _ c: KeyCombo) {
+        hotKeys[kind] = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: kind.carbonID) { [weak self] in
+            self?.perform(kind)
         }
     }
-    private func makeVoiceHotKey(_ c: KeyCombo) {
-        voiceHotKey = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: 2) { [weak self] in
-            self?.panelController.toggleVoiceRecording()
+
+    private func perform(_ kind: ShortcutKind) {
+        switch kind {
+        case .panel:       panelController.toggle()
+        case .voice:       panelController.toggleVoiceRecording()
+        case .capture:     snapController.start()
+        case .upload:      panelController.uploadAudio()
+        case .textCapture: snapController.startTextCapture()
+        case .meeting:     toggleMeetingRecording()
+        case .screenRec:   toggleScreenRecording()
+        case .scroll:      startScrollCapture()
         }
     }
-    private func makeCaptureHotKey(_ c: KeyCombo) {
-        captureHotKey = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: 3) { [weak self] in
-            self?.snapController.start()
-        }
-    }
-    private func makeUploadHotKey(_ c: KeyCombo) {
-        uploadHotKey = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: 4) { [weak self] in
-            self?.panelController.uploadAudio()
-        }
-    }
-    private func makeTextCaptureHotKey(_ c: KeyCombo) {
-        textCaptureHotKey = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: 5) { [weak self] in
-            self?.snapController.startTextCapture()
-        }
-    }
-    private func makeMeetingHotKey(_ c: KeyCombo) {
-        meetingHotKey = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: 6) { [weak self] in
-            self?.toggleMeetingRecording()
-        }
-    }
+
     /// Records the ENTIRE display under the cursor — no region selection. Same engine, full frame.
     @objc private func recordFullScreen() {
         guard !screenRecorder.isRecording, !screenRecorder.isStarting, recOverlay == nil else { return }
@@ -386,17 +419,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let screen else { return }
         screenRecorder.begin(screen: screen,
                              region: CGRect(origin: .zero, size: screen.frame.size))
-    }
-
-    private func makeScreenRecHotKey(_ c: KeyCombo) {
-        screenRecHotKey = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: 7) { [weak self] in
-            self?.toggleScreenRecording()
-        }
-    }
-    private func makeScrollHotKey(_ c: KeyCombo) {
-        scrollHotKey = HotKey(keyCode: c.keyCode, modifiers: c.carbonModifiers, id: 8) { [weak self] in
-            self?.startScrollCapture()
-        }
     }
 
     /// Scrolling capture: pick the CONTENT region (avoid sticky headers/scrollbars), scroll the
@@ -429,25 +451,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                             ToastHUD.show(L10n.t("toast.copied"))
                             return
                         }
-                        switch failure {
-                        case .needsAccessibility:
-                            // The list can SHOW Klip enabled while macOS still refuses: the entry is
-                            // bound to the previous build's signature, so every reinstall staleness it.
-                            // Say exactly that, and open the pane — the fix is toggling it off and on.
-                            SoundFX.error()
-                            ToastHUD.show(L10n.t("scroll.needsAX"),
-                                          detail: L10n.t("scroll.needsAX.detail"),
-                                          style: .failure,
-                                          actionTitle: L10n.t("scroll.needsAX.action")) {
-                                Paster.ensureAccessibilityPermission(prompt: true)
-                                if let u = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                                    NSWorkspace.shared.open(u)
-                                }
-                            }
-                        case .failed:
+                        // A nil failure here means the user cancelled: stay silent, like the overlay.
+                        if case .failed = failure {
                             SoundFX.error(); ToastHUD.show(L10n.t("capture.failed"), style: .failure)
-                        case nil:
-                            break   // cancelled: silent, like the capture overlay
                         }
                     }
                     self.scrollCapture = ctrl
@@ -502,37 +508,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func registerHotKey(_ kind: ShortcutKind, _ c: KeyCombo) {
-        switch kind {
-        case .panel: makePanelHotKey(c)
-        case .voice: makeVoiceHotKey(c)
-        case .capture: makeCaptureHotKey(c)
-        case .upload: makeUploadHotKey(c)
-        case .textCapture: makeTextCaptureHotKey(c)
-        case .meeting: makeMeetingHotKey(c)
-        case .screenRec: makeScreenRecHotKey(c)
-        case .scroll: makeScrollHotKey(c)
-        }
+    /// Adopts `combo` as the shortcut's persisted value (and its revert target).
+    private func commit(_ kind: ShortcutKind, _ combo: KeyCombo) {
+        Settings.shared[keyPath: kind.combo] = combo
+        lastGood[kind] = combo
     }
-    private func hotKeyLive(_ kind: ShortcutKind) -> Bool {
-        switch kind {
-        case .panel: return hotKey != nil
-        case .voice: return voiceHotKey != nil
-        case .capture: return captureHotKey != nil
-        case .upload: return uploadHotKey != nil
-        case .textCapture: return textCaptureHotKey != nil
-        case .meeting: return meetingHotKey != nil
-        case .screenRec: return screenRecHotKey != nil
-        case .scroll: return scrollHotKey != nil
-        }
-    }
+
     /// After moving a LIVE shortcut, make sure it actually registered; if the OS rejected the combo (another
     /// app owns it) fall through to the first registerable suggestion, so dedup never persists a dead combo.
-    private func ensureLiveRegistered(_ kind: ShortcutKind, avoiding taken: [KeyCombo], commit: (KeyCombo) -> Void) {
-        guard !hotKeyLive(kind) else { return }
+    private func ensureLiveRegistered(_ kind: ShortcutKind, avoiding taken: [KeyCombo]) {
+        guard hotKeys[kind] == nil else { return }
         for cand in KeyCombo.suggestions where !taken.contains(cand) {
-            registerHotKey(kind, cand)
-            if hotKeyLive(kind) { commit(cand); return }
+            make(kind, cand)
+            if hotKeys[kind] != nil { commit(kind, cand); return }
         }
     }
 
@@ -542,163 +530,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// suggestion (or default).
     private func deduplicateShortcuts() {
         let s = Settings.shared
-        func free(_ taken: [KeyCombo], _ fallback: KeyCombo) -> KeyCombo {
-            if !taken.contains(fallback) { return fallback }
-            return KeyCombo.suggestions.first { !taken.contains($0) } ?? fallback
-        }
-        // Re-register only when already live (i.e. when called AGAIN after startup recovery) — on the first
-        // call the make*HotKey calls right after handle registration.
-        if s.voiceCombo == s.combo {
-            let fixed = free([s.combo], .defaultVoiceCombo); s.voiceCombo = fixed; lastGoodVoiceCombo = fixed
-            if voiceHotKey != nil {
-                makeVoiceHotKey(fixed)
-                ensureLiveRegistered(.voice, avoiding: [s.combo]) { s.voiceCombo = $0; lastGoodVoiceCombo = $0 }
-            }
-        }
-        if s.captureCombo == s.combo || s.captureCombo == s.voiceCombo {
-            let fixed = free([s.combo, s.voiceCombo], .defaultCaptureCombo); s.captureCombo = fixed; lastGoodCaptureCombo = fixed
-            if captureHotKey != nil {
-                makeCaptureHotKey(fixed)
-                ensureLiveRegistered(.capture, avoiding: [s.combo, s.voiceCombo]) { s.captureCombo = $0; lastGoodCaptureCombo = $0 }
-            }
-        }
-        if s.uploadCombo == s.combo || s.uploadCombo == s.voiceCombo || s.uploadCombo == s.captureCombo {
-            let fixed = free([s.combo, s.voiceCombo, s.captureCombo], .defaultUploadCombo); s.uploadCombo = fixed; lastGoodUploadCombo = fixed
-            if uploadHotKey != nil {
-                makeUploadHotKey(fixed)
-                ensureLiveRegistered(.upload, avoiding: [s.combo, s.voiceCombo, s.captureCombo]) { s.uploadCombo = $0; lastGoodUploadCombo = $0 }
-            }
-        }
-        let used = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo]
-        if used.contains(s.textCaptureCombo) {
-            let fixed = free(used, .defaultTextCaptureCombo); s.textCaptureCombo = fixed; lastGoodTextCaptureCombo = fixed
-            if textCaptureHotKey != nil {
-                makeTextCaptureHotKey(fixed)
-                ensureLiveRegistered(.textCapture, avoiding: used) { s.textCaptureCombo = $0; lastGoodTextCaptureCombo = $0 }
-            }
-        }
-        let used6 = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo]
-        if used6.contains(s.meetingCombo) {
-            let fixed = free(used6, .defaultMeetingCombo); s.meetingCombo = fixed; lastGoodMeetingCombo = fixed
-            if meetingHotKey != nil {
-                makeMeetingHotKey(fixed)
-                ensureLiveRegistered(.meeting, avoiding: used6) { s.meetingCombo = $0; lastGoodMeetingCombo = $0 }
-            }
-        }
-        let used7 = used6 + [s.meetingCombo]
-        if used7.contains(s.screenRecCombo) {
-            let fixed = free(used7, .defaultScreenRecCombo); s.screenRecCombo = fixed; lastGoodScreenRecCombo = fixed
-            if screenRecHotKey != nil {
-                makeScreenRecHotKey(fixed)
-                ensureLiveRegistered(.screenRec, avoiding: used7) { s.screenRecCombo = $0; lastGoodScreenRecCombo = $0 }
-            }
-        }
-        let used8 = used7 + [s.screenRecCombo]
-        if used8.contains(s.scrollCombo) {
-            let fixed = free(used8, .defaultScrollCombo); s.scrollCombo = fixed; lastGoodScrollCombo = fixed
-            if scrollHotKey != nil {
-                makeScrollHotKey(fixed)
-                ensureLiveRegistered(.scroll, avoiding: used8) { s.scrollCombo = $0; lastGoodScrollCombo = $0 }
+        // The panel comes first in allCases and so is never the one moved: it keeps its combo and every
+        // later kind is compared against the (already fixed) combos of the ones before it.
+        var taken: [KeyCombo] = []
+        for kind in ShortcutKind.allCases {
+            defer { taken.append(s[keyPath: kind.combo]) }
+            guard taken.contains(s[keyPath: kind.combo]) else { continue }
+            let fixed = taken.contains(kind.defaultCombo)
+                ? (KeyCombo.suggestions.first { !taken.contains($0) } ?? kind.defaultCombo)
+                : kind.defaultCombo
+            commit(kind, fixed)
+            // Re-register only when already live (i.e. when called AGAIN after startup recovery) — on the
+            // first call the make() loop right after handles registration.
+            if hotKeys[kind] != nil {
+                make(kind, fixed)
+                ensureLiveRegistered(kind, avoiding: taken)
             }
         }
     }
 
     private func setupHotKeys() {
         deduplicateShortcuts()
-        makePanelHotKey(Settings.shared.combo)
-        makeVoiceHotKey(Settings.shared.voiceCombo)
-        makeCaptureHotKey(Settings.shared.captureCombo)
-        makeUploadHotKey(Settings.shared.uploadCombo)
-        makeTextCaptureHotKey(Settings.shared.textCaptureCombo)
-        makeMeetingHotKey(Settings.shared.meetingCombo)
-        makeScreenRecHotKey(Settings.shared.screenRecCombo)
-        makeScrollHotKey(Settings.shared.scrollCombo)
+        for kind in ShortcutKind.allCases { make(kind, Settings.shared[keyPath: kind.combo]) }
         // If a persisted combination collides with another at startup (HotKey.init returns nil), the
-        // shortcut would stay dead for the whole session. Recover with its default shortcut so it isn't lost.
-        if hotKey == nil, Settings.shared.combo != .defaultCombo {
-            Settings.shared.combo = .defaultCombo; lastGoodCombo = .defaultCombo; makePanelHotKey(.defaultCombo)
-        }
-        if voiceHotKey == nil, Settings.shared.voiceCombo != .defaultVoiceCombo {
-            Settings.shared.voiceCombo = .defaultVoiceCombo; lastGoodVoiceCombo = .defaultVoiceCombo; makeVoiceHotKey(.defaultVoiceCombo)
-        }
-        if captureHotKey == nil, Settings.shared.captureCombo != .defaultCaptureCombo {
-            Settings.shared.captureCombo = .defaultCaptureCombo; lastGoodCaptureCombo = .defaultCaptureCombo; makeCaptureHotKey(.defaultCaptureCombo)
-        }
-        // If even the default capture shortcut collides (e.g. another app already took it), try the suggested
-        // combinations so capture isn't left inert without the user knowing.
-        if captureHotKey == nil {
-            for s in KeyCombo.suggestions where s != Settings.shared.combo && s != Settings.shared.voiceCombo {
-                makeCaptureHotKey(s)
-                if captureHotKey != nil {
-                    Settings.shared.captureCombo = s; lastGoodCaptureCombo = s
-                    // Defer the modal: a synchronous runModal here would stall the rest of launch.
+        // shortcut would stay dead for the whole session. Recover with its default shortcut so it isn't lost,
+        // then — for everything but panel/voice — with the first free suggestion, quietly.
+        var taken: [KeyCombo] = []
+        for kind in ShortcutKind.allCases {
+            defer { taken.append(Settings.shared[keyPath: kind.combo]) }
+            if hotKeys[kind] == nil, Settings.shared[keyPath: kind.combo] != kind.defaultCombo {
+                commit(kind, kind.defaultCombo)
+                make(kind, kind.defaultCombo)
+            }
+            guard kind.recoversViaSuggestions, hotKeys[kind] == nil else { continue }
+            for s in KeyCombo.suggestions where !taken.contains(s) {
+                make(kind, s)
+                guard hotKeys[kind] != nil else { continue }
+                commit(kind, s)
+                // Capture is the one remap worth interrupting for — it has no obvious menu-bar twin in the
+                // user's head. Defer the modal: a synchronous runModal here would stall the rest of launch.
+                if kind == .capture {
                     Task { @MainActor in self.showAlert(L10n.t("hotkey.capture.changed.title"), L10n.t("hotkey.capture.changed.info")) }
-                    break
                 }
-            }
-        }
-        // Upload is reachable from the menu bar and the history-panel button too, so a dead shortcut here is
-        // not critical: recover quietly (default → free suggestion) without interrupting the user with an alert.
-        if uploadHotKey == nil, Settings.shared.uploadCombo != .defaultUploadCombo {
-            Settings.shared.uploadCombo = .defaultUploadCombo; lastGoodUploadCombo = .defaultUploadCombo
-            makeUploadHotKey(.defaultUploadCombo)
-        }
-        if uploadHotKey == nil {
-            for s in KeyCombo.suggestions where s != Settings.shared.combo && s != Settings.shared.voiceCombo && s != Settings.shared.captureCombo {
-                makeUploadHotKey(s)
-                if uploadHotKey != nil { Settings.shared.uploadCombo = s; lastGoodUploadCombo = s; break }
-            }
-        }
-        // Text-capture (OCR) is also reachable from the menu bar, so recover quietly like upload.
-        if textCaptureHotKey == nil, Settings.shared.textCaptureCombo != .defaultTextCaptureCombo {
-            Settings.shared.textCaptureCombo = .defaultTextCaptureCombo; lastGoodTextCaptureCombo = .defaultTextCaptureCombo
-            makeTextCaptureHotKey(.defaultTextCaptureCombo)
-        }
-        if textCaptureHotKey == nil {
-            let taken = [Settings.shared.combo, Settings.shared.voiceCombo, Settings.shared.captureCombo, Settings.shared.uploadCombo]
-            for s in KeyCombo.suggestions where !taken.contains(s) {
-                makeTextCaptureHotKey(s)
-                if textCaptureHotKey != nil { Settings.shared.textCaptureCombo = s; lastGoodTextCaptureCombo = s; break }
-            }
-        }
-        // Meeting recording is also reachable from the menu bar, so recover quietly like upload/OCR.
-        if meetingHotKey == nil, Settings.shared.meetingCombo != .defaultMeetingCombo {
-            Settings.shared.meetingCombo = .defaultMeetingCombo; lastGoodMeetingCombo = .defaultMeetingCombo
-            makeMeetingHotKey(.defaultMeetingCombo)
-        }
-        if meetingHotKey == nil {
-            let taken = [Settings.shared.combo, Settings.shared.voiceCombo, Settings.shared.captureCombo,
-                         Settings.shared.uploadCombo, Settings.shared.textCaptureCombo]
-            for s in KeyCombo.suggestions where !taken.contains(s) {
-                makeMeetingHotKey(s)
-                if meetingHotKey != nil { Settings.shared.meetingCombo = s; lastGoodMeetingCombo = s; break }
-            }
-        }
-        // Screen recording is also reachable from the menu bar, so recover quietly like the others.
-        if screenRecHotKey == nil, Settings.shared.screenRecCombo != .defaultScreenRecCombo {
-            Settings.shared.screenRecCombo = .defaultScreenRecCombo; lastGoodScreenRecCombo = .defaultScreenRecCombo
-            makeScreenRecHotKey(.defaultScreenRecCombo)
-        }
-        if screenRecHotKey == nil {
-            let taken = [Settings.shared.combo, Settings.shared.voiceCombo, Settings.shared.captureCombo,
-                         Settings.shared.uploadCombo, Settings.shared.textCaptureCombo, Settings.shared.meetingCombo]
-            for s in KeyCombo.suggestions where !taken.contains(s) {
-                makeScreenRecHotKey(s)
-                if screenRecHotKey != nil { Settings.shared.screenRecCombo = s; lastGoodScreenRecCombo = s; break }
-            }
-        }
-        // Scrolling capture recovers quietly too (also reachable from the menu bar).
-        if scrollHotKey == nil, Settings.shared.scrollCombo != .defaultScrollCombo {
-            Settings.shared.scrollCombo = .defaultScrollCombo; lastGoodScrollCombo = .defaultScrollCombo
-            makeScrollHotKey(.defaultScrollCombo)
-        }
-        if scrollHotKey == nil {
-            let taken = [Settings.shared.combo, Settings.shared.voiceCombo, Settings.shared.captureCombo,
-                         Settings.shared.uploadCombo, Settings.shared.textCaptureCombo,
-                         Settings.shared.meetingCombo, Settings.shared.screenRecCombo]
-            for s in KeyCombo.suggestions where !taken.contains(s) {
-                makeScrollHotKey(s)
-                if scrollHotKey != nil { Settings.shared.scrollCombo = s; lastGoodScrollCombo = s; break }
+                break
             }
         }
         // The suggestion-recovery loops above can land one shortcut on a sibling's combo (they don't all
@@ -708,18 +582,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Dedup may have just freed a combo a still-dead shortcut lost to a SIBLING earlier (Carbon
         // rejects a same-process duplicate registration): retry each dead hotkey with its now-deduped
         // combo before concluding another app owns it.
-        if hotKey == nil { makePanelHotKey(Settings.shared.combo) }
-        if voiceHotKey == nil { makeVoiceHotKey(Settings.shared.voiceCombo) }
-        if captureHotKey == nil { makeCaptureHotKey(Settings.shared.captureCombo) }
-        if uploadHotKey == nil { makeUploadHotKey(Settings.shared.uploadCombo) }
-        if textCaptureHotKey == nil { makeTextCaptureHotKey(Settings.shared.textCaptureCombo) }
-        if meetingHotKey == nil { makeMeetingHotKey(Settings.shared.meetingCombo) }
-        if screenRecHotKey == nil { makeScreenRecHotKey(Settings.shared.screenRecCombo) }
-        if scrollHotKey == nil { makeScrollHotKey(Settings.shared.scrollCombo) }
+        for kind in ShortcutKind.allCases where hotKeys[kind] == nil {
+            make(kind, Settings.shared[keyPath: kind.combo])
+        }
         // If the panel/voice shortcuts are STILL dead after all recovery (another app globally owns even
         // the default combo), tell the user instead of leaving a silently-inert shortcut (deferred so it
         // doesn't block launch).
-        if hotKey == nil || voiceHotKey == nil {
+        if hotKeys[.panel] == nil || hotKeys[.voice] == nil {
             // Here the combo is owned by ANOTHER app, not by a Klip shortcut → dedicated wording.
             Task { @MainActor in SoundFX.error(); self.showAlert(L10n.t("hotkey.dead.title"), L10n.t("hotkey.dead.info")) }
         }
@@ -727,127 +596,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         buildMenu()
     }
 
-    private enum ShortcutKind { case panel, voice, capture, upload, textCapture, meeting, screenRec, scroll }
-
     /// Catch a combo already used by another of OUR shortcuts before touching Carbon: pre-empting the
     /// registration keeps the sibling's hotkey intact and shows the right "in use" wording.
     private func collidesWithOtherShortcut(_ combo: KeyCombo, _ kind: ShortcutKind) -> Bool {
-        let s = Settings.shared
-        let others: [KeyCombo]
-        switch kind {
-        case .panel:       others = [s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo, s.scrollCombo]
-        case .voice:       others = [s.combo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo, s.scrollCombo]
-        case .capture:     others = [s.combo, s.voiceCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo, s.scrollCombo]
-        case .upload:      others = [s.combo, s.voiceCombo, s.captureCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo, s.scrollCombo]
-        case .textCapture: others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.meetingCombo, s.screenRecCombo, s.scrollCombo]
-        case .meeting:     others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.screenRecCombo, s.scrollCombo]
-        case .screenRec:   others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.scrollCombo]
-        case .scroll:      others = [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo, s.screenRecCombo]
-        }
-        return others.contains(combo)
+        ShortcutKind.allCases.contains { $0 != kind && Settings.shared[keyPath: $0.combo] == combo }
     }
 
-    private func applyCaptureHotKey(_ combo: KeyCombo) {
-        if collidesWithOtherShortcut(combo, .capture) {
+    /// Moves one shortcut onto `combo`. Two ways it can fail, same outcome: another Klip shortcut
+    /// already holds it (caught before touching Carbon), or the OS refuses the registration.
+    private func apply(_ kind: ShortcutKind, _ combo: KeyCombo) {
+        func revert() {
             SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
-            Settings.shared.captureCombo = lastGoodCaptureCombo; buildMenu(); return
+            Settings.shared[keyPath: kind.combo] = lastGood[kind] ?? kind.defaultCombo
         }
+        if collidesWithOtherShortcut(combo, kind) { revert(); buildMenu(); return }
         let ok: Bool
-        if captureHotKey == nil { makeCaptureHotKey(combo); ok = (captureHotKey != nil) }   // was dead: re-create
-        else { ok = captureHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
-        if ok { lastGoodCaptureCombo = combo }
-        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.captureCombo = lastGoodCaptureCombo }
-        buildMenu()
-    }
-
-    private func applyHotKey(_ combo: KeyCombo) {
-        if collidesWithOtherShortcut(combo, .panel) {
-            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
-            Settings.shared.combo = lastGoodCombo; buildMenu(); return
-        }
-        let ok: Bool
-        if hotKey == nil { makePanelHotKey(combo); ok = (hotKey != nil) }
-        else { ok = hotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
-        if ok { lastGoodCombo = combo }
-        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.combo = lastGoodCombo }   // collision: revert
-        buildMenu()
-    }
-
-    private func applyVoiceHotKey(_ combo: KeyCombo) {
-        if collidesWithOtherShortcut(combo, .voice) {
-            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
-            Settings.shared.voiceCombo = lastGoodVoiceCombo; buildMenu(); return
-        }
-        let ok: Bool
-        if voiceHotKey == nil { makeVoiceHotKey(combo); ok = (voiceHotKey != nil) }
-        else { ok = voiceHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
-        if ok { lastGoodVoiceCombo = combo }
-        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.voiceCombo = lastGoodVoiceCombo }
-        buildMenu()
-    }
-
-    private func applyUploadHotKey(_ combo: KeyCombo) {
-        if collidesWithOtherShortcut(combo, .upload) {
-            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
-            Settings.shared.uploadCombo = lastGoodUploadCombo; buildMenu(); return
-        }
-        let ok: Bool
-        if uploadHotKey == nil { makeUploadHotKey(combo); ok = (uploadHotKey != nil) }
-        else { ok = uploadHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
-        if ok { lastGoodUploadCombo = combo }
-        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.uploadCombo = lastGoodUploadCombo }
-        buildMenu()
-    }
-
-    private func applyTextCaptureHotKey(_ combo: KeyCombo) {
-        if collidesWithOtherShortcut(combo, .textCapture) {
-            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
-            Settings.shared.textCaptureCombo = lastGoodTextCaptureCombo; buildMenu(); return
-        }
-        let ok: Bool
-        if textCaptureHotKey == nil { makeTextCaptureHotKey(combo); ok = (textCaptureHotKey != nil) }
-        else { ok = textCaptureHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
-        if ok { lastGoodTextCaptureCombo = combo }
-        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.textCaptureCombo = lastGoodTextCaptureCombo }
-        buildMenu()
-    }
-
-    private func applyMeetingHotKey(_ combo: KeyCombo) {
-        if collidesWithOtherShortcut(combo, .meeting) {
-            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
-            Settings.shared.meetingCombo = lastGoodMeetingCombo; buildMenu(); return
-        }
-        let ok: Bool
-        if meetingHotKey == nil { makeMeetingHotKey(combo); ok = (meetingHotKey != nil) }
-        else { ok = meetingHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
-        if ok { lastGoodMeetingCombo = combo }
-        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.meetingCombo = lastGoodMeetingCombo }
-        buildMenu()
-    }
-
-    private func applyScreenRecHotKey(_ combo: KeyCombo) {
-        if collidesWithOtherShortcut(combo, .screenRec) {
-            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
-            Settings.shared.screenRecCombo = lastGoodScreenRecCombo; buildMenu(); return
-        }
-        let ok: Bool
-        if screenRecHotKey == nil { makeScreenRecHotKey(combo); ok = (screenRecHotKey != nil) }
-        else { ok = screenRecHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
-        if ok { lastGoodScreenRecCombo = combo }
-        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.screenRecCombo = lastGoodScreenRecCombo }
-        buildMenu()
-    }
-
-    private func applyScrollHotKey(_ combo: KeyCombo) {
-        if collidesWithOtherShortcut(combo, .scroll) {
-            SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure)
-            Settings.shared.scrollCombo = lastGoodScrollCombo; buildMenu(); return
-        }
-        let ok: Bool
-        if scrollHotKey == nil { makeScrollHotKey(combo); ok = (scrollHotKey != nil) }
-        else { ok = scrollHotKey?.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) == true }
-        if ok { lastGoodScrollCombo = combo }
-        else { SoundFX.error(); ToastHUD.show(L10n.t("hotkey.inuse"), style: .failure); Settings.shared.scrollCombo = lastGoodScrollCombo }
+        if let live = hotKeys[kind] { ok = live.reRegister(keyCode: combo.keyCode, modifiers: combo.carbonModifiers) }
+        else { make(kind, combo); ok = (hotKeys[kind] != nil) }   // was dead: re-create
+        if ok { lastGood[kind] = combo } else { revert() }
         buildMenu()
     }
 
@@ -1090,14 +856,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openPreferences() {
         if prefsController == nil {
             prefsController = PreferencesWindowController(
-                onHotKeyChange: { [weak self] combo in self?.applyHotKey(combo) },
-                onVoiceHotKeyChange: { [weak self] combo in self?.applyVoiceHotKey(combo) },
-                onCaptureHotKeyChange: { [weak self] combo in self?.applyCaptureHotKey(combo) },
-                onUploadHotKeyChange: { [weak self] combo in self?.applyUploadHotKey(combo) },
-                onTextCaptureHotKeyChange: { [weak self] combo in self?.applyTextCaptureHotKey(combo) },
-                onMeetingHotKeyChange: { [weak self] combo in self?.applyMeetingHotKey(combo) },
-                onScreenRecHotKeyChange: { [weak self] combo in self?.applyScreenRecHotKey(combo) },
-                onScrollHotKeyChange: { [weak self] combo in self?.applyScrollHotKey(combo) },
+                onHotKeyChange: { [weak self] kind, combo in self?.apply(kind, combo) },
                 onMaxItemsChange: { [weak self] in self?.manager.applyMaxItems() })
         }
         prefsController?.show()
@@ -1143,19 +902,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func quit() { NSApp.terminate(nil) }
 
     @objc private func exportBackup() {
-        // Direct write to ~/Downloads, no save panel (same convention as exportToDownloads,
-        // including its timestamp pattern and collision-safe naming — exportBackup deletes an
-        // existing dest, so the name must be free).
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let base = "Klip backup \(df.string(from: Date()))"
-        let dir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
-        var url = dir.appendingPathComponent("\(base).zip")
-        var n = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            url = dir.appendingPathComponent("\(base)-\(n).zip"); n += 1
-        }
+        // Direct write to ~/Downloads, no save panel — same naming as every other export.
+        // exportBackup deletes an existing destination, so the name genuinely must be free.
+        let url = Storage.uniqueDownloadsURL(base: "Klip backup \(Storage.exportTimestamp)", ext: "zip")
         manager.pauseMonitoring()   // keep the poll from adding/trimming media mid-copy (it would corrupt the zip)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in   // ditto + heavy copy: off the main thread
             do {

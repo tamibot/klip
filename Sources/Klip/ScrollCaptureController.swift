@@ -6,10 +6,10 @@ import CoreGraphics
 /// Why a scrolling capture ended without an image (`onFinished(nil, failure)`).
 /// nil failure + nil image = the user cancelled — the caller should stay SILENT (no error toast).
 enum ScrollCaptureFailure {
-    /// Synthetic scrolling needs Accessibility, same privilege as auto-paste. The caller should
-    /// prompt via `Paster.ensureAccessibilityPermission(prompt: true)` and explain.
-    case needsAccessibility
     /// Setup or capture broke (no screen-recording permission, display vanished, nothing stitched).
+    /// Missing Accessibility is deliberately NOT a failure: AXIsProcessTrusted() reads false on a
+    /// stale, signature-bound entry the user cannot see, so we scroll anyway and fall back to
+    /// stitching while the USER scrolls — which produces an image, not an error.
     case failed
 }
 

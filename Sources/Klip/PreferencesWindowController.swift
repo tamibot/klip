@@ -4,14 +4,7 @@ import SwiftUI
 /// Standard (titled) Preferences window, distinct from the floating panel.
 final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
 
-    convenience init(onHotKeyChange: @escaping (KeyCombo) -> Void,
-                     onVoiceHotKeyChange: @escaping (KeyCombo) -> Void,
-                     onCaptureHotKeyChange: @escaping (KeyCombo) -> Void,
-                     onUploadHotKeyChange: @escaping (KeyCombo) -> Void,
-                     onTextCaptureHotKeyChange: @escaping (KeyCombo) -> Void,
-                     onMeetingHotKeyChange: @escaping (KeyCombo) -> Void,
-                     onScreenRecHotKeyChange: @escaping (KeyCombo) -> Void,
-                     onScrollHotKeyChange: @escaping (KeyCombo) -> Void,
+    convenience init(onHotKeyChange: @escaping (ShortcutKind, KeyCombo) -> Void,
                      onMaxItemsChange: @escaping () -> Void) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 500, height: 700),
@@ -20,13 +13,6 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         window.title = L10n.t("win.prefs")
         window.isReleasedWhenClosed = false
         Glass.install(PreferencesView(onHotKeyChange: onHotKeyChange,
-                                      onVoiceHotKeyChange: onVoiceHotKeyChange,
-                                      onCaptureHotKeyChange: onCaptureHotKeyChange,
-                                      onUploadHotKeyChange: onUploadHotKeyChange,
-                                      onTextCaptureHotKeyChange: onTextCaptureHotKeyChange,
-                                      onMeetingHotKeyChange: onMeetingHotKeyChange,
-                                      onScreenRecHotKeyChange: onScreenRecHotKeyChange,
-                                      onScrollHotKeyChange: onScrollHotKeyChange,
                                       onMaxItemsChange: onMaxItemsChange), in: window)
         window.center()
         self.init(window: window)

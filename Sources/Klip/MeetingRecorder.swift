@@ -91,7 +91,7 @@ final class MeetingRecorder: NSObject, ObservableObject, SCStreamDelegate, AVAud
         startRequested = true
         Task { @MainActor in
             defer { startRequested = false }
-            guard await requestMicPermission() else {
+            guard await Recorder.requestMicPermission() else {
                 Self.alert(L10n.t("perm.mic.title"), L10n.t("perm.mic.info"))
                 return
             }
@@ -278,18 +278,6 @@ final class MeetingRecorder: NSObject, ObservableObject, SCStreamDelegate, AVAud
         micURL = nil; systemURL = nil
     }
 
-    private func requestMicPermission() async -> Bool {
-        switch AVAudioApplication.shared.recordPermission {
-        case .granted: return true
-        case .denied:  return false
-        case .undetermined:
-            return await withCheckedContinuation { cont in
-                AVAudioApplication.requestRecordPermission { ok in cont.resume(returning: ok) }
-            }
-        @unknown default: return false
-        }
-    }
-
     private func promptForScreenPermission() {
         let askedKey = "klip.askedScreenRecording"   // shared with SnapController so the prompts never overlap
         if !UserDefaults.standard.bool(forKey: askedKey) {
@@ -318,7 +306,7 @@ final class MeetingRecorder: NSObject, ObservableObject, SCStreamDelegate, AVAud
                 // peak reported from SystemAudioWriter's sample callback.
                 if let rec = self.micRecorder {
                     rec.updateMeters()
-                    let lvl = Self.normalized(power: rec.averagePower(forChannel: 0))
+                    let lvl = Recorder.normalized(power: rec.averagePower(forChannel: 0))
                     self.micLevel = lvl
                     if lvl >= Self.silenceLevel { self.activity.touch() }
                 }
@@ -335,12 +323,6 @@ final class MeetingRecorder: NSObject, ObservableObject, SCStreamDelegate, AVAud
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
-    }
-
-    private static func normalized(power db: Float) -> Float {
-        let minDb: Float = -50
-        if db < minDb { return 0 }
-        return min(1, (db - minDb) / -minDb)
     }
 
     private static func alert(_ title: String, _ info: String) {
@@ -386,8 +368,9 @@ final class MeetingRecorder: NSObject, ObservableObject, SCStreamDelegate, AVAud
 
     /// Overlays the source files with an AVMutableComposition (both inserted at .zero) and renders
     /// the mix through AVAssetReaderAudioMixOutput → AVAssetWriter, 16 kHz mono AAC — the exact
-    /// shape of the app's own voice notes. Pump copied from MediaAudioExtractor (see there for why
-    /// reader/writer instead of AVAssetExportSession, and for the Flag/PumpBox pattern).
+    /// shape of the app's own voice notes. The reader/writer pump is MediaAudioExtractor.render
+    /// (see there for why reader/writer instead of AVAssetExportSession); every failure of it is a
+    /// mixFailed here.
     private static func mix(sources: [URL]) async throws -> URL {
         let comp = AVMutableComposition()
         for url in sources {
@@ -404,103 +387,10 @@ final class MeetingRecorder: NSObject, ObservableObject, SCStreamDelegate, AVAud
 
         let outURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("meeting-\(UUID().uuidString).m4a")
-        let reader: AVAssetReader
-        let writer: AVAssetWriter
-        do {
-            reader = try AVAssetReader(asset: comp)
-            writer = try AVAssetWriter(outputURL: outURL, fileType: .m4a)
-        } catch { throw MeetingError.mixFailed }
-
-        var monoLayout = AudioChannelLayout(); monoLayout.mChannelLayoutTag = kAudioChannelLayoutTag_Mono
-        let layout = Data(bytes: &monoLayout, count: MemoryLayout<AudioChannelLayout>.size)
-
-        let output = AVAssetReaderAudioMixOutput(audioTracks: tracks, audioSettings: [
-            AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: 16_000,
-            AVNumberOfChannelsKey: 1,
-            AVChannelLayoutKey: layout,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-            AVLinearPCMIsNonInterleaved: false,
-        ])
-        output.alwaysCopiesSampleData = false
-        guard reader.canAdd(output) else { throw MeetingError.mixFailed }
-        reader.add(output)
-
-        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
-            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 16_000,
-            AVNumberOfChannelsKey: 1,
-            AVChannelLayoutKey: layout,
-            AVEncoderBitRateKey: 32_000,
-        ])
-        input.expectsMediaDataInRealTime = false
-        guard writer.canAdd(input) else { throw MeetingError.mixFailed }
-        writer.add(input)
-
-        guard reader.startReading() else { throw MeetingError.mixFailed }
-        guard writer.startWriting() else { throw MeetingError.mixFailed }
-        writer.startSession(atSourceTime: .zero)
-
-        let cancelled = Flag()
-        let queue = DispatchQueue(label: "klip.meeting-mix")
-        let box = PumpBox(reader: reader, writer: writer, input: input, output: output)
-
-        do {
-            try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                    box.input.requestMediaDataWhenReady(on: queue) {
-                        while box.input.isReadyForMoreMediaData {
-                            if cancelled.value {
-                                box.reader.cancelReading(); box.input.markAsFinished(); box.writer.cancelWriting()
-                                cont.resume(throwing: CancellationError()); return
-                            }
-                            guard let buf = box.output.copyNextSampleBuffer() else {
-                                box.input.markAsFinished()
-                                if box.reader.status == .failed {
-                                    box.writer.cancelWriting()
-                                    cont.resume(throwing: MeetingError.mixFailed); return
-                                }
-                                box.writer.finishWriting {
-                                    if box.writer.status == .completed { cont.resume() }
-                                    else { cont.resume(throwing: MeetingError.mixFailed) }
-                                }
-                                return
-                            }
-                            if !box.input.append(buf) {
-                                box.reader.cancelReading(); box.writer.cancelWriting()
-                                cont.resume(throwing: MeetingError.mixFailed); return
-                            }
-                        }
-                    }
-                }
-            } onCancel: {
-                cancelled.set()
-            }
-        } catch {
-            try? FileManager.default.removeItem(at: outURL)   // never orphan a partial temp file
-            throw error
-        }
-
-        return outURL
-    }
-
-    /// Tiny lock-protected Bool touched from two threads (cancellation handler + mix pump).
-    private final class Flag: @unchecked Sendable {
-        private let lock = NSLock()
-        private var flag = false
-        var value: Bool { lock.lock(); defer { lock.unlock() }; return flag }
-        func set() { lock.lock(); flag = true; lock.unlock() }
-    }
-
-    /// Box to pass the (non-Sendable) reader/writer objects into the pump's @Sendable closure.
-    /// Safe because all of them are used only on the serial mix queue.
-    private struct PumpBox: @unchecked Sendable {
-        let reader: AVAssetReader
-        let writer: AVAssetWriter
-        let input: AVAssetWriterInput
-        let output: AVAssetReaderAudioMixOutput
+        let output = AVAssetReaderAudioMixOutput(audioTracks: tracks,
+                                                 audioSettings: MediaAudioExtractor.monoPCMSettings)
+        return try await MediaAudioExtractor.render(asset: comp, output: output, to: outURL,
+                                                    queue: "klip.meeting-mix") { _ in MeetingError.mixFailed }
     }
 }
 

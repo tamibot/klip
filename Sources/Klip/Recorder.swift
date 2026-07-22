@@ -85,7 +85,8 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     /// Only blocks starting another RECORDING; transcribing in the background doesn't count as busy.
     var isRecording: Bool { startRequested || state == .recording }
 
-    private func requestMicPermission() async -> Bool {
+    /// Shared with MeetingRecorder, which records the mic on the same terms.
+    static func requestMicPermission() async -> Bool {
         switch AVAudioApplication.shared.recordPermission {
         case .granted: return true
         case .denied:  return false
@@ -103,7 +104,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         startRequested = true
         Task { @MainActor in
             guard AIProvider.hasKey else { state = .missingAPIKey; startRequested = false; return }
-            guard await requestMicPermission() else {
+            guard await Self.requestMicPermission() else {
                 state = .micDenied; startRequested = false; return
             }
             guard startRequested else { return }   // stop()/cancel() while waiting for permission
@@ -481,7 +482,10 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
                        // Real byte copy when the source is on another volume: offload it like the sibling
                        // path at transcribeFiles, so an audio-in-movie-container from an external drive
                        // doesn't freeze the UI on the main actor.
-                       let stored = await Task.detached(priority: .userInitiated) { Storage.shared.importAudio(from: url) }.value {
+                       // (operation: passed explicitly — a trailing closure inside an `if` condition
+                       // is ambiguous with the `if` body, and the compiler warns about exactly that.)
+                       let stored = await Task.detached(priority: .userInitiated,
+                                                        operation: { Storage.shared.importAudio(from: url) }).value {
                         onVoiceNoteAudioStored?(id, stored)
                         // Also remember it on the upload row so a failed row retries from the stored audio.
                         if let j = uploadResults.firstIndex(where: { $0.id == id }) { uploadResults[j].audioFileName = stored }
@@ -518,7 +522,8 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
     private func stopMeterTimer() { meterTimer?.invalidate(); meterTimer = nil }
 
-    private static func normalized(power db: Float) -> Float {
+    /// dB (AVAudioRecorder metering) → 0…1 bar height. Shared with MeetingRecorder's mic meter.
+    static func normalized(power db: Float) -> Float {
         let minDb: Float = -50
         if db < minDb { return 0 }
         return min(1, (db - minDb) / -minDb)

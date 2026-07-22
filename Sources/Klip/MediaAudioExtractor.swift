@@ -93,52 +93,84 @@ enum MediaAudioExtractor {
     private static func extract(asset: AVAsset, track: AVAssetTrack) async throws -> URL {
         let outURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("KlipVideoAudio-\(UUID().uuidString).m4a")
+        return try await render(asset: asset,
+                                output: AVAssetReaderTrackOutput(track: track, outputSettings: monoPCMSettings),
+                                to: outURL, queue: "klip.audio-extraction") { failure in
+            switch failure {
+            case .unreadable:        return ExtractionError.unreadable
+            case .readFailed(let e): return ExtractionError.readFailed(e)
+            case .writeFailed:       return ExtractionError.writeFailed
+            }
+        }
+    }
 
+    // MARK: - Shared render (also used by MeetingRecorder's mic+system mix)
+
+    /// Where a `render` run failed, so each caller maps it onto its OWN error type.
+    enum RenderFailure {
+        case unreadable          // the reader couldn't be created, wired up or started
+        case readFailed(Error?)  // the reader died mid-pump
+        case writeFailed         // the writer refused a buffer, or failed to start/finalize
+    }
+
+    /// One mono channel layout, applied to BOTH the reader's downmix and the AAC encoder (double
+    /// insurance so a multichannel/5.1 source gets downmixed regardless of which stage honors it).
+    static var monoLayout: Data {
+        var mono = AudioChannelLayout(); mono.mChannelLayoutTag = kAudioChannelLayoutTag_Mono
+        return Data(bytes: &mono, count: MemoryLayout<AudioChannelLayout>.size)
+    }
+
+    /// Reader-side settings: what the source decodes into before the AAC encode in `render`.
+    static var monoPCMSettings: [String: Any] {
+        [
+            AVFormatIDKey: Int(kAudioFormatLinearPCM),
+            AVSampleRateKey: 16_000,
+            AVNumberOfChannelsKey: 1,
+            AVChannelLayoutKey: monoLayout,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+    }
+
+    /// Pumps `output` (built with `monoPCMSettings`, from a track or an audio mix of `asset`) into a
+    /// 16 kHz mono AAC .m4a at `outURL`. Callers map a failure onto their own error type through
+    /// `mapError`; cancellation always surfaces as CancellationError. On any throw the partial file
+    /// is removed, so nothing is orphaned in the temp directory.
+    static func render(asset: AVAsset, output: AVAssetReaderOutput, to outURL: URL,
+                       queue label: String,
+                       error mapError: @escaping @Sendable (RenderFailure) -> Error) async throws -> URL {
         let reader: AVAssetReader
         let writer: AVAssetWriter
         do {
             reader = try AVAssetReader(asset: asset)
             writer = try AVAssetWriter(outputURL: outURL, fileType: .m4a)
-        } catch { throw ExtractionError.unreadable }
+        } catch { throw mapError(.unreadable) }
 
-        // A single mono channel layout, shared by the reader's downmix and the AAC encoder (double insurance so
-        // a multichannel/5.1 source gets downmixed regardless of which stage honors the layout).
-        var mono = AudioChannelLayout(); mono.mChannelLayoutTag = kAudioChannelLayoutTag_Mono
-        let layout = Data(bytes: &mono, count: MemoryLayout<AudioChannelLayout>.size)
-
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
-            AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: 16_000,
-            AVNumberOfChannelsKey: 1,
-            AVChannelLayoutKey: layout,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-            AVLinearPCMIsNonInterleaved: false,
-        ])
         output.alwaysCopiesSampleData = false
-        guard reader.canAdd(output) else { throw ExtractionError.unreadable }
+        guard reader.canAdd(output) else { throw mapError(.unreadable) }
         reader.add(output)
 
         let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
             AVSampleRateKey: 16_000,
             AVNumberOfChannelsKey: 1,
-            AVChannelLayoutKey: layout,
+            AVChannelLayoutKey: monoLayout,
             AVEncoderBitRateKey: 32_000,
         ])
         input.expectsMediaDataInRealTime = false
-        guard writer.canAdd(input) else { throw ExtractionError.writeFailed }
+        guard writer.canAdd(input) else { throw mapError(.writeFailed) }
         writer.add(input)
 
-        guard reader.startReading() else { throw ExtractionError.unreadable }
-        guard writer.startWriting() else { throw ExtractionError.writeFailed }
+        guard reader.startReading() else { throw mapError(.unreadable) }
+        guard writer.startWriting() else { throw mapError(.writeFailed) }
         writer.startSession(atSourceTime: .zero)
 
         // The pump runs in a dispatch callback with NO current Task, so Task.isCancelled is useless there;
         // a lock-protected flag flipped by the cancellation handler is checked on every pass.
         let cancelled = Flag()
-        let queue = DispatchQueue(label: "klip.audio-extraction")
+        let queue = DispatchQueue(label: label)
 
         // AVFoundation types aren't Sendable, but the entire pump runs on the serial queue above
         // (the cancellation handler only touches the Flag), so wrapping them in an @unchecked Sendable box is safe.
@@ -157,17 +189,17 @@ enum MediaAudioExtractor {
                                 box.input.markAsFinished()
                                 if box.reader.status == .failed {
                                     box.writer.cancelWriting()
-                                    cont.resume(throwing: ExtractionError.readFailed(box.reader.error)); return
+                                    cont.resume(throwing: mapError(.readFailed(box.reader.error))); return
                                 }
                                 box.writer.finishWriting {
                                     if box.writer.status == .completed { cont.resume() }
-                                    else { cont.resume(throwing: ExtractionError.writeFailed) }
+                                    else { cont.resume(throwing: mapError(.writeFailed)) }
                                 }
                                 return
                             }
                             if !box.input.append(buf) {
                                 box.reader.cancelReading(); box.writer.cancelWriting()
-                                cont.resume(throwing: ExtractionError.writeFailed); return
+                                cont.resume(throwing: mapError(.writeFailed)); return
                             }
                         }
                     }
@@ -183,7 +215,7 @@ enum MediaAudioExtractor {
         return outURL
     }
 
-    /// Tiny lock-protected Bool touched from two threads (cancellation handler + extraction pump).
+    /// Tiny lock-protected Bool touched from two threads (cancellation handler + render pump).
     private final class Flag: @unchecked Sendable {
         private let lock = NSLock()
         private var flag = false
@@ -192,11 +224,11 @@ enum MediaAudioExtractor {
     }
 
     /// Box to pass the (non-Sendable) reader/writer objects into the pump's @Sendable closure.
-    /// Safe because all of them are used only on the serial extraction queue.
+    /// Safe because all of them are used only on the serial render queue.
     private struct PumpBox: @unchecked Sendable {
         let reader: AVAssetReader
         let writer: AVAssetWriter
         let input: AVAssetWriterInput
-        let output: AVAssetReaderTrackOutput
+        let output: AVAssetReaderOutput
     }
 }

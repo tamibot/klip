@@ -1140,35 +1140,27 @@ struct ItemRow: View {
         .buttonStyle(PressableButtonStyle()).help(help)   // press-down feedback (Apple: respond on press)
     }
 
-    /// Human-readable date label: "Hoy · 10:43", "Ayer · 10:43" or "martes 04 de julio · 10:43".
-    static func timeLabel(_ date: Date) -> String {
-        let cal = Calendar.current
-        let en = Settings.shared.uiLanguage == "en"
-        let time = df(en ? "h:mm a" : "HH:mm", en).string(from: date)
-        if cal.isDateInToday(date)     { return "\(L10n.t("date.today")) · \(time)" }
-        if cal.isDateInYesterday(date) { return "\(L10n.t("date.yesterday")) · \(time)" }
-        let sameYear = cal.component(.year, from: date) == cal.component(.year, from: Date())
-        let fmt = en ? (sameYear ? "EEEE, MMM d" : "EEEE, MMM d, yyyy")
-                     : (sameYear ? "EEEE dd 'de' MMMM" : "EEEE dd 'de' MMMM yyyy")
-        return "\(df(fmt, en).string(from: date)) · \(time)"
-    }
+    /// The UI language, not the system one: Klip's interface language is its own preference.
+    /// Date.FormatStyle is a value type over a formatter Foundation caches internally, so building one
+    /// per row is fine — and its field-based styles order themselves per locale, which the old
+    /// hand-written en/es patterns could not do for the other six languages (they all fell back to es).
+    private static var loc: Locale { Locale(identifier: L10n.lang) }
 
     /// Just the time ("20:46" / "8:46 PM") — the day now lives in the list's section header.
     static func timeShort(_ date: Date) -> String {
-        let en = Settings.shared.uiLanguage == "en"
-        return df(en ? "h:mm a" : "HH:mm", en).string(from: date)
+        date.formatted(.dateTime.locale(loc).hour().minute())
     }
 
     /// Day-level section title for the grouped list: "Hoy" / "Ayer" / weekday / date (no time).
     static func daySection(_ date: Date) -> String {
         let cal = Calendar.current
-        let en = Settings.shared.uiLanguage == "en"
         if cal.isDateInToday(date)     { return L10n.t("date.today") }
         if cal.isDateInYesterday(date) { return L10n.t("date.yesterday") }
-        let sameYear = cal.component(.year, from: date) == cal.component(.year, from: Date())
-        let fmt = en ? (sameYear ? "EEEE, MMM d" : "MMM d, yyyy")
-                     : (sameYear ? "EEEE d 'de' MMMM" : "d 'de' MMMM yyyy")
-        return df(fmt, en).string(from: date)
+        // Past years drop the weekday: that far back it carries no orientation, only width.
+        guard cal.component(.year, from: date) == cal.component(.year, from: Date()) else {
+            return date.formatted(.dateTime.locale(loc).year().month().day())
+        }
+        return date.formatted(.dateTime.locale(loc).weekday(.wide).month().day())
     }
 
     /// Two dates fall in the same calendar day (drives section breaks).
@@ -1177,33 +1169,7 @@ struct ItemRow: View {
     /// Age in words, for VoiceOver only. The visible row shows a bare clock time, which read aloud out
     /// of its day section is just a number with no anchor.
     static func relativeTime(_ date: Date) -> String {
-        rdf().localizedString(for: date, relativeTo: Date())
-    }
-
-    /// Cached per UI language, same reason as `dfCache`: this runs once per visible row per render.
-    private static var rdfCache: [String: RelativeDateTimeFormatter] = [:]
-    private static func rdf() -> RelativeDateTimeFormatter {
-        let lang = L10n.lang
-        if let f = rdfCache[lang] { return f }
-        let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: lang)
-        f.unitsStyle = .full
-        rdfCache[lang] = f
-        return f
-    }
-
-    /// DateFormatters cached by (language, format, time zone) — avoids recreating them on every render, while
-    /// still reflecting a system time-zone change mid-session (the TZ in the key busts a stale formatter).
-    private static var dfCache: [String: DateFormatter] = [:]
-    private static func df(_ format: String, _ en: Bool) -> DateFormatter {
-        let cacheKey = "\(en ? "en" : "es")|\(format)|\(TimeZone.current.identifier)"
-        if let f = dfCache[cacheKey] { return f }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: en ? "en_US" : "es_ES")
-        f.timeZone = .current
-        f.dateFormat = format
-        dfCache[cacheKey] = f
-        return f
+        date.formatted(.relative(presentation: .named).locale(loc))
     }
 }
 

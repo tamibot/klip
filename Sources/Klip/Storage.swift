@@ -136,49 +136,45 @@ final class Storage {
     func imageURL(for fileName: String) -> URL { imagesURL.appendingPathComponent(fileName) }
     func loadImage(fileName: String) -> NSImage? { NSImage(contentsOf: imageURL(for: fileName)) }
 
-    /// Writes data straight to ~/Downloads with a collision-safe name — no save dialog
-    /// (Shottr-style: saving should never ask for a name). `base` defaults to a timestamped
-    /// "Klip <date> at <time>"; pass a clip's name to keep it. Returns the written URL.
-    func exportToDownloads(_ data: Data, ext: String, base: String? = nil) throws -> URL {
+    /// The stamp every Downloads export is named after: "2026-07-22 at 14.03.51".
+    static var exportTimestamp: String {
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        return df.string(from: Date())
+    }
+
+    /// A free path in ~/Downloads for `base`.`ext`, suffixing "-2", "-3"… on collision. `base` nil
+    /// or empty falls back to the timestamped "Klip <date> at <time>"; a clip's own name is kept,
+    /// sanitized for the filesystem. Saving never opens a dialog (Shottr-style: it should not ask
+    /// for a name), so this uniquing is the only thing separating two captures in the same second.
+    static func uniqueDownloadsURL(base: String?, ext: String) -> URL {
         let dir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
         let name: String
         if let base, !base.isEmpty {
-            // Sanitize a user-provided clip name for the filesystem.
             name = base.replacingOccurrences(of: "[/:\\\\]", with: "-", options: .regularExpression)
         } else {
-            let df = DateFormatter()
-            df.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-            name = "Klip \(df.string(from: Date()))"
+            name = "Klip \(exportTimestamp)"
         }
         var url = dir.appendingPathComponent("\(name).\(ext)")
         var n = 2
         while FileManager.default.fileExists(atPath: url.path) {
             url = dir.appendingPathComponent("\(name)-\(n).\(ext)"); n += 1
         }
+        return url
+    }
+
+    /// Writes data straight to ~/Downloads with a collision-safe name. Returns the written URL.
+    func exportToDownloads(_ data: Data, ext: String, base: String? = nil) throws -> URL {
+        let url = Self.uniqueDownloadsURL(base: base, ext: ext)
         try data.write(to: url, options: .atomic)
         return url
     }
 
-    /// Same timestamped, collision-safe Downloads export, but MOVING an existing file instead of
-    /// writing a Data blob — a screen recording can be hundreds of MB and must never be loaded
-    /// into memory just to relocate it.
+    /// Same export, but MOVING an existing file instead of writing a Data blob — a screen recording
+    /// can be hundreds of MB and must never be loaded into memory just to relocate it.
     func exportFileToDownloads(from src: URL, ext: String, base: String? = nil) throws -> URL {
-        let dir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
-        let name: String
-        if let base, !base.isEmpty {
-            name = base.replacingOccurrences(of: "[/:\\\\]", with: "-", options: .regularExpression)
-        } else {
-            let df = DateFormatter()
-            df.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-            name = "Klip \(df.string(from: Date()))"
-        }
-        var url = dir.appendingPathComponent("\(name).\(ext)")
-        var n = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            url = dir.appendingPathComponent("\(name)-\(n).\(ext)"); n += 1
-        }
+        let url = Self.uniqueDownloadsURL(base: base, ext: ext)
         try FileManager.default.moveItem(at: src, to: url)
         return url
     }

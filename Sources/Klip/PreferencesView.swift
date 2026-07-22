@@ -53,14 +53,7 @@ final class APIKeyModel: ObservableObject {
 /// Klip's Preferences window.
 struct PreferencesView: View {
     @ObservedObject var settings = Settings.shared
-    var onHotKeyChange: (KeyCombo) -> Void
-    var onVoiceHotKeyChange: (KeyCombo) -> Void
-    var onCaptureHotKeyChange: (KeyCombo) -> Void
-    var onUploadHotKeyChange: (KeyCombo) -> Void
-    var onTextCaptureHotKeyChange: (KeyCombo) -> Void
-    var onMeetingHotKeyChange: (KeyCombo) -> Void
-    var onScreenRecHotKeyChange: (KeyCombo) -> Void
-    var onScrollHotKeyChange: (KeyCombo) -> Void
+    var onHotKeyChange: (ShortcutKind, KeyCombo) -> Void
     // Kept for the AppDelegate wiring but intentionally never called: trimming on every
     // Stepper click deleted history (and media) per click. History self-trims on the next
     // capture via trimAndSave, so the new limit applies as new items arrive.
@@ -188,14 +181,14 @@ struct PreferencesView: View {
             }
 
             Section(header: sectionHeader("prefs.shortcuts")) {
-                shortcutRow(L10n.t("prefs.sc.show"), $settings.combo, onHotKeyChange)
-                shortcutRow(L10n.t("prefs.sc.voice"), $settings.voiceCombo, onVoiceHotKeyChange)
-                shortcutRow(L10n.t("prefs.sc.capture"), $settings.captureCombo, onCaptureHotKeyChange)
-                shortcutRow(L10n.t("prefs.sc.captureText"), $settings.textCaptureCombo, onTextCaptureHotKeyChange)
-                shortcutRow(L10n.t("prefs.sc.upload"), $settings.uploadCombo, onUploadHotKeyChange)
-                shortcutRow(L10n.t("prefs.sc.meeting"), $settings.meetingCombo, onMeetingHotKeyChange)
-                shortcutRow(L10n.t("prefs.sc.record"), $settings.screenRecCombo, onScreenRecHotKeyChange)
-                shortcutRow(L10n.t("prefs.sc.scroll"), $settings.scrollCombo, onScrollHotKeyChange)
+                shortcutRow(.panel, L10n.t("prefs.sc.show"), $settings.combo)
+                shortcutRow(.voice, L10n.t("prefs.sc.voice"), $settings.voiceCombo)
+                shortcutRow(.capture, L10n.t("prefs.sc.capture"), $settings.captureCombo)
+                shortcutRow(.textCapture, L10n.t("prefs.sc.captureText"), $settings.textCaptureCombo)
+                shortcutRow(.upload, L10n.t("prefs.sc.upload"), $settings.uploadCombo)
+                shortcutRow(.meeting, L10n.t("prefs.sc.meeting"), $settings.meetingCombo)
+                shortcutRow(.screenRec, L10n.t("prefs.sc.record"), $settings.screenRecCombo)
+                shortcutRow(.scroll, L10n.t("prefs.sc.scroll"), $settings.scrollCombo)
                 Text(L10n.t("prefs.sc.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -442,13 +435,12 @@ struct PreferencesView: View {
         .animation(.easeOut(duration: 0.15), value: settings.aiProvider)
     }
 
-    /// One shortcut row with a uniform height so all six rows line up in the grouped Form.
-    private func shortcutRow(_ label: String, _ combo: Binding<KeyCombo>,
-                             _ onChange: @escaping (KeyCombo) -> Void) -> some View {
+    /// One shortcut row with a uniform height so all eight rows line up in the grouped Form.
+    private func shortcutRow(_ kind: ShortcutKind, _ label: String, _ combo: Binding<KeyCombo>) -> some View {
         HStack {
             Text(label)
             Spacer()
-            FilteredHotKeyField(combo: combo, onChange: onChange)
+            FilteredHotKeyField(combo: combo) { onHotKeyChange(kind, $0) }
         }
         .frame(height: 28)
     }
@@ -569,11 +561,11 @@ private struct FilteredHotKeyField: View {
     @Binding var combo: KeyCombo
     var onChange: (KeyCombo) -> Void
 
-    /// Combos held by the OTHER shortcuts (this field's own value is filtered out).
+    /// Combos held by the OTHER shortcuts (this field's own value is filtered out). Derived from
+    /// ShortcutKind so a new shortcut can't be forgotten here — the hand-written list had gone stale
+    /// twice, leaving the menu offering combos that screen-recording and scrolling capture already held.
     private var taken: [KeyCombo] {
-        let s = Settings.shared
-        return [s.combo, s.voiceCombo, s.captureCombo, s.uploadCombo, s.textCaptureCombo, s.meetingCombo]
-            .filter { $0 != combo }
+        ShortcutKind.allCases.map { Settings.shared[keyPath: $0.combo] }.filter { $0 != combo }
     }
 
     var body: some View {

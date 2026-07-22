@@ -25,39 +25,14 @@ enum SnapTool: String, CaseIterable {
         }
     }
 
+    /// L10n key stem. Every tool's keys are its raw value; `rectangle` alone was shortened to "rect".
+    private var key: String { self == .rectangle ? "rect" : rawValue }
+
     /// One line saying what the tool DOES — the tool's name alone doesn't teach anything
     /// (especially "highlighter" vs "pencil"). Shown under the name in the toolbar tooltip.
-    var hint: String {
-        switch self {
-        case .select:    return L10n.t("tool.hint.select")
-        case .pencil:    return L10n.t("tool.hint.pencil")
-        case .line:      return L10n.t("tool.hint.line")
-        case .arrow:     return L10n.t("tool.hint.arrow")
-        case .rectangle: return L10n.t("tool.hint.rect")
-        case .ellipse:   return L10n.t("tool.hint.ellipse")
-        case .marker:    return L10n.t("tool.hint.marker")
-        case .text:      return L10n.t("tool.hint.text")
-        case .blur:      return L10n.t("tool.hint.blur")
-        case .spotlight: return L10n.t("tool.hint.spotlight")
-        case .counter:   return L10n.t("tool.hint.counter")
-        }
-    }
+    var hint: String { L10n.t("tool.hint.\(key)") }
 
-    var tooltip: String {
-        switch self {
-        case .select:    return L10n.t("tool.select")
-        case .pencil:    return L10n.t("tool.pencil")
-        case .line:      return L10n.t("tool.line")
-        case .arrow:     return L10n.t("tool.arrow")
-        case .rectangle: return L10n.t("tool.rect")
-        case .ellipse:   return L10n.t("tool.ellipse")
-        case .marker:    return L10n.t("tool.marker")
-        case .text:      return L10n.t("tool.text")
-        case .blur:      return L10n.t("tool.blur")
-        case .spotlight: return L10n.t("tool.spotlight")
-        case .counter:   return L10n.t("tool.counter")
-        }
-    }
+    var tooltip: String { L10n.t("tool.\(key)") }
 }
 
 /// A drawable annotation. `points` holds the freehand stroke (pencil/marker); shapes use the
