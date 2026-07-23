@@ -359,14 +359,12 @@
   @media (max-width:520px){ .grid{ grid-template-columns:1fr } }
   .feat{ padding:22px 20px 24px; border-radius:18px; transition:transform .22s cubic-bezier(.2,.7,.2,1) }
   .feat:hover{ transform:translateY(-4px) }
-  .feat .tile{
-    width:44px; height:44px; border-radius:12px; display:grid; place-items:center; margin-bottom:15px;
-    color:var(--accent);                                   /* indigo glyph */
-    background:color-mix(in srgb, var(--ink) 6%, transparent);   /* neutral gray tile */
-    box-shadow: inset 0 0 0 .5px var(--hairline);
-  }
-  .feat .tile.voice{ color:var(--voice) }                  /* purple = voice only */
-  .feat .tile svg{ width:24px; height:24px }
+  .feat .picto{ margin-bottom:14px; color:var(--ink) }
+  .feat .picto svg{ width:104px; height:80px; display:block }
+  .feat .picto .n{ stroke:currentColor; opacity:.45 }      /* neutral tone: the canvas */
+  .feat .picto .a{ stroke:var(--accent) }                  /* brand tone: the action */
+  .feat .picto .af{ fill:var(--accent); stroke:none }
+  .feat .picto.voice .a{ stroke:var(--voice) }             /* purple = voice only */
   .feat h3{ font-size:1.06rem; font-weight:650; letter-spacing:-.015em; margin:0 0 7px }
   .feat p{ margin:0; color:var(--muted); font-size:.92rem; line-height:1.55 }
   .feat p kbd{ margin:0 1px }
@@ -612,55 +610,55 @@
       <div class="grid">
 
         <div class="feat glass glass--flat reveal">
-          <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="3"/><path d="M9 4V3.2A2.8 2.8 0 0 1 15 3.2V4"/><path d="M9 11h6"/><path d="M9 14.5h6"/><path d="M9 18h4"/></svg></div>
+          <div class="picto"><svg viewBox="0 0 130 100" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect class="n" x="22" y="24" width="52" height="44" rx="9"/><path class="n" d="M28 76h40"/><path class="n" d="M34 84h28"/><rect class="a" x="62" y="34" width="50" height="44" rx="9"/><path class="a" d="M74 48h26"/><path class="a" d="M74 58h18"/></svg></div>
           <h3>Searchable history</h3>
           <p><kbd>⌥⇧E</kbd> and your last 500 clips — text, images, video and voice notes — are a keystroke away. Instant search, type filters, full keyboard navigation.</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
-          <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6.5A2.5 2.5 0 0 1 6.5 4H8"/><path d="M16 4h1.5A2.5 2.5 0 0 1 20 6.5V8"/><path d="M20 16v1.5a2.5 2.5 0 0 1-2.5 2.5H16"/><path d="M8 20H6.5A2.5 2.5 0 0 1 4 17.5V16"/><circle cx="12" cy="12" r="3.2"/></svg></div>
+          <div class="picto"><svg viewBox="0 0 130 100" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect class="n" x="22" y="16" width="86" height="66" rx="11"/><path class="a" d="M44 66 83 34"/><path class="a" d="M69 37 83 34 77 47"/></svg></div>
           <h3>Capture &amp; annotate</h3>
           <p><kbd>⌥⇧D</kbd> — drag over a frozen screen, then mark it up: arrows, text, blur, spotlight, counters, undo/redo. Lands in history and on the clipboard, confirmed by a toast — never by a panel opening over your work.</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
-          <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6.5A2.5 2.5 0 0 1 6.5 4H8"/><path d="M16 4h1.5A2.5 2.5 0 0 1 20 6.5V8"/><path d="M20 16v1.5a2.5 2.5 0 0 1-2.5 2.5H16"/><path d="M8 20H6.5A2.5 2.5 0 0 1 4 17.5V16"/><path d="M8 9.5h8"/><path d="M8 12.5h8"/><path d="M8 15.5h5"/></svg></div>
+          <div class="picto"><svg viewBox="0 0 130 100" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="n" d="M24 32v-8a10 10 0 0 1 10-10h8"/><path class="n" d="M88 14h8a10 10 0 0 1 10 10v8"/><path class="n" d="M106 68v8a10 10 0 0 1-10 10h-8"/><path class="n" d="M42 86h-8a10 10 0 0 1-10-10v-8"/><path class="a" d="M53 70 65 30 77 70"/><path class="a" d="M57.5 55.5h15"/></svg></div>
           <h3>Text recognition</h3>
           <p><kbd>⌥⇧F</kbd> — select any region and its text is OCR'd straight to the clipboard with Apple's Vision engine. On-device, with a toast to confirm.</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
-          <div class="tile voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2"/><path d="M6.6 8v8"/><path d="M10.2 5v14"/><path d="M13.8 8v8"/><path d="M17.4 6.5v11"/><path d="M21 10v4"/></svg></div>
+          <div class="picto voice"><svg viewBox="0 0 130 100" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect class="n" x="28" y="12" width="74" height="76" rx="11"/><path class="n" d="M42 64h46"/><path class="n" d="M42 74h30"/><path class="a" d="M42 33v10"/><path class="a" d="M54 22v32"/><path class="a" d="M65 28v20"/><path class="a" d="M76 20v36"/><path class="a" d="M88 31v14"/></svg></div>
           <h3>Voice &amp; video → text</h3>
           <p><kbd>⌥⇧R</kbd> to dictate, or <kbd>⌥⇧O</kbd> to drop audio &amp; video. Transcribed on your Mac by Whisper — no key, no account, no upload.</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
-          <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="3" width="5" height="9.5" rx="2.5"/><path d="M3.5 10.5a4.5 4.5 0 0 0 9 0"/><path d="M8 15v3"/><path d="M6 20.5h4"/><path d="M15.5 8.5v7"/><path d="M18.5 6v12"/><path d="M21.5 9.5v5"/></svg></div>
+          <div class="picto"><svg viewBox="0 0 130 100" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect class="n" x="16" y="16" width="56" height="36" rx="11"/><path class="n" d="M30 52v9l11-9"/><rect class="n" x="58" y="48" width="56" height="36" rx="11"/><path class="n" d="M100 84v9l-11-9"/><path class="a" d="M32 30v8"/><path class="a" d="M42 26v16"/><path class="a" d="M52 30v8"/><path class="a" d="M74 62v8"/><path class="a" d="M84 58v16"/><path class="a" d="M94 62v8"/></svg></div>
           <h3>Meeting notes, no bot</h3>
           <p><kbd>⌥⇧M</kbd> on any call — Zoom, Meet, Teams, FaceTime. Records your mic + the system audio (nobody joins) and transcribes it on-device, Me / Them labelled. Forgot to stop it? It stops itself after 15 minutes of silence.</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
-          <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="12" rx="2.5"/><path d="M15.5 8.5V6A2.5 2.5 0 0 0 13 3.5H6.5A2.5 2.5 0 0 0 4 6v8.5A2.5 2.5 0 0 0 6.5 17H8.5"/></svg></div>
+          <div class="picto"><svg viewBox="0 0 130 100" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect class="n" x="54" y="10" width="56" height="28" rx="12"/><path class="n" d="M98 38v8l-10-8"/><rect class="n" x="18" y="54" width="94" height="30" rx="10"/><path class="a" d="M50 61 42 69 50 77"/><path class="a" d="M74 61 82 69 74 77"/><path class="a" d="M65.5 59 58.5 79"/></svg></div>
           <h3>Paste-ready, always clean</h3>
           <p>One click reformats a clip for WhatsApp, rich email, Markdown or a fenced code block (<kbd>⌘↩</kbd>) — and every rich copy is stored clean: bold and emojis kept, backgrounds and fonts dropped.</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
-          <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/></svg></div>
+          <div class="picto"><svg viewBox="0 0 130 100" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect class="n" x="20" y="16" width="90" height="68" rx="11"/><path class="a" d="M38 42v-4a6 6 0 0 1 6-6h4"/><path class="a" d="M82 32h4a6 6 0 0 1 6 6v4"/><path class="a" d="M92 58v4a6 6 0 0 1-6 6h-4"/><path class="a" d="M48 68h-4a6 6 0 0 1-6-6v-4"/><circle class="af" cx="65" cy="50" r="7"/></svg></div>
           <h3>Record screen → video/GIF</h3>
           <p><kbd>⌥⇧V</kbd> — select a region (or record the full screen) with system audio; a floating frame marks what is being recorded. It lands in your history: play, save, or one-tap convert to GIF (the first 30 s, 10 fps, 1000 px wide).</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
-          <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M12 7.5v9"/><path d="M9 13.5 12 16.5 15 13.5"/></svg></div>
+          <div class="picto"><svg viewBox="0 0 130 100" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect class="n" x="40" y="8" width="50" height="66" rx="9"/><path class="n" d="M50 22h30"/><path class="n" d="M50 32h30"/><path class="n" d="M50 42h20"/><path class="a" d="M65 52v35"/><path class="a" d="M53 75 65 87 77 75"/></svg></div>
           <h3>Scrolling capture</h3>
           <p><kbd>⌥⇧S</kbd> — pick the content area and Klip scrolls the page <em>for you</em>: back to the top first, then all the way down, stitching as it goes. One tall screenshot, up to 16 000 px — an endless feed stops there instead of running forever.</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
-          <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.8"/><path d="M7.8 10.5V7.5a4.2 4.2 0 0 1 8.4 0v3"/><circle cx="12" cy="15" r="1.4"/><path d="M12 16.4v2"/></svg></div>
+          <div class="picto"><svg viewBox="0 0 130 100" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect class="n" x="26" y="18" width="78" height="64" rx="11"/><path class="n" d="M40 68h.1"/><path class="n" d="M50 68h.1"/><path class="n" d="M80 68h.1"/><path class="n" d="M90 68h.1"/><circle class="a" cx="65" cy="42" r="9.5"/><path class="af" d="M62 50.5h6l4.5 15.5h-15Z"/></svg></div>
           <h3>Encrypted credentials</h3>
           <p>Tokens and API keys are auto-detected, shown masked, encrypted at rest (AES-256-GCM, key in the Keychain) and never auto-pasted.</p>
         </div>
