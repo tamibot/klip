@@ -8,7 +8,7 @@ set -euo pipefail
 # fake data folder in /tmp instead of the real install.
 APP="${KLIP_APP_PATH:-/Applications/Klip.app}"
 DATA="${KLIP_DATA_DIR:-$HOME/Library/Application Support/Klip}"
-BUNDLE_ID="${KLIP_BUNDLE_ID:-com.proper.klip}"
+BUNDLE_ID="${KLIP_BUNDLE_ID:-io.github.tamibot.klip}"
 IDENTITY="${KLIP_KEYCHAIN_IDENTITY:-Klip Code Signing}"
 MODELS="$HOME/Documents/huggingface/models/argmaxinc/whisperkit-coreml"
 
@@ -70,6 +70,9 @@ elif [ -d "$DATA" ]; then
     echo "    · $DATA"
     data_inventory
     echo "    · preferences ($BUNDLE_ID), caches, and the credential encryption key in the keychain"
+    echo "      ⚠ that key is the ONLY thing that can decrypt saved credentials, and it lives in the"
+    echo "        keychain — not in the folder above. Copying the folder does not back it up. Delete"
+    echo "        the key and every saved credential becomes unreadable, restore or no restore."
 else
     echo "  No data folder at $DATA."
 fi
@@ -149,6 +152,13 @@ if [ "$DELETE_DATA" = 1 ]; then
     defaults delete "$BUNDLE_ID" >/dev/null 2>&1 && note "preferences ($BUNDLE_ID)" || true
     security delete-generic-password -a "$BUNDLE_ID.credentialKey" >/dev/null 2>&1 \
         && note "credential encryption key from the keychain" || true
+    # Klip's bundle id changed; an install that predates the rename left its preferences and its
+    # encryption key under the old one. A "remove everything" that leaves those behind is a lie.
+    for old in com.proper.klip com.proper.pastaclip; do
+        defaults delete "$old" >/dev/null 2>&1 && note "preferences ($old, pre-rename)" || true
+    done
+    security delete-generic-password -a "com.proper.klip.credentialKey" >/dev/null 2>&1 \
+        && note "credential encryption key from the keychain (pre-rename)" || true
     for leftover in "$HOME/Library/Caches/$BUNDLE_ID" \
                     "$HOME/Library/HTTPStorages/$BUNDLE_ID" \
                     "$HOME/Library/HTTPStorages/$BUNDLE_ID.binarycookies"; do

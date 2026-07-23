@@ -75,12 +75,12 @@ fi
 
 echo "==> 3.5) Signing in /Applications (stable location, no metadata re-added)…"
 $SUDO xattr -cr "$DEST" 2>/dev/null || true
-if ! $SUDO codesign --force --sign "$SIGN_ID" --identifier com.proper.klip \
+if ! $SUDO codesign --force --sign "$SIGN_ID" --identifier io.github.tamibot.klip \
         --entitlements Resources/Klip.entitlements "$DEST" 2>/tmp/klip_sign_err; then
     if [ "$SIGN_ID" != "-" ]; then
         echo "  ⚠ signing with '$SIGN_ID' failed; falling back to ad-hoc"
         SIGN_ID="-"
-        $SUDO codesign --force --sign - --identifier com.proper.klip \
+        $SUDO codesign --force --sign - --identifier io.github.tamibot.klip \
             --entitlements Resources/Klip.entitlements "$DEST"
     else
         cat /tmp/klip_sign_err; rm -f /tmp/klip_sign_err; exit 1
@@ -108,8 +108,8 @@ else
         *)                       KLIP_LANG="en" ;;
     esac
 fi
-defaults read com.proper.klip uiLanguage            >/dev/null 2>&1 || defaults write com.proper.klip uiLanguage            -string "$KLIP_LANG"
-defaults read com.proper.klip transcriptionLanguage >/dev/null 2>&1 || defaults write com.proper.klip transcriptionLanguage -string "$KLIP_LANG"
+defaults read io.github.tamibot.klip uiLanguage            >/dev/null 2>&1 || defaults write io.github.tamibot.klip uiLanguage            -string "$KLIP_LANG"
+defaults read io.github.tamibot.klip transcriptionLanguage >/dev/null 2>&1 || defaults write io.github.tamibot.klip transcriptionLanguage -string "$KLIP_LANG"
 
 # Drop the build artifacts now that the real app lives in /Applications. Leaving one here is a trap:
 # it carries the same bundle id but only an ad-hoc signature, so opening it by accident runs a

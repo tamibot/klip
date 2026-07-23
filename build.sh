@@ -8,7 +8,7 @@ APP_NAME="Klip"
 BUNDLE="$APP_NAME.app"
 CONFIG="${1:-release}"
 BUILD_DIR=".build/$CONFIG"
-BUNDLE_ID="com.proper.klip"
+BUNDLE_ID="io.github.tamibot.klip"
 ENTITLEMENTS="Resources/Klip.entitlements"
 MIN_MACOS=14        # keep in sync with Package.swift: platforms: [.macOS(.v14)]
 

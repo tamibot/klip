@@ -35,8 +35,14 @@ struct L10nIntegrityTests {
     /// loudly instead of the user's app dying silently" is the strongest signal available.
     @Test("loading any string forces all eight tables to collapse without a duplicate key")
     func allTablesInitialise() {
-        #expect(L10n.t("menu.quit") == "Quit Klip")
+        // Deliberately NOT compared against the English string: L10n.t resolves through
+        // Settings.shared.uiLanguage, so asserting "Quit Klip" made this test fail for anyone whose
+        // process language was not English — it failed here the moment a domain migration handed the
+        // runner a Spanish preference. What matters is that a lookup happens at all (that is what
+        // collapses the literals) and that it resolves to a real translation rather than the raw key.
+        #expect(L10n.t("menu.quit") != "menu.quit")
         #expect(L10n.tables.count == 8)
+        #expect(L10n.tables["en"]?["menu.quit"] == "Quit Klip")
     }
 
     /// The fallback chain is `(tables[lang] ?? en)[key] ?? en[key] ?? key`. The tail matters: an

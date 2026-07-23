@@ -260,6 +260,7 @@ final class Settings: ObservableObject {
     }
 
     private init() {
+        Settings.migratePreviousBundleDomainIfNeeded()   // must precede everything that reads a default
         Settings.migrateLegacyDefaultsIfNeeded()
         d.register(defaults: [
             // Registration domain only: init assigns `maxItems` WITHOUT firing didSet (Swift skips property
@@ -393,8 +394,35 @@ final class Settings: ObservableObject {
         excludedBundleIDs.removeAll { $0 == id }
     }
 
+    // MARK: - Migration from the old domains
+
+    /// The bundle id changed, and UserDefaults.standard is the BUNDLE's domain — so on the first launch
+    /// after the rename every setting reads as unset: shortcuts back to defaults, language back to the
+    /// system one, the welcome window again, and every one-time migration flag cleared so the hotkey
+    /// migrations would re-run and remap combos the user had chosen. Copy the whole old domain across.
+    /// Whole-dictionary rather than a key list: the flags matter as much as the values, and a list here
+    /// would go stale the next time a setting is added.
+    private static let migratedDomainKey = "migratedFromProperDomain"
+
+    private static func migratePreviousBundleDomainIfNeeded() {
+        // Only when we ARE Klip. UserDefaults.standard is whatever the HOST process's domain is, so
+        // without this the copy also fires inside the test runner and hands it the user's real
+        // settings — which is exactly how the localization suite caught this.
+        guard Bundle.main.bundleIdentifier == "io.github.tamibot.klip" else { return }
+        let std = UserDefaults.standard
+        guard !std.bool(forKey: migratedDomainKey) else { return }
+        defer { std.set(true, forKey: migratedDomainKey) }
+        guard let old = UserDefaults(suiteName: "com.proper.klip") else { return }
+        for (key, value) in old.persistentDomain(forName: "com.proper.klip") ?? [:]
+        where std.object(forKey: key) == nil {
+            std.set(value, forKey: key)
+        }
+    }
+
     // MARK: - Migration from the old domain (Pasta → Klip)
 
+    /// The suite name is the OLD app's, so it stays exactly as it was written on disk — renaming the
+    /// string here would not rename anything, it would just stop finding those users' settings.
     private static let migratedFlagKey = "migratedFromPastaClip"
 
     private static func migrateLegacyDefaultsIfNeeded() {

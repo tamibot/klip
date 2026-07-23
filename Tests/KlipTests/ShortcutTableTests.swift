@@ -71,7 +71,7 @@ struct ShortcutTableTests {
     ///
     /// READ-ONLY on purpose, and it must stay that way. Touching `Settings.shared` from a test constructs
     /// the singleton against the test runner's own defaults domain (Bundle.main is nil under
-    /// swiftpm-testing-helper, so this is NOT Klip's com.proper.klip). Reading is inert; ASSIGNING would
+    /// swiftpm-testing-helper, so this is NOT Klip's io.github.tamibot.klip). Reading is inert; ASSIGNING would
     /// fire the `@Published` didSet, persist that value into the runner's domain, and break this test on
     /// the NEXT run — on that machine only. Never assign to Settings.shared from a test.
     @Test("every shortcut's registered UserDefaults default is the combo the table declares")

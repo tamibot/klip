@@ -26,7 +26,7 @@ enum Fixture {
 ///
 /// Not covered here, deliberately:
 ///  * `CredentialCrypto.seal/open` — they hit the REAL login Keychain under a hardcoded account name
-///    (`com.proper.klip.credentialKey`) with no injection point. On a machine where that item exists
+///    (`io.github.tamibot.klip.credentialKey`) with no injection point. On a machine where that item exists
 ///    the test process is outside its ACL and every round-trip assertion fails; on a fresh machine the
 ///    test process WINS the create and Klip.app can no longer read its own key, silently bricking every
 ///    already-sealed clip. A test that breaks the product on first run is worse than no test.

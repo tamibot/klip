@@ -114,7 +114,13 @@ open Klip.app
 ./uninstall.sh --dry-run    # prints the plan, changes nothing
 ```
 
-It quits Klip, removes `/Applications/Klip.app` — which takes the launch-at-login registration with it — and deletes the "Klip Code Signing" certificate from your login keychain. Then it asks *separately* about your data: `~/Library/Application Support/Klip`, the `com.proper.klip` preferences and the credential encryption key in the Keychain, telling you how many images, voice notes and recordings that is before you answer. The default is no. `--keep-data` leaves all of it alone; `--yes` removes everything, data included, without asking.
+It quits Klip, removes `/Applications/Klip.app` — which takes the launch-at-login registration with it — and deletes the "Klip Code Signing" certificate from your login keychain. Then it asks *separately* about your data: `~/Library/Application Support/Klip`, the `io.github.tamibot.klip` preferences and the credential encryption key in the Keychain, telling you how many images, voice notes and recordings that is before you answer. The default is no. `--keep-data` leaves all of it alone; `--yes` removes everything, data included, without asking.
+
+> **Saving credentials for later takes more than copying the folder.** Klip encrypts credentials at
+> rest, and the key lives in the Keychain rather than in `~/Library/Application Support/Klip`. Copy
+> the folder and you copy the ciphertext without the key: those items come back permanently
+> unreadable. Klip keeps the sealed text rather than discarding it, so nothing gets worse — but
+> nothing gets it back either. Reveal and copy anything you still need before you remove the key.
 
 Two things no script may touch, both printed again when it finishes:
 
