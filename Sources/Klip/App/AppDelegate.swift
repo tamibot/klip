@@ -765,7 +765,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.isMovableByWindowBackground = true
             panel.isReleasedWhenClosed = false
-            // Apple's panel recipe (backdrop + ceiling tint + rim), shared with the main panel.
+            // Apple's panel recipe (backdrop material + sheen + concentric rim), shared with the main panel.
             let fx = GlassPanelView(frame: NSRect(x: 0, y: 0, width: 264, height: 150), radius: 12)
             fx.setContent(NSHostingView(rootView: view))
             panel.contentView = fx

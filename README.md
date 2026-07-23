@@ -40,7 +40,7 @@ Nothing to press. Every text and image copy lands in the history, grouped by day
 `⌥⇧E`. Type a few characters, matches highlight as you type. `↑`/`↓`, `Enter` pastes into whatever app you were in. Or narrow with a type chip first: text, links, images, video, voice, credentials, favorites. A chip only appears once you own items of that type.
 
 **3. The UI is broken and describing it is hopeless.**
-`⌥⇧D`, drag over the region. The overlay behaves like `⌘⇧4`: no screen dimming, a light gray veil on the selection with a two-device-pixel border and a live dimension badge at the correct Retina scale. Let go and Klip Snap opens — arrow at the bug, rectangle around the misaligned element, a numbered badge on each thing the model should look at, blur over the customer's email. Copy, paste into the chat.
+`⌥⇧D`, drag over the region. The overlay behaves like `⌘⇧4`: no screen dimming, a neutral gray veil on the selection edged by two one-device-pixel strokes — dark outside, white inside — and a live dimension badge at the correct Retina scale. Let go and Klip Snap opens — arrow at the bug, rectangle around the misaligned element, a numbered badge on each thing the model should look at, blur over the customer's email. Copy, paste into the chat.
 
 **4. The error is in a screenshot, not selectable text.**
 `⌥⇧F`. Snip the region, the text is OCR'd straight onto your clipboard. No editor, no window, nothing to close.
@@ -90,11 +90,11 @@ Klip starts in your Mac's language if it speaks it (English, Spanish, French, Ge
 
 ### Permissions
 
-Klip asks for three. The first-run window offers all three up front; skip them there and the feature that needs one asks when you first use it. Nothing is captured until you press a shortcut.
+Klip asks for three. The first-run window offers all three up front — next to the speech-model download, which is never a gate; skip any of them there and the feature that needs one asks when you first use it. Nothing is captured until you press a shortcut.
 
 | Permission | What needs it | If you say no |
 |---|---|---|
-| **Screen Recording** | `⌥⇧D` annotate · `⌥⇧F` OCR · `⌥⇧S` scrolling capture · `⌥⇧V` screen recording · the system-audio half of `⌥⇧M` meetings | Those five stop with a pointer to System Settings. Clipboard history and voice notes carry on. |
+| **Screen Recording** | `⌥⇧D` annotate · `⌥⇧F` OCR · `⌥⇧S` scrolling capture · `⌥⇧V` screen recording · `⌥⇧M` meetings, for the system-audio track | Those five stop with a pointer to System Settings — a meeting refuses to start at all, before the microphone is even asked for. Clipboard history and voice notes carry on. |
 | **Accessibility** | Auto-paste (`Enter` pasting into the app you came from) and the *automatic* scrolling in `⌥⇧S` | The clip is still copied and focus still returns — you press `⌘V`. Scrolling capture falls back to stitching while *you* scroll, so it still hands you an image. |
 | **Microphone** | `⌥⇧R` voice notes and `⌥⇧M` meetings | Neither can start. Nothing else changes. |
 
@@ -110,7 +110,7 @@ open Klip.app
 ### Uninstall
 
 ```bash
-./uninstall.sh              # asks before each step
+./uninstall.sh              # asks before removing anything
 ./uninstall.sh --dry-run    # prints the plan, changes nothing
 ```
 
@@ -157,8 +157,10 @@ In the panel:
 | Key | Action |
 |---|---|
 | `↑` / `↓` + `Enter` | Navigate and pick |
-| `⌘↩` | Copy the selected item as a code block |
-| `Esc` | Close |
+| `⌘↩` | Copy the selected text item as a code block (never a credential) |
+| `⌘⌫` | Delete the selected item — confirming first if it carries an image or audio |
+| `⌘⇧F` | Star / unstar the selected item |
+| `Esc` | Backs out one layer at a time: leave multi-select, then clear the search, then close |
 
 `⌘⇧⌃4` — macOS's own screenshot-to-clipboard — lands in Klip too.
 
@@ -172,7 +174,7 @@ Automatic text and image history · instant search with match highlighting and f
 
 ### Capture
 
-- **Region overlay** (`⌥⇧D`, reused by the `⌥⇧V` and `⌥⇧S` pickers) — rebuilt to feel like `⌘⇧4`. No screen dimming: a light gray veil marks the selection, two-device-pixel border, live dimension badge at the correct Retina scale, Apple-style crosshair, hint text that fades on its own, no popup animation. Engine is ScreenCaptureKit, not the deprecated capture API. A preference sends region captures either to the annotation editor or straight to the clipboard.
+- **Region overlay** (`⌥⇧D`, reused by the `⌥⇧V` and `⌥⇧S` pickers) — rebuilt to feel like `⌘⇧4`. No screen dimming: a neutral gray veil marks the selection, edged by two one-device-pixel strokes (dark outside, white inside), live dimension badge at the correct Retina scale, Apple-style crosshair, hint text that fades on its own, no popup animation. Engine is ScreenCaptureKit, not the deprecated capture API. A preference sends region captures either to the annotation editor or straight to the clipboard.
 - **Klip Snap, the annotation editor** — select & move any annotation · pencil · line · arrow · rectangle · ellipse · highlighter · text (editable, movable, resizable) · blur/pixelate · spotlight · numbered counter badges · colour · stroke width · undo/redo · pinch zoom with a live percentage readout. The editor shows the capture and nothing else, no gray dead space around it.
 - **OCR** (`⌥⇧F`) — on-device Vision. Snip, and the text is on your clipboard and in history. Also available as a row action on any image.
 - **Scrolling capture** (`⌥⇧S`) — select the content area; Klip rewinds to the top, then scrolls and stitches down on its own. Bounded on purpose: **20 steps up, 50 down**, and hard caps of 16 000 px or 120 frames auto-finish with what exists, so an endless feed can't run away and it never fails to save. Stitching matches around the known expected offset — that is what killed the seam artifacts a full-range search produced on repetitive content. Cancel from the pill, with `Esc`, or `⌥⇧S` again to finish now. Needs Accessibility, but is *not* gated up front: that permission is bound to the code signature and can read as denied while System Settings shows it enabled. Klip tries, and if the content provably did not move it falls back to stitching while *you* scroll. Result: an image, not an error.
@@ -248,7 +250,7 @@ Good places to start:
 - **A "copy for X" formatter.** `Markdownify.swift` already turns a clip into WhatsApp or email shapes; another target is one function plus a menu entry.
 - **A language pass.** `L10n.swift` holds eight tables. They must stay key-complete with each other and duplicate-free — a duplicate key in a dict literal traps at *launch*, not at compile time.
 
-It builds with just the Command Line Tools (`swift build`), so there is nothing to set up. Code and comments are in English. Run the tests with `./test.sh`; every push and pull request runs `./build.sh` and `./test.sh` on macOS 14 — results in the repo's [Actions tab](https://github.com/tamibot/klip/actions).
+It builds with just the Command Line Tools (`swift build`), so there is nothing to set up. Code and comments are in English. Run the tests with `./test.sh` — 70 of them, in 12 suites, all pure logic. Every push to `main` and every pull request against it runs `./build.sh` and `./test.sh` on macOS 14 — results in the repo's [Actions tab](https://github.com/tamibot/klip/actions).
 
 > **Anyone touching panel or window material should read `DESIGN.md` first** — the glass breaks in ways that fail silently.
 

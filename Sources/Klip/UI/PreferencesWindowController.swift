@@ -21,7 +21,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
 
     func show() {
         // Switch to a "regular" app while the window is open: guarantees keyboard focus
-        // (needed to type/paste the API key into the SecureField).
+        // (needed so the shortcut recorder and the text fields can take keyboard focus).
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)

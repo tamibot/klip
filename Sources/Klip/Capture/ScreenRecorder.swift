@@ -8,9 +8,10 @@ import IOKit.pwr_mgt
 /// Records a screen region to an H.264 .mov with ScreenCaptureKit — the video sibling of
 /// MeetingRecorder's audio stream (same SCStream + AVAssetWriter shape, same own-app exclusion).
 ///
-/// Video-only on purpose: the target use is a silent demo or a GIF for a chat, and audio is the
-/// single most-patched area of every screen recorder's changelog — it arrives separately, reusing
-/// MeetingRecorder's already-debugged audio path. Container is QuickTime (.mov), not .mp4:
+/// Video shipped first on purpose — audio is the single most-patched area of every screen
+/// recorder's changelog — and system audio followed once it could reuse MeetingRecorder's
+/// already-debugged path: `capturesAudio` below, muxed as an AAC track, with Klip's own interface
+/// cues excluded so they never end up in the recording. Container is QuickTime (.mov), not .mp4:
 /// AVAssetWriter's movieFragmentInterval only fragments QuickTime files, and periodic fragments are
 /// what make a crash mid-recording leave a playable file instead of a corrupt one.
 @MainActor

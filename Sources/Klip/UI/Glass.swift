@@ -161,7 +161,7 @@ private final class GlassSheenView: NSView {
         applyRecipe()
     }
 
-    /// The measured CoreUI recipe (see references/apple-glass/DESIGN-BRIEF.md §3.2).
+    /// The measured CoreUI recipe (see DESIGN.md §3.2).
     @objc func applyRecipe() {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
@@ -192,7 +192,7 @@ private final class GlassSheenView: NSView {
     }
 }
 
-/// A floating glass surface implementing Apple's real material recipe (references/apple-glass):
+/// A floating glass surface implementing Apple's real material recipe (see DESIGN.md):
 ///
 ///   backdrop  — NSVisualEffectView (.popover, .behindWindow, .active) rounded via maskImage
 ///   sheen     — GlassSheenView: the specular highlight + the accessibility opaque fallback

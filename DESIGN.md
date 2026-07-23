@@ -46,7 +46,7 @@ Three layers compose it (Apple's naming, also [CSS-Tricks](https://css-tricks.co
 
 macOS 27 "Golden Gate" (WWDC26) **reduced** transparency: a user-facing translucency slider, higher baseline opacity, and — the tell — Apple **added "darkened edges and brighter specular highlights"** to restore depth and separation ([MacRumors](https://www.macrumors.com/2026/06/09/macos-golden-gate-liquid-glass/)).
 
-**The lesson, and this is the whole brief in one line: glass is defined by its rim, not by how much shows through.** Spend your effort on the edge. Be conservative with body transparency. Klip's recent commits ("most-translucent light material", "light glossy Dock-style glass") are pushing the exact direction Apple itself reversed.
+**The lesson, and this is the whole brief in one line: glass is defined by its rim, not by how much shows through.** Spend your effort on the edge. Be conservative with body transparency. Klip once went the other way — commits `611778b` "light glossy Dock-style glass" and `8d58bd2` "most-translucent light material" chased exactly the direction Apple itself reversed, and `29ac712` started walking it back. Whenever the fix for a surface that "doesn't look glassy enough" is *more transparency*, it is the wrong fix.
 
 ---
 
@@ -186,25 +186,28 @@ Because the light direction is fixed and the normal varies around the bezel, **b
 
 - `.glassEffect()` / `NSGlassEffectView` / `NSGlassEffectContainerView` / `NSBackgroundExtensionView` — **macOS 26+ only.**
 - Real lensing from AppKit. There is no public refraction primitive.
-- Automatic Reduce Transparency / Increase Contrast / Reduce Motion adaptation. "These are available automatically **whenever you use the new material**" — a hand-rolled surface inherits **none** of it.
+- Automatic Reduce Transparency / Increase Contrast / Reduce Motion adaptation. "These are available automatically **whenever you use the new material**" — a hand-rolled surface inherits **none** of it. All three are wired by hand: transparency and contrast in `GlassSheenView.applyRecipe`, motion in the `Motion` table at the top of the same file, which is the one gate every animation in the app takes its duration from.
 - `CABackdropLayer`, `CAFilter`, `setValue(true, forKey: "clear")`, `CGSSetWindowTags`, `"shouldAutoFlattenLayerTree"`, `"canHostLayersInWindowServer"` — **all private API.** Klip has a Mac App Store goal. **Treat Groth's implementation as reference, not shippable code.**
 
 ### Can have — the honest approximation
 
-1. **One** `NSVisualEffectView` for the panel: `material = .popover` (or `.menu` / `.hudWindow` for a genuinely detached utility overlay), `blendingMode = .behindWindow`, `state = .active`. Semantic materials only. Never `.light` — deprecated since 10.14, and R5 forbids the reasoning behind it anyway. `.behindWindow` is the *only* mode that samples the desktop; `.withinWindow` will look dead on a floating panel. (Commit `29ac712` "real behind-window vibrancy" was right.)
-2. **The tint/ceiling layer** — the thing that actually makes it read as glass. A plain `CALayer` over the effect view with `compositingFilter = "darkenBlendMode"` and a solid near-white fill at the recipe alpha. Public CA behavior. Mirror to `"lightenBlendMode"` for dark.
-3. **The two-stroke concentric rim** — plain `CALayer` borders, `outerRadius = innerRadius + borderWidth`, `cornerCurve = .continuous`, light/dark asymmetry per §3.4. Fully public, and it is the highest-leverage thing on this list.
-4. **A shadow** approximating the adaptive one. You can't sample the backdrop cheaply, so pick a slightly deeper static shadow — R8 says a panel-sized surface earns it — and accept the loss.
-5. **Vibrant labels** — `labelColor`, `secondaryLabelColor`. Target **7:1** for the small row text, **4.5:1** absolute floor ([HIG Dark Mode](https://developer.apple.com/design/human-interface-guidelines/dark-mode)).
-6. **Concentric row radii**: `rowRadius = panelRadius − padding`. The `maskImage corners` work in `29ac712` should use this, not an arbitrary number.
-7. **A soft scroll-edge gradient** at the list boundary instead of hard dividers.
-8. **Manual accessibility** — wire `NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency` and `...ShouldIncreaseContrast` yourself, and copy Apple's escape hatch exactly: **go fully opaque** (light 0.8784 / 0.8235; dark 0.12 / 0.09804 at α1.0), swap backdrop+tint for a solid fill, force the rim to 1pt α1.0. This is not optional polish; it's the accessibility floor.
-9. **Strip everything else.** Custom backgrounds in the SwiftUI root, nested effect views, per-row materials — all out. Commit `29ac712`'s "clear SwiftUI root" was the right instinct; finish the job.
+All ten are implemented in `Sources/Klip/UI/Glass.swift` — `GlassPanelView` for the floating surfaces (history panel, voice-recording popup, meeting HUD, toast, recording pill, scrolling-capture pill) and `Glass.install` for the titled windows (Welcome, Guide, Upload, Preferences). Read it before you change any of this; the numbers below are the ones that are actually in the file.
+
+1. **One** `NSVisualEffectView` for the panel: `material = .popover` (or `.menu` / `.hudWindow` for a genuinely detached utility overlay), `blendingMode = .behindWindow`, `state = .active`. Semantic materials only. Never `.light` — deprecated since 10.14, and R5 forbids the reasoning behind it anyway. `.behindWindow` is the *only* mode that samples the desktop; `.withinWindow` will look dead on a floating panel. (Commit `29ac712` "real behind-window vibrancy" was right.) **And never round it with `wantsLayer` + `layer.cornerRadius` + `masksToBounds`**: `.behindWindow` works by the window server compositing the material through the view's `maskImage`, so forcing the view into its own clipped backing layer composites it off-screen and collapses the glass to flat opaque gray — silently, whatever the material. Round it with a resizable rounded-rect `maskImage` (`GlassMask.rounded`). Titled windows skip the mask entirely: the window frame already clips them.
+2. **No extra tint/ceiling layer — and this reverses what this document used to prescribe.** The obvious move is a `CALayer` over the effect view with `compositingFilter = "darkenBlendMode"` at the §3.2 alpha. Measured against a real Finder menu over the same backdrop, the bare `.popover` + `maskImage` already converges on the same value (Δ≈−9 vs +15, both toward ~188): the system material applies Apple's whole recipe — floor, darken ceiling, saturation — internally. Stacking the CoreUI tint on top double-applies it and lands ~20 too dark. Hand-roll the tint only over a backdrop you drew yourself, never over a system material.
+3. **A specular sheen instead** — the thing that makes the surface read as glass over plain white content, where blur alone shows nothing. An axial `CAGradientLayer` from the top-left, fading out about two-thirds across at the §3.5 light direction (≈ −60°): white α0.28 → α0.08 → clear in light, α0.10 → α0.03 → clear in dark. Directional and edge-weighted, which is what keeps it from being the flat white veil §3.3 spends three reasons rejecting.
+4. **The two-stroke concentric rim** — plain `CALayer` borders, `cornerCurve = .continuous`, `innerRadius = outerRadius − strokeWidth`. Klip's outer contour is 0.5pt (black α0.10 light, α0.8 dark) and the inner specular edge is 1pt — a **gradient masked to a stroke**, not a uniform border, so perimeter brightness falls from the lit corner to the shaded one (§3.5, checklist #5): white α0.65→α0.25 light, α0.35→α0.08 dark. Note the light-mode outer is *dark*, unlike Apple's measured `panelLight` in §3.2: a white contour is invisible against the white content Klip usually floats over. The rim view sits above the hosted content and must not intercept clicks — `hitTest` returns nil, or you get a dead Cancel button.
+5. **A shadow** approximating the adaptive one. You can't sample the backdrop cheaply: Klip takes the stock window shadow (`hasShadow = true`) and accepts the loss. R8 says a panel-sized surface earns a deeper one if anybody wants to hand-roll it.
+6. **Vibrant labels** — `labelColor`, `secondaryLabelColor`. Target **7:1** for the small row text, **4.5:1** absolute floor ([HIG Dark Mode](https://developer.apple.com/design/human-interface-guidelines/dark-mode)). No `systemGray*` survives in the tree; keep it that way.
+7. **Concentric row radii**: `rowRadius = panelRadius − padding`. The panel is 12 with 6 of padding, so rows are 6 — derived, not eyeballed. Change one and the other has to move.
+8. **A soft scroll-edge gradient** at the list boundary instead of hard dividers.
+9. **Manual accessibility** — `NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency` and `...ShouldIncreaseContrast` are wired by hand, off `accessibilityDisplayOptionsDidChangeNotification` (which `NSWorkspace` posts on **its own** notification center, not `.default`). Apple's escape hatch, copied exactly: **go fully opaque** (light 0.8784, dark 0.12 at α1.0), hide the sheen *and* the effect view so no live material bleeds at the mask edge, force the rim to a single 1pt α1.0 stroke. This is not optional polish; it's the accessibility floor — and a hand-rolled surface inherits none of it for free.
+10. **Nothing else.** Custom backgrounds in the SwiftUI root, nested effect views, per-row materials — all out; rows are fills + vibrancy (R3). The one remaining `NSVisualEffectView` outside `Glass.swift` is the Snap editor's toolbar (`.titlebar` / `.withinWindow`, `SnapEditorController`), which is a bar in its own titled window, not a second material inside a panel. A new effect view anywhere else is almost certainly the bug.
 
 ### The fork
 
-- **(a) Accept blur, invest in the bezel.** NSVisualEffectView + darken tint + two-stroke rim + shadow. ~90% of the perceived quality for ~10% of the work. **Take this one.**
-- **(b) Metal/CIFilter displacement shader** on a captured backdrop using the convex-squircle profile. Real lensing, large lift, ongoing backdrop-capture cost, forfeits every automatic adaptation, and you still hand-roll all the a11y. Only worth it after (a) is shipped and measured.
+- **(a) Accept blur, invest in the bezel.** NSVisualEffectView + sheen + two-stroke rim + shadow. ~90% of the perceived quality for ~10% of the work. **This is what shipped** — minus the darken tint this document used to prescribe, which was measured out along the way (§4, "Can have" #2).
+- **(b) Metal/CIFilter displacement shader** on a captured backdrop using the convex-squircle profile. Real lensing, large lift, ongoing backdrop-capture cost, forfeits every automatic adaptation, and you still hand-roll all the a11y. (a) is shipped and measured; (b) has not earned its cost yet.
 
 Forward path: gate on `if #available(macOS 26, *) { .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16)) }` and let the OS do it properly, with (a) as the fallback.
 
@@ -218,10 +221,10 @@ Hold a build against this list. Every ❌ is a tell.
 |---|---|---|---|
 | 1 | **Does the backdrop's dark structure read through?** | Shapes and edges survive behind the panel | Whited-out fog; structure erased |
 | 2 | **Over a bright white wallpaper, does it blow out?** | Ceiling clamps, panel stays a distinct surface | Blooms toward white, text contrast dies |
-| 3 | **Is there a min/darken blend anywhere?** | Yes — that's the ceiling | Only `rgba(255,255,255,0.15)` = floor with no ceiling |
+| 3 | **Is there a ceiling, not just a floor?** | Yes — from the system material's own recipe (§4.2), or a min/darken blend if you drew the backdrop yourself | Only `rgba(255,255,255,0.15)` = floor with no ceiling |
 | 4 | **Is the rim two strokes?** | 0.5pt contour + 1pt specular, concentric radii | One `1px solid white` border |
 | 5 | **Does perimeter brightness vary?** | Bright top-left → dim bottom-right (fixed light ≈ −60°) | Uniform glow all the way around |
-| 6 | **Is saturation applied before blur?** | `saturate → blur → brightness` | `blur → saturate` (CSS default; hue already averaged out) |
+| 6 | **Is saturation applied before blur?** | `saturate → blur → brightness` — Klip gets this free from the system material, so the test only bites on a hand-rolled backdrop | `blur → saturate` (CSS default; hue already averaged out) |
 | 7 | **Any glass inside the glass?** | Rows are fills + vibrancy | Glass rows on a glass panel |
 | 8 | **Grep for `systemGray`.** | `labelColor` / `secondaryLabelColor` | Hard-coded greys — Apple's literal ❌ example |
 | 9 | **Was the material chosen semantically?** | `.popover` because it's a popover | `.light` because it "looks glossiest" |
@@ -230,7 +233,7 @@ Hold a build against this list. Every ❌ is a tell.
 | 12 | **Does the panel flip light↔dark as it moves?** | No — it's a big element; it adapts without flipping | Flips (small-element behavior on a big surface) |
 | 13 | **Where did the effort go?** | The rim | The middle |
 
-**If you only fix three things:** add the darken tint layer (#3), build the two-stroke concentric rim (#4), and wire the opaque accessibility fallback (#10). Those three carry the look and the floor.
+**The three that carry the look and the floor** — all shipped, so read them as the three to check you haven't broken: the ceiling (#3, which now comes from the system material rather than a tint of ours), the two-stroke concentric rim with its varying perimeter (#4, #5), and the opaque accessibility fallback (#10).
 
 ---
 

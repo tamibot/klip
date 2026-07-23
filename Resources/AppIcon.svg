@@ -12,6 +12,6 @@
        The notch is what keeps the clip readable at 16px — without it the two blue
        shapes fuse into one blob. Its 48px inset is the gap, ≈1.5px at 32px. -->
   <rect x="292" y="284" width="440" height="516" rx="88" fill="#5B6BF0"/>
-  <rect x="364" y="176" width="296" height="196" rx="98" fill="#FCFCFD"/>
+  <rect x="364" y="176" width="296" height="196" rx="98" fill="#EFF1F7"/>
   <rect x="412" y="224" width="200" height="100" rx="50" fill="#5B6BF0"/>
 </svg>

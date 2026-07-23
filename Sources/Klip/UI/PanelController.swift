@@ -119,7 +119,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.delegate = self
 
-        // Apple's panel recipe: backdrop material + luminance-ceiling tint + concentric rim.
+        // Apple's panel recipe: backdrop material + sheen gradient + concentric rim. No tint layer —
+        // the system material already applies it; see the measurement in Glass.applyRecipe().
         let glass = GlassPanelView(frame: NSRect(x: 0, y: 0, width: 480, height: 640),
                                    radius: cornerRadius)
         let hosting = NSHostingView(rootView: root)
@@ -553,7 +554,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             p.isMovableByWindowBackground = true   // draggable from the background (borderless panel with no title bar)
             p.hidesOnDeactivate = false   // don't hide when focus returns to the user's app
             p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]   // also show over full-screen apps
-            // Same Apple panel recipe as the main panel (backdrop + ceiling tint + rim).
+            // Same Apple panel recipe as the main panel (backdrop + sheen + rim).
             let glass = GlassPanelView(frame: NSRect(x: 0, y: 0, width: 320, height: 210),
                                        radius: cornerRadius)
             let host = NSHostingView(rootView: view)
