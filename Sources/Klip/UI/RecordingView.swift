@@ -7,7 +7,6 @@ struct RecordingView: View {
     var onStop: () -> Void
     var onCancel: () -> Void
     var onClose: () -> Void
-    var onOpenPreferences: () -> Void
 
     /// Armed by the first Cancel/Esc on a long recording: the button reads "Discard?" until it auto-resets.
     @State private var confirmDiscard = false
@@ -87,20 +86,6 @@ struct RecordingView: View {
                 }
                 .padding()
             }
-
-        case .missingAPIKey:
-            VStack(spacing: 12) {
-                Image(systemName: "key.slash").font(.system(size: 34))
-                    .symbolRenderingMode(.hierarchical).foregroundStyle(.orange)
-                Text(L10n.t("rec.nokey.title")).font(.system(size: 13, weight: .semibold))
-                Text(L10n.t("rec.nokey.info"))
-                    .font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                HStack {
-                    Button(L10n.t("common.close")) { recorder.reset() }
-                    Button(L10n.t("rec.openprefs")) { onOpenPreferences(); recorder.reset() }
-                        .buttonStyle(.borderedProminent)
-                }
-            }.padding()
 
         case .micDenied:
             VStack(spacing: 12) {

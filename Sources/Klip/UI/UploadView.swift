@@ -9,7 +9,6 @@ struct UploadView: View {
     var onChoose: (String) -> Void
     var onFiles: ([URL], String) -> Void
     var onClose: () -> Void
-    var onOpenPreferences: () -> Void
     var onCopy: (String) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -21,22 +20,14 @@ struct UploadView: View {
     @State private var languageOverride: String?
     private var effectiveLanguage: String { languageOverride ?? settings.transcriptionLanguage }
 
-    // Formats the transcribers actually accept. (Dropped aac/aiff: OpenAI rejects them and they'd fail
-    // silently; .m4b is treated as .m4a on upload.)
+    // Audio extensions accepted for upload; .m4b is treated as .m4a.
+    // ponytail: kept exactly as it was — widening it (aac/aiff…) is a separate, testable change.
     private let exts = ["m4a", "m4b", "mp3", "wav", "mp4", "flac", "ogg", "oga", "opus",
                         "webm", "mpga", "mpeg"]
 
     var body: some View {
         VStack(spacing: 16) {
             switch recorder.state {
-            case .missingAPIKey:
-                Image(systemName: "key.slash").font(.system(size: 34))
-                    .symbolRenderingMode(.hierarchical).foregroundStyle(.orange)
-                Text(L10n.t("rec.nokey.title")).font(.system(size: 13, weight: .semibold))
-                HStack {
-                    Button(L10n.t("common.close")) { onClose() }
-                    Button(L10n.t("rec.openprefs")) { onOpenPreferences(); onClose() }.buttonStyle(.borderedProminent)
-                }
             case .error(let m):
                 Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 34))
                     .symbolRenderingMode(.hierarchical).foregroundStyle(.orange)

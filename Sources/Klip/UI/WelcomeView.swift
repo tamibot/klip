@@ -3,8 +3,8 @@ import AppKit
 import AVFAudio   // AVAudioApplication (microphone permission)
 
 /// First-run onboarding. Explains what Klip does and — importantly for privacy / App Store review —
-/// discloses that it keeps a local clipboard history and never sends anything off the Mac unless the
-/// user adds an AI key for voice transcription. Shown once (Settings.hasSeenWelcome).
+/// discloses that it keeps a local clipboard history and never sends anything off the Mac
+/// (voice notes are transcribed on-device). Shown once (Settings.hasSeenWelcome).
 struct WelcomeView: View {
     @ObservedObject var settings = Settings.shared   // re-localize live + show the current shortcuts
     var onStart: () -> Void

@@ -16,7 +16,7 @@
     <key>NSHighResolutionCapable</key><true/>
     <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
     <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Martin Velasco O.</string>
-    <key>NSMicrophoneUsageDescription</key><string>Klip records voice notes and transcribes them to text using the AI provider you choose (OpenAI or Google Gemini).</string>
+    <key>NSMicrophoneUsageDescription</key><string>Klip records voice notes and transcribes them to text on your Mac. The audio never leaves your device.</string>
     <key>NSScreenCaptureUsageDescription</key><string>Klip captures a screen region you select, so you can annotate it and save it to your history.</string>
 </dict>
 </plist>

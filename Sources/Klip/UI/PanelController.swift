@@ -23,10 +23,9 @@ final class PanelController: NSObject, NSWindowDelegate {
     var isVoiceRecording: Bool { recorder.isRecording || recorder.finishing }
 
     /// Forwards a finished meeting recording into the recorder's transcription path (the recorder is
-    /// private to this controller). Local provider: per-track Me/Them transcript; cloud: mixed file.
-    func transcribeMeetingNote(itemID: UUID, mixedFileName: String, micURL: URL?, systemURL: URL?) {
-        recorder.transcribeMeetingTracks(itemID: itemID, micURL: micURL, systemURL: systemURL,
-                                         mixedFileName: mixedFileName)
+    /// private to this controller): per-track Me/Them transcript.
+    func transcribeMeetingNote(itemID: UUID, micURL: URL?, systemURL: URL?) {
+        recorder.transcribeMeetingTracks(itemID: itemID, micURL: micURL, systemURL: systemURL)
     }
     /// True while one of our auxiliary windows is on screen, so the panel's auto-hide on
     /// outside click / resign-key doesn't fire while the user interacts with one of them (Upload/Guide/Welcome/Recording).
@@ -36,7 +35,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     private weak var statusItem: NSStatusItem?
     private weak var previousApp: NSRunningApplication?
 
-    /// Injected by AppDelegate to open Preferences from the panel (missing-API-key state).
+    /// Injected by AppDelegate to open Preferences from the panel (gear button).
     var onOpenPreferences: (() -> Void)?
     /// Injected by AppDelegate to trigger the new Klip Snap from the panel's camera button.
     var onCaptureAnnotate: (() -> Void)?
@@ -545,16 +544,7 @@ final class PanelController: NSObject, NSWindowDelegate {
                 recorder: recorder,
                 onStop: { [weak self] in MainActor.assumeIsolated { self?.recorder.stop() } },
                 onCancel: { [weak self] in MainActor.assumeIsolated { self?.recorder.cancel() } },
-                onClose: { [weak self] in self?.closeRecordingPopup() },
-                onOpenPreferences: { [weak self] in
-                    guard let self else { return }
-                    // The popup closes right after this (recorder.reset → onClose) and would hand focus
-                    // back to the previous app, leaving Preferences BEHIND it. Drop the restore target
-                    // and activate ourselves so Preferences lands in front.
-                    self.previousApp = nil
-                    self.onOpenPreferences?()
-                    NSApp.activate(ignoringOtherApps: true)
-                }
+                onClose: { [weak self] in self?.closeRecordingPopup() }
             )
             let p = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: 320, height: 210),
                                  styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -635,7 +625,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// Opens the "Upload audio to transcribe" window. Shared entry point for the history panel
     /// button, the menu bar item, and the global shortcut.
     func uploadAudio() {
-        // recorder.state is shared; clear a previous .error/.missingAPIKey to show the dropzone — but NOT
+        // recorder.state is shared; clear a previous .error to show the dropzone — but NOT
         // while the recording popup is on screen (that would wipe its own error/state).
         if recorder.state != .recording, recordingPanel?.isVisible != true { recorder.reset() }
         // Fresh session (nothing in flight): start with an empty results list so no stale results linger.
@@ -650,7 +640,6 @@ final class PanelController: NSObject, NSWindowDelegate {
                 onChoose: { [weak self] lang in self?.chooseAudioFiles(language: lang) },
                 onFiles: { [weak self] urls, lang in MainActor.assumeIsolated { self?.submitAudioFiles(urls, language: lang) } },
                 onClose: { [weak self] in self?.uploadWindow?.orderOut(nil) },
-                onOpenPreferences: { [weak self] in self?.onOpenPreferences?() },
                 onCopy: { [weak self] in self?.manager.setClipboardText($0) }
             )
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 440),
@@ -696,9 +685,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// Retries transcribing a failed voice note (uses its stored audio).
     private func retryTranscription(_ item: ClipboardItem) {
         guard let af = item.audioFileName, Storage.shared.audioExists(fileName: af) else { return }
-        // Prevents a second retry (double click) while one is in flight → doesn't duplicate the API call.
+        // Prevents a second retry (double click) while one is in flight → doesn't duplicate the work.
         guard manager.items.first(where: { $0.id == item.id })?.transcribing != true else { return }
-        guard AIProvider.hasKey else { onOpenPreferences?(); return }   // no key: offer to set it up
         MainActor.assumeIsolated { recorder.retry(itemID: item.id, audioFileName: af) }
     }
 

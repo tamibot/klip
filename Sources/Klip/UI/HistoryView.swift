@@ -733,9 +733,6 @@ struct ItemRow: View {
         return NSItemProvider(object: (item.text ?? "") as NSString)
     }
 
-    /// Uploads this clip to the user's own bucket (Preferences → Sharing) and puts the public
-    /// link on the clipboard. Strictly per-item and per-click — nothing is ever auto-uploaded.
-    /// Credentials never reach here: the menu only offers the action on image/text branches.
     /// GIF conversion for a recording row — same streamed transcode the finish-toast offers.
     private func convertToGIF(_ url: URL) {
         Task { @MainActor in
@@ -744,33 +741,6 @@ struct ItemRow: View {
                 SoundFX.play(.save); ToastHUD.show(L10n.t("toast.gifSaved"), detail: gif.lastPathComponent)
             } catch {
                 SoundFX.error(); ToastHUD.show(L10n.t("toast.gifFailed"), style: .failure)
-            }
-        }
-    }
-
-    private func shareLink() {
-        let payload: (data: Data, ext: String, type: String)?
-        if item.kind == .image, let f = item.imageFileName,
-           let d = try? Data(contentsOf: Storage.shared.imageURL(for: f)) {
-            payload = (d, "png", "image/png")
-        } else if item.kind == .video, let f = item.videoFileName,
-                  let d = try? Data(contentsOf: Storage.shared.videoURL(for: f)) {
-            payload = (d, "mov", "video/quicktime")
-        } else if let t = item.text, !t.isEmpty {
-            payload = (Data(t.utf8), "txt", "text/plain; charset=utf-8")
-        } else { payload = nil }
-        guard let payload else { return }
-        Task { @MainActor in
-            do {
-                let url = try await S3Uploader.upload(data: payload.data, ext: payload.ext,
-                                                      contentType: payload.type)
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                SoundFX.play(.success)
-                ToastHUD.show(L10n.t("toast.linkCopied"), detail: url.host ?? "")
-            } catch {
-                SoundFX.error()
-                ToastHUD.show(L10n.t("toast.linkFailed"), detail: error.localizedDescription, style: .failure)
             }
         }
     }
@@ -1067,9 +1037,6 @@ struct ItemRow: View {
             Button { onAnnotate(item) } label: { Label(L10n.t("row.annotate"), systemImage: "pencil.tip.crop.circle") }
             Button { onSaveImage(item) } label: { Label(L10n.t("row.save"), systemImage: "square.and.arrow.down") }
             Button { onOCR() } label: { Label(L10n.t("row.ocr"), systemImage: "text.viewfinder") }
-            if S3Uploader.isConfigured, item.imageFileName != nil {
-                Button { shareLink() } label: { Label(L10n.t("row.copylink"), systemImage: "link") }
-            }
         } else if item.kind == .video {
             if let fn = item.videoFileName {
                 let url = Storage.shared.videoURL(for: fn)
@@ -1081,9 +1048,6 @@ struct ItemRow: View {
                     } else { SoundFX.error() }
                 } label: { Label(L10n.t("row.save"), systemImage: "square.and.arrow.down") }
                 Button { convertToGIF(url) } label: { Label(L10n.t("toast.recSaved.action"), systemImage: "photo.stack") }
-                if S3Uploader.isConfigured {
-                    Button { shareLink() } label: { Label(L10n.t("row.copylink"), systemImage: "link") }
-                }
             }
         } else if isCredential {
             Button { manager.toggleCredential(item) } label: { Label(L10n.t("row.unmarkcred"), systemImage: "key.slash") }
@@ -1097,9 +1061,6 @@ struct ItemRow: View {
             }
             Button { onCopyMarkdown(item) } label: { Label(L10n.t("row.markdown"), systemImage: "doc.richtext") }
             Button { onSaveAsFile(item) } label: { Label(L10n.t("row.savefile"), systemImage: "square.and.arrow.down") }
-            if S3Uploader.isConfigured, hasText {
-                Button { shareLink() } label: { Label(L10n.t("row.copylink"), systemImage: "link") }
-            }
             Button { manager.toggleCredential(item) } label: { Label(L10n.t("row.markcred"), systemImage: "key") }
         }
         Divider()

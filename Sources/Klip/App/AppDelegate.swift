@@ -132,9 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             return id
         }
-        meetingRecorder.onTranscribe = { [weak self] id, fileName, micURL, systemURL in
-            self?.panelController.transcribeMeetingNote(itemID: id, mixedFileName: fileName,
-                                                        micURL: micURL, systemURL: systemURL)
+        meetingRecorder.onTranscribe = { [weak self] id, micURL, systemURL in
+            self?.panelController.transcribeMeetingNote(itemID: id, micURL: micURL, systemURL: systemURL)
         }
         // Red status-item icon while a meeting records + menu title toggle + the live HUD.
         meetingRecorder.$isRecording.dropFirst().receive(on: RunLoop.main)
@@ -200,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             .store(in: &cancellables)
         MeetingRecorder.sweepOrphanedTempFiles()   // clear unfinalized tracks from a crashed run
+        Self.purgeRemovedFeatureSecrets()
         manager.start()
         SoundFX.activate()   // copy tick for every pasteboard write made through the app
         ToastHUD.activateAnnouncements()   // …and its VoiceOver equivalent
@@ -210,19 +210,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         setupHotKeys()
         maybeEnableLoginOnce()
-        // On-device is the default: warm the model into memory now so the first voice note doesn't pay
-        // the cold pipeline load. This does NOT download — prewarm() bails unless the weights are already
-        // on disk, and a first-run download stays lazy on the first voice note (see LocalTranscriber).
-        if Settings.shared.aiProvider == "local" {
-            let m = Settings.shared.localModel
-            Task.detached(priority: .utility) { await LocalTranscriber.shared.prewarm(model: m) }
-        }
+        // Warm the model into memory now so the first voice note doesn't pay the cold pipeline load.
+        // This does NOT download — prewarm() bails unless the weights are already on disk, and a
+        // first-run download stays lazy on the first voice note (see LocalTranscriber).
+        let localModel = Settings.shared.localModel
+        Task.detached(priority: .utility) { await LocalTranscriber.shared.prewarm(model: localModel) }
         // Hop to main explicitly so buildMenu() (@MainActor) is safe no matter where uiLanguage is mutated.
         Settings.shared.$uiLanguage.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.buildMenu() }.store(in: &cancellables)
         // First-run onboarding (clipboard-monitoring + privacy disclosure). Deferred so it never stalls launch.
         if !Settings.shared.hasSeenWelcome {
             DispatchQueue.main.async { [weak self] in self?.panelController.showWelcome() }
+        }
+    }
+
+    /// Cloud transcription (OpenAI/Gemini) and share links (S3) are gone, so the key files and the
+    /// bucket settings older versions wrote are orphaned — and no UI is left to view or delete them.
+    /// They are the user's secrets and endpoints, so remove them instead of leaving them on disk.
+    /// Idempotent and silent: "already gone" is the normal case.
+    private static func purgeRemovedFeatureSecrets() {
+        for name in ["openai.key", "gemini.key", "s3.key"] {
+            try? FileManager.default.removeItem(at: Storage.shared.baseURL.appendingPathComponent(name))
+        }
+        for key in ["s3Endpoint", "s3Region", "s3Bucket", "s3AccessKey", "s3PublicBase",
+                    "aiProvider", "transcriptionModel", "geminiModel"] {
+            UserDefaults.standard.removeObject(forKey: key)
         }
     }
 

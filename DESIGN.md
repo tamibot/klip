@@ -1,7 +1,7 @@
 # Klip — Design Notes: the glass
 
 Why Klip's floating surfaces look the way they do, and how to keep them right. Target floor macOS 14
-(no Liquid Glass API). The operational recipe lives in `Sources/Klip/Glass.swift`; this is the *why*
+(no Liquid Glass API). The operational recipe lives in `Sources/Klip/UI/Glass.swift`; this is the *why*
 behind it. Read this before touching any panel, popover, or window material.
 
 ---

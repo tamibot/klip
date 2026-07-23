@@ -26,9 +26,9 @@ final class MeetingRecorder: NSObject, ObservableObject, SCStreamDelegate, AVAud
     /// (wired to manager.beginVoiceNote + rename). (audioFileName, duration) → item id.
     var onMeetingReady: ((String, Double?) -> UUID?)?
     /// Kicks off the transcription of the ready note through the existing Recorder path.
-    /// (itemID, mixedAudioFileName, micTempURL, systemTempURL) — the temp track URLs let the local
-    /// provider transcribe each side separately (Me/Them labels); the callee deletes them when done.
-    var onTranscribe: ((UUID, String, URL?, URL?) -> Void)?
+    /// (itemID, micTempURL, systemTempURL) — the temp track URLs let each side be transcribed
+    /// separately (Me/Them labels); the callee deletes them when done.
+    var onTranscribe: ((UUID, URL?, URL?) -> Void)?
     /// The voice-note recorder owns the mic → refuse to start a meeting while it records.
     var isMicBusy: (() -> Bool)?
 
@@ -74,12 +74,6 @@ final class MeetingRecorder: NSObject, ObservableObject, SCStreamDelegate, AVAud
         guard !isRecording, !startRequested, !stopping else { return }
         if isMicBusy?() == true {
             Self.alert(L10n.t("meeting.busy.title"), L10n.t("meeting.busy.info"))
-            return
-        }
-        // Cloud provider without a key: fail BEFORE the meeting, not after an hour of recording
-        // (local returns true, so the on-device default never hits this).
-        guard AIProvider.hasKey else {
-            Self.alert(L10n.t("rec.nokey.title"), L10n.t("rec.nokey.info"))
             return
         }
         // Same Screen Recording flow as SnapController (shared askedKey): the FIRST time only the
@@ -132,12 +126,12 @@ final class MeetingRecorder: NSObject, ObservableObject, SCStreamDelegate, AVAud
             defer { try? FileManager.default.removeItem(at: mixed) }
             guard let stored = storage.importAudio(from: mixed) else { throw MeetingError.saveFailed }
             if let id = onMeetingReady?(stored, duration) {
-                // Hand the temp TRACK files to the transcription (the local provider transcribes them
-                // separately for Me/Them labels and deletes them when done). Anything not handed off
-                // (a dead system file, or no note) is removed by cleanupTempFiles in the defer above.
+                // Hand the temp TRACK files to the transcription (they're transcribed separately for
+                // Me/Them labels and deleted when done). Anything not handed off (a dead system file,
+                // or no note) is removed by cleanupTempFiles in the defer above.
                 let mic = micURL; let sys = systemOK ? systemURL : nil
                 micURL = nil; if systemOK { systemURL = nil }
-                onTranscribe?(id, stored, mic, sys)
+                onTranscribe?(id, mic, sys)
             }
         } catch {
             NSLog("Klip: meeting recording failed — %@", String(describing: error))

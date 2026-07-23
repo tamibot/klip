@@ -152,12 +152,9 @@ final class Settings: ObservableObject {
         static let cleanCap   = "cleanCapture"
         static let capDest    = "captureDestination"
         static let detectRem  = "detectRemoteSource"
-        static let transModel = "transcriptionModel"
-        static let geminiModel = "geminiModel"
         static let transLang  = "transcriptionLanguage"
         static let transVocab = "transcriptionVocabulary"
         static let localModel = "localModel"
-        static let aiProv     = "aiProvider"
         static let keyCode2   = "voiceHotKeyCode"
         static let mods2      = "voiceHotKeyModifiers"
         static let keyCode3   = "captureHotKeyCode"
@@ -173,11 +170,6 @@ final class Settings: ObservableObject {
         static let keyCode8   = "scrollCaptureHotKeyCode"
         static let mods8      = "scrollCaptureHotKeyModifiers"
         static let uiLang     = "uiLanguage"
-        static let s3Endpoint = "s3Endpoint"
-        static let s3Region   = "s3Region"
-        static let s3Bucket   = "s3Bucket"
-        static let s3AccessKey = "s3AccessKey"
-        static let s3PublicBase = "s3PublicBase"
     }
 
     @Published var maxItems: Int          { didSet { d.set(maxItems, forKey: K.maxItems) } }
@@ -199,16 +191,11 @@ final class Settings: ObservableObject {
     /// history + clipboard, no editor).
     @Published var captureDestination: String { didSet { d.set(captureDestination, forKey: K.capDest) } }
     @Published var detectRemoteSource: Bool { didSet { d.set(detectRemoteSource, forKey: K.detectRem) } }
-    @Published var transcriptionModel: String { didSet { d.set(transcriptionModel, forKey: K.transModel) } }
-    /// Google Gemini model for transcription (configurable; previously hard-coded to "gemini-flash-latest").
-    @Published var geminiModel: String { didSet { d.set(geminiModel, forKey: K.geminiModel) } }
     @Published var transcriptionLanguage: String { didSet { d.set(transcriptionLanguage, forKey: K.transLang) } }
     /// Context words / vocabulary (names, brands, jargon) sent to the transcriber so it spells them right.
     @Published var transcriptionVocabulary: String { didSet { d.set(transcriptionVocabulary, forKey: K.transVocab) } }
-    /// On-device (WhisperKit) model name when aiProvider == "local".
+    /// On-device (WhisperKit) transcription model name.
     @Published var localModel: String { didSet { d.set(localModel, forKey: K.localModel) } }
-    /// AI provider for transcription: "local" (on-device), "openai" or "gemini".
-    @Published var aiProvider: String { didSet { d.set(aiProvider, forKey: K.aiProv) } }
     @Published var voiceCombo: KeyCombo   { didSet {
         d.set(Int(voiceCombo.keyCode), forKey: K.keyCode2)
         d.set(Int(voiceCombo.carbonModifiers), forKey: K.mods2)
@@ -242,12 +229,6 @@ final class Settings: ObservableObject {
         d.set(Int(scrollCombo.keyCode), forKey: K.keyCode8)
         d.set(Int(scrollCombo.carbonModifiers), forKey: K.mods8)
     } }
-    // Share-link (S3-compatible) settings. The SECRET key lives in SecretStore, never in defaults.
-    @Published var s3Endpoint: String   { didSet { d.set(s3Endpoint, forKey: K.s3Endpoint) } }
-    @Published var s3Region: String     { didSet { d.set(s3Region, forKey: K.s3Region) } }
-    @Published var s3Bucket: String     { didSet { d.set(s3Bucket, forKey: K.s3Bucket) } }
-    @Published var s3AccessKey: String  { didSet { d.set(s3AccessKey, forKey: K.s3AccessKey) } }
-    @Published var s3PublicBase: String { didSet { d.set(s3PublicBase, forKey: K.s3PublicBase) } }
     @Published var uiLanguage: String     { didSet {
         d.set(uiLanguage, forKey: K.uiLang)
         // Keep the audio language following the platform language, but ONLY while the user hasn't
@@ -277,12 +258,9 @@ final class Settings: ObservableObject {
             K.cleanCap: true,
             K.capDest: "editor",
             K.detectRem: true,
-            K.transModel: "gpt-4o-mini-transcribe",
-            K.geminiModel: "gemini-flash-latest",
             K.transLang: "",   // auto-detect: forcing a language mistranscribes any other (UI defaults to en, so "es" was wrong on fresh installs; local installs seed their own via install.sh)
             K.transVocab: "",
             K.localModel: "small",   // best accuracy/speed balance on Apple Silicon (downloads ~480 MB once)
-            K.aiProv: "local",   // on-device (WhisperKit) by default; cloud is opt-in (needs an API key)
             K.keyCode2: Int(kVK_ANSI_R),
             K.mods2: Int(optionKey | shiftKey),
             K.keyCode3: Int(kVK_ANSI_D),
@@ -312,12 +290,9 @@ final class Settings: ObservableObject {
         cleanCapture = d.object(forKey: K.cleanCap) as? Bool ?? true
         captureDestination = d.string(forKey: K.capDest) ?? "editor"
         detectRemoteSource = d.object(forKey: K.detectRem) as? Bool ?? true
-        transcriptionModel = d.string(forKey: K.transModel) ?? "gpt-4o-mini-transcribe"
-        geminiModel = d.string(forKey: K.geminiModel) ?? "gemini-flash-latest"
         transcriptionLanguage = d.string(forKey: K.transLang) ?? "es"
         transcriptionVocabulary = d.string(forKey: K.transVocab) ?? ""
         localModel = d.string(forKey: K.localModel) ?? "small"
-        aiProvider = d.string(forKey: K.aiProv) ?? "local"
         voiceCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode2)),
                               carbonModifiers: UInt32(d.integer(forKey: K.mods2)))
         captureCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode3)),
@@ -332,11 +307,6 @@ final class Settings: ObservableObject {
                                   carbonModifiers: UInt32(d.integer(forKey: K.mods7)))
         scrollCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode8)),
                                carbonModifiers: UInt32(d.integer(forKey: K.mods8)))
-        s3Endpoint = d.string(forKey: K.s3Endpoint) ?? ""
-        s3Region = d.string(forKey: K.s3Region) ?? "auto"
-        s3Bucket = d.string(forKey: K.s3Bucket) ?? ""
-        s3AccessKey = d.string(forKey: K.s3AccessKey) ?? ""
-        s3PublicBase = d.string(forKey: K.s3PublicBase) ?? ""
         uiLanguage = d.string(forKey: K.uiLang) ?? "en"
 
         // One-time migration: the capture default changed from ⌘⇧2 to ⌘⇧U (⌘⇧2 was hijacked by apps like Loom).
@@ -380,15 +350,6 @@ final class Settings: ObservableObject {
             if uploadCombo == KeyCombo.prevShiftUpload { uploadCombo = KeyCombo.defaultUploadCombo }     // ⌥⇧G → ⌥⇧O
             if textCaptureCombo == KeyCombo.prevShiftText { textCaptureCombo = KeyCombo.defaultTextCaptureCombo } // ⌥⇧E → ⌥⇧F
             d.set(true, forKey: migHotkeysV5)
-        }
-
-        // One-time migration to on-device transcription (the new default). Existing cloud users predate
-        // the "local" option; move them to local once so transcription works offline with no API key.
-        // Reversible: they can re-select OpenAI/Gemini in Preferences (and won't be migrated again).
-        let migLocalKey = "migratedToLocalProvider"
-        if !d.bool(forKey: migLocalKey) {
-            aiProvider = "local"
-            d.set(true, forKey: migLocalKey)
         }
     }
 

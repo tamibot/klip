@@ -1,9 +1,9 @@
 import Foundation
 import WhisperKit
 
-/// On-device transcription with WhisperKit (Whisper on Core ML). No audio leaves the Mac and no API key
-/// is needed. The Core ML model is downloaded once on first use and cached; the pipeline is kept in memory
-/// and reused while the chosen model doesn't change.
+/// On-device transcription with WhisperKit (Whisper on Core ML) — the only transcription engine, so no
+/// audio ever leaves the Mac. The Core ML model is downloaded once on first use and cached; the pipeline
+/// is kept in memory and reused while the chosen model doesn't change.
 actor LocalTranscriber {
     static let shared = LocalTranscriber()
 
@@ -101,7 +101,7 @@ actor LocalTranscriber {
         } else {
             opts.detectLanguage = true        // "auto-detect"
         }
-        // Bias toward the user's context words/names (same idea as the cloud `prompt`): encode them as
+        // Bias toward the user's context words/names: encode them as
         // Whisper prompt tokens. WhisperKit also strips special tokens and caps length internally.
         let vocab = vocabulary.trimmingCharacters(in: .whitespacesAndNewlines)
         if !vocab.isEmpty, let tok = wk.tokenizer {

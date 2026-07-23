@@ -1,54 +1,13 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="tile" x1="512" y1="120" x2="512" y2="904" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#7A8AF7"/>
-      <stop offset="0.55" stop-color="#5B6BF0"/>
-      <stop offset="1" stop-color="#4048C9"/>
-    </linearGradient>
-    <linearGradient id="topsheen" x1="512" y1="120" x2="512" y2="470" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="board" x1="512" y1="300" x2="512" y2="820" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#EEF1FB"/>
-    </linearGradient>
-    <linearGradient id="clip" x1="512" y1="250" x2="512" y2="360" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#EDEFFA"/>
-      <stop offset="1" stop-color="#C9CFEC"/>
-    </linearGradient>
-    <filter id="tileShadow" x="-20%" y="-20%" width="140%" height="150%">
-      <feDropShadow dx="0" dy="22" stdDeviation="26" flood-color="#2A2F6B" flood-opacity="0.38"/>
-    </filter>
-    <filter id="boardShadow" x="-30%" y="-30%" width="160%" height="170%">
-      <feDropShadow dx="0" dy="26" stdDeviation="30" flood-color="#20265A" flood-opacity="0.30"/>
-    </filter>
-  </defs>
+  <!-- Flat mark: one colour, one glyph. Nothing here may become a gradient again. -->
 
-  <!-- Rounded-rect tile (Apple squircle radius ≈ 0.2237·size) with a soft cast shadow -->
-  <g filter="url(#tileShadow)">
-    <rect x="100" y="120" width="824" height="824" rx="184" ry="184" fill="url(#tile)"/>
-  </g>
-  <!-- Light catching the top of the material -->
-  <rect x="100" y="120" width="824" height="824" rx="184" ry="184" fill="url(#topsheen)"/>
-  <!-- Bright top hairline edge -->
-  <rect x="100" y="120" width="824" height="824" rx="184" ry="184" fill="none"
-        stroke="#ffffff" stroke-opacity="0.22" stroke-width="3"/>
+  <!-- Apple squircle tile (radius 184 ≈ 0.2237·824), centred on the 1024 grid -->
+  <rect x="100" y="100" width="824" height="824" rx="184" ry="184" fill="#5B6BF0"/>
 
-  <!-- Clipboard, floating on the tile with a soft drop shadow -->
-  <g filter="url(#boardShadow)">
-    <!-- board -->
-    <rect x="322" y="320" width="380" height="470" rx="52" ry="52" fill="url(#board)"/>
-  </g>
-  <!-- metal clip -->
-  <rect x="442" y="268" width="140" height="86" rx="34" ry="34" fill="url(#clip)"/>
-  <rect x="470" y="286" width="84" height="34" rx="17" ry="17" fill="#5B6BF0"/>
-
-  <!-- content lines: copied items -->
-  <g fill="#5B6BF0">
-    <rect x="382" y="430" width="260" height="30" rx="15"/>
-    <rect x="382" y="502" width="200" height="30" rx="15" fill="#8A95F3"/>
-    <rect x="382" y="574" width="240" height="30" rx="15"/>
-    <rect x="382" y="646" width="150" height="30" rx="15" fill="#8A95F3"/>
-  </g>
+  <!-- Clipboard: board, then a tile-coloured notch, then the clip that sits in it.
+       The notch is what keeps the clip readable at 16px — without it the two white
+       shapes fuse into one blob. Its 48px inset is the gap, ≈1.5px at 32px. -->
+  <rect x="292" y="284" width="440" height="516" rx="88" fill="#ffffff"/>
+  <rect x="364" y="176" width="296" height="196" rx="98" fill="#5B6BF0"/>
+  <rect x="412" y="224" width="200" height="100" rx="50" fill="#ffffff"/>
 </svg>

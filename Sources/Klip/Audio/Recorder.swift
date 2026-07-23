@@ -7,9 +7,8 @@ import CoreAudio
 enum RecorderState: Equatable {
     case idle
     case recording
-    case missingAPIKey
     case micDenied          // microphone permission denied → guide to System Settings
-    case error(String)      // error BEFORE recording starts (permission/key). Transcription runs in the background.
+    case error(String)      // error BEFORE recording starts (permission). Transcription runs in the background.
 }
 
 /// The transcription of an uploaded audio file, shown live in the Upload window. `text == nil` while it runs.
@@ -25,7 +24,7 @@ struct UploadTranscription: Identifiable, Equatable {
     var allowAutoCopy: Bool = true     // false for batch rows → a retry must not re-arm the clipboard auto-copy
 }
 
-/// Records a voice note to .m4a and transcribes it with OpenAI (not live: the whole note at once).
+/// Records a voice note to .m4a and transcribes it on-device (not live: the whole note at once).
 /// Transcription runs in the background: once stopped, the recorder is free to record another.
 @MainActor
 final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
@@ -103,7 +102,6 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         guard !isRecording else { return }
         startRequested = true
         Task { @MainActor in
-            guard AIProvider.hasKey else { state = .missingAPIKey; startRequested = false; return }
             guard await Self.requestMicPermission() else {
                 state = .micDenied; startRequested = false; return
             }
@@ -203,10 +201,10 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         stop()   // finish and transcribe what was recorded up to the device change
     }
 
-    /// Returns to .idle from terminal states (error or missing API key) to revalidate on reopen.
+    /// Returns to .idle from terminal states (error, denied mic) to revalidate on reopen.
     func reset() {
         switch state {
-        case .error, .missingAPIKey, .micDenied: state = .idle
+        case .error, .micDenied: state = .idle
         default: break
         }
     }
@@ -252,12 +250,6 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @MainActor
     func transcribeFiles(_ urls: [URL], language: String? = nil) {
         guard !urls.isEmpty else { return }
-        guard AIProvider.hasKey else {
-            // `state` is shared with a live recording (RecordingView/UploadView both observe it). Only
-            // report "missing key" through it when idle, so a keyless upload doesn't kill an in-progress note.
-            if state != .recording && !finishing { state = .missingAPIKey }
-            return
-        }
         // No forced auto-copy: finishVoiceNote already puts the transcription on the clipboard when it's
         // safe (changeCount guard — doesn't clobber what the user copied in the meantime — and never a secret).
         let allowAutoCopy = urls.count == 1   // a batch would rewrite the clipboard once per file
@@ -333,26 +325,13 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         transcribeInBackground(id: id, url: transcribeURL, languageOverride: language)
     }
 
-    /// Transcribes the already-stored audio of an already-created item (meeting recordings: the
-    /// item was created via beginVoiceNote — already "Transcribing…" — so no state to flip first).
+    /// Meeting note transcription: the mic and system TRACKS are transcribed SEPARATELY with segment
+    /// timestamps and interleaved into a "Me:"/"Them:" labeled transcript (Granola-style, all on-device).
+    /// Owns the temp track files: they are deleted when transcription finishes.
     @MainActor
-    func transcribeExisting(itemID: UUID, audioFileName: String) {
-        transcribeInBackground(id: itemID, url: storage.audioURL(for: audioFileName))
-    }
-
-    /// Meeting note transcription. On-device (the default): the mic and system TRACKS are transcribed
-    /// SEPARATELY with segment timestamps and interleaved into a "Me:"/"Them:" labeled transcript
-    /// (Granola-style, all local). Cloud providers transcribe the stored MIXED file instead (no labels —
-    /// same as the retry path). Owns the temp track files: they are deleted when transcription finishes.
-    @MainActor
-    func transcribeMeetingTracks(itemID: UUID, micURL: URL?, systemURL: URL?, mixedFileName: String) {
+    func transcribeMeetingTracks(itemID: UUID, micURL: URL?, systemURL: URL?) {
         func deleteTemps() {
             for u in [micURL, systemURL] where u != nil { try? FileManager.default.removeItem(at: u!) }
-        }
-        guard Settings.shared.aiProvider == "local" else {
-            deleteTemps()
-            transcribeExisting(itemID: itemID, audioFileName: mixedFileName)
-            return
         }
         transcribingCount += 1
         let model = Settings.shared.localModel
@@ -437,22 +416,16 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @MainActor
     private func transcribeInBackground(id: UUID?, url: URL, languageOverride: String? = nil) {
         transcribingCount += 1
-        // Resolve the active provider's model here, on the MainActor (avoids reading Settings.shared
-        // from the transcription thread). Gemini and OpenAI each have their own model setting.
-        // Resolve the provider + its model here, on the MainActor (a single snapshot — avoids both a data race
-        // reading Settings.shared off-thread and a provider/model TOCTOU). Each provider uses its own
-        // key, so there is no cross-provider fallback (recording is already gated on AIProvider.hasKey for the selection).
-        let provider = Settings.shared.aiProvider
-        let model = provider == "gemini" ? Settings.shared.geminiModel
-                  : provider == "local"  ? Settings.shared.localModel
-                  : Settings.shared.transcriptionModel
+        // Snapshot the settings here, on the MainActor, so the transcription thread never reads
+        // Settings.shared off-main.
+        let model = Settings.shared.localModel
         let language = languageOverride ?? Settings.shared.transcriptionLanguage   // the per-upload override wins
         let vocabulary = Settings.shared.transcriptionVocabulary
         // First on-device use downloads the model: show "Downloading model…" so it doesn't look stuck.
-        if provider == "local", !LocalTranscriber.isModelReady(model), let id { onVoiceNoteDownloadingModel?(id) }
+        if !LocalTranscriber.isModelReady(model), let id { onVoiceNoteDownloadingModel?(id) }
         // The session's first on-device transcription pays a one-time Core ML / Neural Engine
         // warm-up (~20 s, then cached): surface it as "Preparing model…" instead of a plain "Transcribing…" spinner.
-        if provider == "local", !LocalTranscriber.pipelineReady { preparingModel = true }
+        if !LocalTranscriber.pipelineReady { preparingModel = true }
         Task { @MainActor in
             // Clear "Preparing…" when the counter empties OR the pipeline is already warm (an overlapping
             // transcription is then actually transcribing, not preparing).
@@ -461,8 +434,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
                 // VIDEO NORMALIZATION: WhisperKit/AVAudioFile can't decode video containers, so
                 // first demux the audio track to a temp 16 kHz mono AAC .m4a. Only runs for
                 // video inputs; audio (record / retry / audio upload) skips it entirely. Runs
-                // off the MainActor → the await suspends without blocking the UI. Upstream of the provider switch,
-                // so local + both clouds receive decodable audio (and fixes the latent bug where an .mp4 with a video track failed silently on the local path).
+                // off the MainActor → the await suspends without blocking the UI.
                 let mediaURL: URL
                 if MediaAudioExtractor.isVideo(url) {
                     extractingCount += 1
@@ -496,19 +468,8 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
                 let cleanupTemp = (mediaURL != url)
                 defer { if cleanupTemp { try? FileManager.default.removeItem(at: mediaURL) } }
 
-                // Cloud size pre-check: 16 kHz mono AAC is ~14 MB/h, so a very long clip
-                // can still exceed the cloud caps. OpenAI sends raw bytes (~25 MB limit → 24 MB floor);
-                // Gemini sends base64 inline_data (~4/3 inflation against a ~20 MB request cap → ~15 MB of raw audio).
-                // Turn the opaque HTTP failure into a clear "too large — switch to on-device" row. Local
-                // (WhisperKit) has no size limit → skip.
-                let cloudLimit = provider == "gemini" ? 15_000_000 : 24_000_000
-                if provider != "local",
-                   let sz = try? FileManager.default.attributesOfItem(atPath: mediaURL.path)[.size] as? Int,
-                   sz > cloudLimit {
-                    throw MediaAudioExtractor.ExtractionError.tooLargeForCloud
-                }
-
-                let text = try await AIProvider.transcribe(provider: provider, audioURL: mediaURL, language: language, model: model, vocabulary: vocabulary)
+                let text = try await LocalTranscriber.shared.transcribe(audioURL: mediaURL, model: model,
+                                                                        language: language, vocabulary: vocabulary)
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmed.isEmpty { if let id { onVoiceNoteFailed?(id); fillUploadResult(id, text: nil, failed: true) } }
                 else { if let id { onVoiceNoteTranscribed?(id, trimmed); fillUploadResult(id, text: trimmed, failed: false) } }

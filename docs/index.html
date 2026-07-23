@@ -26,7 +26,7 @@
   /* ============================================================
      Klip — landing page
      System fonts only. Self-contained. Light + dark, first-class.
-     Glass follows the app's real recipe (Sources/Klip/Glass.swift):
+     Glass follows the app's real recipe (Sources/Klip/UI/Glass.swift):
      defined at the RIM (two-stroke concentric), light materials
      darken / dark lighten, specular sheen from the top-left ≈ -60deg.
      ============================================================ */
@@ -560,7 +560,7 @@
             </div>
             <div class="row cred">
               <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4.2"/><path d="M11 12l8.5-8.5"/><path d="M16 7l2.5 2.5"/><path d="M13.5 9.5 16 12"/></svg></span>
-              <span class="tx"><span class="t1">OPENAI_API_KEY</span><span class="t2 dots-pw">•••••••••••••••</span></span>
+              <span class="tx"><span class="t1">STRIPE_SECRET_KEY</span><span class="t2 dots-pw">•••••••••••••••</span></span>
               <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
               <span class="time">3h</span>
             </div>
@@ -604,7 +604,7 @@
         <div class="feat glass glass--flat reveal">
           <div class="tile voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2"/><path d="M6.6 8v8"/><path d="M10.2 5v14"/><path d="M13.8 8v8"/><path d="M17.4 6.5v11"/><path d="M21 10v4"/></svg></div>
           <h3>Voice &amp; video → text</h3>
-          <p><kbd>⌥⇧R</kbd> to dictate, or <kbd>⌥⇧O</kbd> to drop audio &amp; video. On-device Whisper by default — no key, no upload — or bring your own OpenAI/Gemini.</p>
+          <p><kbd>⌥⇧R</kbd> to dictate, or <kbd>⌥⇧O</kbd> to drop audio &amp; video. Transcribed on your Mac by Whisper — no key, no account, no upload.</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
@@ -622,19 +622,13 @@
         <div class="feat glass glass--flat reveal">
           <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/></svg></div>
           <h3>Record screen → video/GIF</h3>
-          <p><kbd>⌥⇧V</kbd> — select a region (or record the full screen) with system audio; a floating frame marks what is being recorded. It lands in your history: play, share, save, or one-tap convert to GIF.</p>
+          <p><kbd>⌥⇧V</kbd> — select a region (or record the full screen) with system audio; a floating frame marks what is being recorded. It lands in your history: play, save, or one-tap convert to GIF.</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
           <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M12 7.5v9"/><path d="M9 13.5 12 16.5 15 13.5"/></svg></div>
           <h3>Scrolling capture</h3>
           <p><kbd>⌥⇧S</kbd> — pick the content area and Klip scrolls the page <em>for you</em>: back to the top first, then all the way down, stitching as it goes. One tall screenshot of the whole page.</p>
-        </div>
-
-        <div class="feat glass glass--flat reveal">
-          <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 14.5 14.5 9.5"/><path d="M11 6.5 12.8 4.7a3.8 3.8 0 0 1 5.4 0l1.1 1.1a3.8 3.8 0 0 1 0 5.4L17.5 13"/><path d="M13 17.5l-1.8 1.8a3.8 3.8 0 0 1-5.4 0l-1.1-1.1a3.8 3.8 0 0 1 0-5.4L6.5 11"/></svg></div>
-          <h3>Share from your own cloud</h3>
-          <p>Copy a public link to any clip, uploaded to <em>your</em> S3-compatible bucket — Cloudflare R2, AWS S3, Backblaze B2, MinIO. Opt-in per click; no hosted middleman.</p>
         </div>
 
         <div class="feat glass glass--flat reveal">
@@ -675,10 +669,10 @@
     <div class="wrap">
       <div class="priv-wrap">
         <div class="priv-copy reveal">
-          <span class="badge-ondevice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 8h6M9 12h6M9 16h3"/></svg> On-device by default</span>
+          <span class="badge-ondevice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 8h6M9 12h6M9 16h3"/></svg> On-device, always</span>
           <p class="sec-kicker">Private by design</p>
           <h2>Your clipboard is nobody's business but yours.</h2>
-          <p>Klip is local-first. Your history, images and audio live on your Mac with <code>0600</code> permissions — and stay there. The only time anything is sent out is audio <em>you</em> explicitly hand to a cloud transcriber, and even that is off by default.</p>
+          <p>Klip is local-only. Your history, images and audio live on your Mac with <code>0600</code> permissions — and stay there. There is no cloud to opt into: no accounts, no sync, no service to hand your clips to. Klip has nowhere to send them.</p>
           <ul class="priv-list">
             <li>
               <span class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg></span>
@@ -686,7 +680,7 @@
             </li>
             <li>
               <span class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 6 12 3l7.5 3v5.5c0 4.4-3.1 7.6-7.5 9-4.4-1.4-7.5-4.6-7.5-9Z"/><path d="M9 12l2 2 4-4"/></svg></span>
-              <div><b>On-device transcription</b><span>Voice, video and meeting notes run offline with Whisper — no API key, no upload. Cloud engines are opt-in with your own key.</span></div>
+              <div><b>On-device transcription</b><span>Voice, video and meeting notes run offline with Whisper — the only engine Klip has. The model is downloaded once; your audio never goes the other way.</span></div>
             </li>
             <li>
               <span class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2"/></svg></span>
@@ -695,7 +689,7 @@
           </ul>
         </div>
         <aside class="priv-card glass glass--flat reveal" aria-label="At a glance">
-          <div class="priv-stat"><span class="n">0 KB</span><span class="d">of your data leaves the Mac — unless you choose a cloud transcriber.</span></div>
+          <div class="priv-stat"><span class="n">0 KB</span><span class="d">of your data leaves the Mac. No exceptions, no opt-outs to check.</span></div>
           <div class="priv-stat"><span class="n">AES-256</span><span class="d">GCM encryption at rest for every detected credential.</span></div>
           <div class="priv-stat"><span class="n">100%</span><span class="d">native Swift. No Electron, no bundled browser, no background sync.</span></div>
           <div class="priv-stat"><span class="n">Apache 2.0</span><span class="d">open source — the code is public, so you can check every claim here.</span></div>

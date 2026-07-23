@@ -3,11 +3,10 @@ import AVFoundation
 import CoreAudio
 import UniformTypeIdentifiers
 
-/// Extracts the audio track of a VIDEO file into a small temporary audio file that BOTH transcription paths accept.
-/// WhisperKit/AVAudioFile can't decode video containers (.mov/.mkv, and .mp4 with a video track), and
-/// cloud uploads have a size cap. The output is 16 kHz mono AAC .m4a — Whisper's native rate and the EXACT shape of
-/// the app's own voice notes (see Recorder.start), so WhisperKit already decodes it, OpenAI accepts it as
-/// audio/mp4, and at ~14 MB/hour a normal clip stays under the cloud caps. Uses AVAssetReader → AVAssetWriter
+/// Extracts the audio track of a VIDEO file into a small temporary audio file the transcriber accepts.
+/// WhisperKit/AVAudioFile can't decode video containers (.mov/.mkv, and .mp4 with a video track).
+/// The output is 16 kHz mono AAC .m4a — Whisper's native rate and the EXACT shape of
+/// the app's own voice notes (see Recorder.start), so WhisperKit already decodes it. Uses AVAssetReader → AVAssetWriter
 /// (not AVAssetExportSession) because only the reader/writer pair allows fixing sample rate + channels + codec,
 /// and it stays within the macOS 14 deployment floor (the async export() overload is macOS 15+).
 enum MediaAudioExtractor {
@@ -25,14 +24,12 @@ enum MediaAudioExtractor {
         case unreadable
         case readFailed(Error?)
         case writeFailed
-        case tooLargeForCloud
 
         /// L10n key shown on the failed row of the Upload window (mapped by Recorder's catch).
         var uploadErrorKey: String {
             switch self {
             case .drmProtected:     return "upload.videoProtected"
             case .noAudioTrack:     return "upload.noAudioTrack"
-            case .tooLargeForCloud: return "upload.tooLarge"
             case .unreadable, .readFailed, .writeFailed: return "upload.extractFailed"
             }
         }
@@ -44,7 +41,6 @@ enum MediaAudioExtractor {
             case .unreadable:        return "Couldn't read this video file."
             case .readFailed(let e): return "Failed while reading the video's audio. \(e?.localizedDescription ?? "")"
             case .writeFailed:       return "Failed while extracting the audio."
-            case .tooLargeForCloud:  return "The audio is too large for cloud transcription."
             }
         }
     }
@@ -68,13 +64,12 @@ enum MediaAudioExtractor {
     static func audioForTranscription(from url: URL) async throws -> URL {
         let asset = AVURLAsset(url: url)
 
-        // DRM: FairPlay-protected media can't be decoded by us or by the cloud.
+        // DRM: FairPlay-protected media can't be decoded by us.
         if (try? await asset.load(.hasProtectedContent)) == true { throw ExtractionError.drmProtected }
 
-        // No visible video track → treat it as audio and hand the ORIGINAL file to the provider unchanged.
-        // WhisperKit reads common audio directly, and the cloud APIs accept webm/ogg/mp3/mp4-audio/etc. This
-        // covers audio-only .mp4 (no needless re-encode — and, once saved, it stays playable in history) and
-        // containers AVFoundation can't demux but the cloud still accepts. Only a REAL video track gets demuxed.
+        // No visible video track → treat it as audio and hand the ORIGINAL file to the transcriber unchanged.
+        // WhisperKit reads common audio directly. This covers audio-only .mp4 (no needless re-encode — and,
+        // once saved, it stays playable in history). Only a REAL video track gets demuxed.
         let videoTracks = (try? await asset.loadTracks(withMediaType: .video)) ?? []
         if videoTracks.isEmpty { return url }
 
