@@ -1,0 +1,119 @@
+<svg viewBox="0 0 1000 500" width="1000" height="500" xmlns="http://www.w3.org/2000/svg"
+     font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif"
+     role="img" aria-labelledby="kf-title">
+  <title id="kf-title">Eight Klip shortcuts orbiting one clipboard history</title>
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".64"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity=".47"/>
+    </linearGradient>
+    <linearGradient id="glassHub" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".76"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity=".56"/>
+    </linearGradient>
+    <g id="ic-history" stroke="#5b6bf0" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="14" cy="14" r="9.5"/><path d="M14 8.8 V14 l4.3 2.4"/>
+    </g>
+    <g id="ic-annotate" stroke="#5b6bf0" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.5 21.5 l1.2-4.4 L18 6.8 a2.26 2.26 0 0 1 3.2 3.2 L10.9 20.3 l-4.4 1.2 z"/>
+    </g>
+    <g id="ic-ocr" stroke="#5b6bf0" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 8.8 V6.8 Q5 5 6.8 5 H8.8 M19.2 5 h2 Q23 5 23 6.8 v2 M23 19.2 v2 Q23 23 21.2 23 h-2 M8.8 23 H6.8 Q5 23 5 21.2 v-2"/>
+      <path d="M9.5 11.5 h9 M9.5 15 h9 M9.5 18.5 h5.5"/>
+    </g>
+    <g id="ic-scroll" stroke="#5b6bf0" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="8.5" y="4.5" width="11" height="19" rx="3"/><path d="M14 9.5 v8 M11 14.7 l3 2.8 3-2.8"/>
+    </g>
+    <g id="ic-record" stroke="#5b6bf0" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4.5" y="7" width="19" height="14" rx="3.5"/><circle cx="14" cy="14" r="3.4" fill="#5b6bf0" stroke="none"/>
+    </g>
+    <g id="ic-voice" stroke="#5b6bf0" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="11.2" y="4.5" width="5.6" height="10.5" rx="2.8"/><path d="M8 13 a6 6 0 0 0 12 0 M14 19.4 v3.1 M10.8 22.5 h6.4"/>
+    </g>
+    <g id="ic-upload" stroke="#5b6bf0" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 17.5 V6.5 M9.7 10.6 L14 6.3 l4.3 4.3 M6 18.5 v2 A2.5 2.5 0 0 0 8.5 23 h11 a2.5 2.5 0 0 0 2.5-2.5 v-2"/>
+    </g>
+    <g id="ic-meeting" stroke="#5b6bf0" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4.5" y="5.5" width="19" height="13.5" rx="4.5"/><path d="M9.5 19 v3.6 L13 19"/>
+      <path d="M9.8 10.5 v3.5 M14 8.8 v7 M18.2 10.5 v3.5"/>
+    </g>
+  </defs>
+
+  <!-- orbit + flow direction -->
+  <ellipse cx="500" cy="250" rx="360" ry="170" fill="none" stroke="#78788c" stroke-opacity=".35" stroke-width="1.6" stroke-dasharray="1 9" stroke-linecap="round"/>
+  <path d="M-4.5 -4 L2.5 0 L-4.5 4" fill="none" stroke="#78788c" stroke-opacity=".55" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="translate(832.6 315.1) rotate(131.3)"/>
+  <path d="M-4.5 -4 L2.5 0 L-4.5 4" fill="none" stroke="#78788c" stroke-opacity=".55" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="translate(362.2 407.1) rotate(-168.9)"/>
+  <path d="M-4.5 -4 L2.5 0 L-4.5 4" fill="none" stroke="#78788c" stroke-opacity=".55" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="translate(167.4 184.9) rotate(-48.7)"/>
+  <path d="M-4.5 -4 L2.5 0 L-4.5 4" fill="none" stroke="#78788c" stroke-opacity=".55" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="translate(637.8 92.9) rotate(11.1)"/>
+
+  <!-- hub: glass squircle + the AppIcon.svg clipboard mark -->
+  <g>
+    <rect x="415" y="165" width="170" height="170" rx="38" fill="url(#glassHub)" stroke="#78788c" stroke-opacity=".42" stroke-width="1.2"/>
+    <path d="M456 166.6 H544" stroke="#ffffff" stroke-opacity=".7" stroke-width="1.8" stroke-linecap="round"/>
+    <g transform="translate(424.48 156.02) scale(0.1475)">
+      <!-- AppIcon.svg board with the notch bay traced out of its silhouette, so the gap shows glass through -->
+      <path fill="#5b6bf0" d="M364.66 285.35 A98 98 0 0 0 462 372 H562 A98 98 0 0 0 659.34 285.35
+               A88 88 0 0 1 732 372 V712 A88 88 0 0 1 644 800 H380 A88 88 0 0 1 292 712 V372
+               A88 88 0 0 1 364.66 285.35 Z"/>
+      <rect x="412" y="224" width="200" height="100" rx="50" fill="#5b6bf0"/>
+    </g>
+    <text x="500" y="320" font-size="25" font-weight="700" letter-spacing="-.4" fill="#1c1c1e" text-anchor="middle">Klip</text>
+  </g>
+
+  <g>
+    <rect x="388" y="46" width="224" height="68" rx="17" fill="url(#glass)" stroke="#78788c" stroke-opacity=".38" stroke-width="1"/>
+    <path d="M404 48 H596" stroke="#ffffff" stroke-opacity=".65" stroke-width="1.6" stroke-linecap="round"/>
+    <use href="#ic-history" x="406" y="66"/>
+    <text x="448" y="77" font-size="23" font-weight="600" fill="#1c1c1e">History</text>
+    <text x="448" y="100" font-size="18" font-weight="500" fill="#3a3a3e" fill-opacity=".78">⌥⇧E</text>
+  </g>
+  <g>
+    <rect x="643" y="96" width="224" height="68" rx="17" fill="url(#glass)" stroke="#78788c" stroke-opacity=".38" stroke-width="1"/>
+    <path d="M659 97 H851" stroke="#ffffff" stroke-opacity=".65" stroke-width="1.6" stroke-linecap="round"/>
+    <use href="#ic-annotate" x="661" y="116"/>
+    <text x="703" y="127" font-size="23" font-weight="600" fill="#1c1c1e">Annotate</text>
+    <text x="703" y="150" font-size="18" font-weight="500" fill="#3a3a3e" fill-opacity=".78">⌥⇧D</text>
+  </g>
+  <g>
+    <rect x="748" y="216" width="224" height="68" rx="17" fill="url(#glass)" stroke="#78788c" stroke-opacity=".38" stroke-width="1"/>
+    <path d="M764 218 H956" stroke="#ffffff" stroke-opacity=".65" stroke-width="1.6" stroke-linecap="round"/>
+    <use href="#ic-ocr" x="766" y="236"/>
+    <text x="808" y="247" font-size="23" font-weight="600" fill="#1c1c1e">OCR text</text>
+    <text x="808" y="270" font-size="18" font-weight="500" fill="#3a3a3e" fill-opacity=".78">⌥⇧F</text>
+  </g>
+  <g>
+    <rect x="643" y="336" width="224" height="68" rx="17" fill="url(#glass)" stroke="#78788c" stroke-opacity=".38" stroke-width="1"/>
+    <path d="M659 338 H851" stroke="#ffffff" stroke-opacity=".65" stroke-width="1.6" stroke-linecap="round"/>
+    <use href="#ic-scroll" x="661" y="356"/>
+    <text x="703" y="367" font-size="23" font-weight="600" fill="#1c1c1e">Scroll capture</text>
+    <text x="703" y="390" font-size="18" font-weight="500" fill="#3a3a3e" fill-opacity=".78">⌥⇧S</text>
+  </g>
+  <g>
+    <rect x="388" y="386" width="224" height="68" rx="17" fill="url(#glass)" stroke="#78788c" stroke-opacity=".38" stroke-width="1"/>
+    <path d="M404 388 H596" stroke="#ffffff" stroke-opacity=".65" stroke-width="1.6" stroke-linecap="round"/>
+    <use href="#ic-record" x="406" y="406"/>
+    <text x="448" y="417" font-size="23" font-weight="600" fill="#1c1c1e">Record screen</text>
+    <text x="448" y="440" font-size="18" font-weight="500" fill="#3a3a3e" fill-opacity=".78">⌥⇧V</text>
+  </g>
+  <g>
+    <rect x="133" y="336" width="224" height="68" rx="17" fill="url(#glass)" stroke="#78788c" stroke-opacity=".38" stroke-width="1"/>
+    <path d="M149 338 H341" stroke="#ffffff" stroke-opacity=".65" stroke-width="1.6" stroke-linecap="round"/>
+    <use href="#ic-voice" x="151" y="356"/>
+    <text x="193" y="367" font-size="23" font-weight="600" fill="#1c1c1e">Voice note</text>
+    <text x="193" y="390" font-size="18" font-weight="500" fill="#3a3a3e" fill-opacity=".78">⌥⇧R</text>
+  </g>
+  <g>
+    <rect x="28" y="216" width="224" height="68" rx="17" fill="url(#glass)" stroke="#78788c" stroke-opacity=".38" stroke-width="1"/>
+    <path d="M44 218 H236" stroke="#ffffff" stroke-opacity=".65" stroke-width="1.6" stroke-linecap="round"/>
+    <use href="#ic-upload" x="46" y="236"/>
+    <text x="88" y="247" font-size="23" font-weight="600" fill="#1c1c1e">Upload media</text>
+    <text x="88" y="270" font-size="18" font-weight="500" fill="#3a3a3e" fill-opacity=".78">⌥⇧O</text>
+  </g>
+  <g>
+    <rect x="133" y="96" width="224" height="68" rx="17" fill="url(#glass)" stroke="#78788c" stroke-opacity=".38" stroke-width="1"/>
+    <path d="M149 97 H341" stroke="#ffffff" stroke-opacity=".65" stroke-width="1.6" stroke-linecap="round"/>
+    <use href="#ic-meeting" x="151" y="116"/>
+    <text x="193" y="127" font-size="23" font-weight="600" fill="#1c1c1e">Meeting</text>
+    <text x="193" y="150" font-size="18" font-weight="500" fill="#3a3a3e" fill-opacity=".78">⌥⇧M</text>
+  </g>
+</svg>

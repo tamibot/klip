@@ -386,6 +386,34 @@
   .sc .l{ display:block; margin-top:11px; font-size:.82rem; color:var(--muted); font-weight:500 }
   .sc-note{ text-align:center; margin:22px auto 0; font-size:.86rem; color:var(--faint) }
 
+  /* ---------- Flow illustration ---------- */
+  .flow{ margin-top:72px }
+  .flow img{ display:block; width:100%; height:auto }
+
+  /* ---------- Full feature index ---------- */
+  .ix-card{ padding:28px 30px 32px; border-radius:22px }
+  @media (max-width:520px){ .ix-card{ padding:22px 18px 26px } }
+  .ix-cols{ columns:3 260px; column-gap:40px }
+  .ix-group{ margin:0 0 26px }
+  .ix-group h3{
+    font-size:.76rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 2px; break-after:avoid;
+  }
+  .ix-group h3.voice{ color:var(--voice) }
+  .ix-group ul{ list-style:none; margin:0; padding:0 }
+  .ix-group li{ padding:8px 0 9px; border-top:.5px solid var(--hairline); break-inside:avoid }
+  .ix-group li b{ display:block; font-size:.87rem; font-weight:600; letter-spacing:-.01em; color:var(--ink) }
+  .ix-group li b kbd{ font-size:.78em; padding:2px 6px; margin-left:2px; vertical-align:1px }
+  .ix-group li span{ display:block; font-size:.8rem; color:var(--muted); line-height:1.45; margin-top:1px }
+
+  /* ---------- GitHub CTA ---------- */
+  .gh-card{ text-align:center; max-width:760px; margin:0 auto; padding:44px 32px 42px; border-radius:24px }
+  @media (max-width:520px){ .gh-card{ padding:34px 20px 32px } }
+  .gh-card h2{ font-family:var(--display); font-size:clamp(1.55rem,3.1vw,2.1rem); line-height:1.14; letter-spacing:-.025em; margin:0; font-weight:700; color:var(--ink) }
+  .gh-card .lead{ color:var(--muted); font-size:1.04rem; line-height:1.6; max-width:50ch; margin:14px auto 0 }
+  .gh-card .cta-row{ margin-top:28px }
+  .gh-alt{ margin:20px 0 0; font-size:.9rem; color:var(--muted) }
+
   /* ---------- Privacy ---------- */
   .privacy{ position:relative }
   .priv-wrap{ display:grid; grid-template-columns:1.05fr .95fr; gap:44px; align-items:center }
@@ -567,6 +595,12 @@
     </div>
   </header>
 
+  <!-- ============ FLOW ILLUSTRATION ============ -->
+  <div class="flow wrap reveal">
+    <img src="klip-flow.svg" width="1000" height="500" loading="lazy" decoding="async"
+      alt="How Klip works: copies, screen captures, recordings and voice notes flow into one on-device history, and come back out clean wherever you paste — nothing leaves your Mac.">
+  </div>
+
   <!-- ============ FEATURES ============ -->
   <section id="features">
     <div class="wrap">
@@ -631,6 +665,172 @@
           <p>Tokens and API keys are auto-detected, shown masked, encrypted at rest (AES-256-GCM, key in the Keychain) and never auto-pasted.</p>
         </div>
 
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FULL FEATURE INDEX ============ -->
+  <section id="everything">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <p class="sec-kicker">The full list</p>
+        <h2>Everything, one by one.</h2>
+        <p>The nine cards are the shape. These are all 102 capabilities behind them — every line verifiable in the source.</p>
+      </div>
+      <div class="ix-card glass glass--flat reveal">
+        <div class="ix-cols">
+
+          <div class="ix-group">
+            <h3>Clipboard</h3>
+            <ul>
+              <li><b>Automatic history</b><span>Every copy — text, links, file paths, images — captured in the background.</span></li>
+              <li><b>Wide image formats</b><span>TIFF, PNG, JPEG plus anything macOS decodes: HEIC, GIF, WebP…</span></li>
+              <li><b>Re-copy dedup</b><span>Copying the same text bumps the clip instead of duplicating it.</span></li>
+              <li><b>Always paste clean</b><span>Rich copies stored as Markdown — bold survives, fonts and backgrounds don't.</span></li>
+              <li><b>Click to paste</b><span>A click copies and pastes straight into the app you came from.</span></li>
+              <li><b>Global panel <kbd>⌥⇧E</kbd></b><span>The history pops up over any app, even full-screen Spaces.</span></li>
+              <li><b>Keyboard-first panel</b><span>↑↓ to move, ↩ to paste, ⌘⇧F to star, ⌘⌫ to delete, layered Esc.</span></li>
+              <li><b>Menu-bar Recents</b><span>The last 10 clips pasteable straight from the status menu.</span></li>
+              <li><b>Drag clips out</b><span>Rows drag into Finder, Slack or an AI chat as real files.</span></li>
+              <li><b>From-another-device flag</b><span>Universal Clipboard arrivals from iPhone/iPad are flagged in exports.</span></li>
+              <li><b>Color swatches</b><span>A copied hex color shows a real swatch in its row.</span></li>
+              <li><b>Copy without closing</b><span>A per-row copy button leaves the panel open for the next grab.</span></li>
+              <li><b>Adjustable history size</b><span>Keep 20–1000 clips; starred ones are never trimmed away.</span></li>
+              <li><b>Icon-flash confirmation</b><span>The menu-bar icon flashes a checkmark on every copy — no popup.</span></li>
+            </ul>
+          </div>
+
+          <div class="ix-group">
+            <h3>Capture</h3>
+            <ul>
+              <li><b>Region capture <kbd>⌥⇧D</kbd></b><span>Select a region and it opens straight in the annotation editor.</span></li>
+              <li><b>Straight-to-clipboard mode</b><span>A preference skips the editor: region → history + clipboard.</span></li>
+              <li><b>OCR capture <kbd>⌥⇧F</kbd></b><span>Select a region; its text is extracted on-device, ready to paste.</span></li>
+              <li><b>Line-break cleanup</b><span>One tap collapses hard-wrapped OCR text into flowing paragraphs.</span></li>
+              <li><b>Scrolling capture <kbd>⌥⇧S</kbd></b><span>Klip auto-scrolls the target app and stitches one long screenshot.</span></li>
+              <li><b>OCR any stored image</b><span>"Extract text" on an image row shows and copies the recognized text.</span></li>
+              <li><b>Re-annotate stored images</b><span>Reopen any image in the editor; the result flows back to history.</span></li>
+              <li><b>11 annotation tools</b><span>Arrows, shapes, highlighter, text, blur, spotlight, counter badges and more.</span></li>
+              <li><b>One-key tool switching</b><span>Bare letters (V/P/L/A/R/O/H/T/B/S/C) switch tools instantly.</span></li>
+              <li><b>Full editor chrome</b><span>Palettes, stroke widths, blur slider, undo/redo, zoom with live percentage.</span></li>
+              <li><b>Copy or save</b><span>⌘C copies and closes; ⌘S saves a PNG to Downloads, no dialog.</span></li>
+              <li><b>Editor memory</b><span>Last tool, color and stroke width restored on the next capture.</span></li>
+            </ul>
+          </div>
+
+          <div class="ix-group">
+            <h3>Recording</h3>
+            <ul>
+              <li><b>Region recording <kbd>⌥⇧V</kbd></b><span>H.264 30 fps video of any region, with system audio.</span></li>
+              <li><b>Full-display recording</b><span>One menu item records the whole screen under your cursor.</span></li>
+              <li><b>Clean system audio</b><span>Captures what's playing, excludes Klip's own sound cues.</span></li>
+              <li><b>Live frame + stop pill</b><span>A floating frame marks the region, with one-click stop.</span></li>
+              <li><b>Recordings in history</b><span>Playable rows with a poster thumbnail and duration badge.</span></li>
+              <li><b>One-tap GIF</b><span>Convert a recording to a looping GIF from the toast or the row menu.</span></li>
+              <li><b>Paste as a file</b><span>Copying a video row puts the actual movie file on the clipboard.</span></li>
+              <li><b>Crash-safe recording</b><span>Fragmented QuickTime stays playable; the display can't sleep mid-take.</span></li>
+              <li><b>Video row utilities</b><span>Play, reveal in Finder, save a copy, or convert to GIF.</span></li>
+            </ul>
+          </div>
+
+          <div class="ix-group">
+            <h3 class="voice">Voice &amp; meetings</h3>
+            <ul>
+              <li><b>Voice notes <kbd>⌥⇧R</kbd></b><span>Dictate into a popup; the transcript lands in history and clipboard.</span></li>
+              <li><b>100% on-device</b><span>WhisperKit on Core ML is the only engine — audio never leaves the Mac.</span></li>
+              <li><b>Four model sizes</b><span>Tiny to Large v3 Turbo: trade speed for accuracy.</span></li>
+              <li><b>12 languages + auto-detect</b><span>Set the dictation language or let the model detect it.</span></li>
+              <li><b>Custom vocabulary</b><span>Names, brands and jargon you list are spelled right.</span></li>
+              <li><b>Silence guard</b><span>2 silent minutes ask if you're there; 3 stop the note on their own.</span></li>
+              <li><b>Audio kept, retry ready</b><span>The m4a stays playable; a failed transcription retries in one click.</span></li>
+              <li><b>Meeting recording <kbd>⌥⇧M</kbd></b><span>Mic + system audio in one local note — no bot joins the call.</span></li>
+              <li><b>Me / Them transcripts</b><span>Both tracks transcribed separately and interleaved chronologically.</span></li>
+              <li><b>Live meeting HUD</b><span>Floating level meters for both sources; drags anywhere, remembers its spot.</span></li>
+              <li><b>Meeting auto-stop</b><span>15 silent minutes end the recording automatically.</span></li>
+              <li><b>Quit-safe meetings</b><span>Quitting mid-meeting saves the note before the app exits.</span></li>
+              <li><b>Batch transcription <kbd>⌥⇧O</kbd></b><span>Drop multiple files; each transcribes with live per-file results.</span></li>
+              <li><b>Video transcription</b><span>20+ video formats accepted; the audio track is demuxed on-device.</span></li>
+              <li><b>WhatsApp voice notes</b><span>.opus and .oga files upload and transcribe.</span></li>
+              <li><b>Per-upload language</b><span>Override the language for one file without touching settings.</span></li>
+              <li><b>Honest model download</b><span>A real percentage and size, only on first use — never silently at launch.</span></li>
+              <li><b>Clipboard-guarded copy</b><span>A finished transcript never overwrites something you copied meanwhile.</span></li>
+            </ul>
+          </div>
+
+          <div class="ix-group">
+            <h3>Paste into AI</h3>
+            <ul>
+              <li><b>Copy as code block <kbd>⌘↩</kbd></b><span>``` fences with the language auto-inferred.</span></li>
+              <li><b>Copy as Markdown</b><span>URLs become links, code gets fenced, prose gets paragraphs.</span></li>
+              <li><b>History as Markdown</b><span>The whole history exports as one timestamped document.</span></li>
+              <li><b>Format for WhatsApp</b><span>*bold*, _italic_, ~strike~ in WhatsApp's own syntax.</span></li>
+              <li><b>Format for email</b><span>Real rich text (RTF) so Mail and Gmail render it formatted.</span></li>
+              <li><b>Save text as a file</b><span>Huge logs become a .txt in Downloads instantly.</span></li>
+              <li><b>Combine into one PDF</b><span>Multi-select clips become a single PDF, one page each.</span></li>
+              <li><b>Export as ZIP</b><span>Selected clips as numbered PNGs, .txt and audio in one archive.</span></li>
+              <li><b>Open link</b><span>URL clips open in the browser and get their own filter.</span></li>
+            </ul>
+          </div>
+
+          <div class="ix-group">
+            <h3>Organization</h3>
+            <ul>
+              <li><b>Instant search</b><span>Filter by name, text or preview with every match highlighted.</span></li>
+              <li><b>Type filter chips</b><span>All, Favorites, Text, Links, Images, Video, Voice, Credentials.</span></li>
+              <li><b>Collections</b><span>Name a batch of clips and filter by it with its own chip.</span></li>
+              <li><b>Favorites</b><span>Starred clips are never auto-trimmed out of the history.</span></li>
+              <li><b>Rename any clip</b><span>A custom title becomes its searchable display name.</span></li>
+              <li><b>Multi-select</b><span>⌘-click batch mode, Shift-click ranges, select-all-visible.</span></li>
+              <li><b>Day sections</b><span>Today, Yesterday and weekday headers group the list.</span></li>
+              <li><b>One-click backup</b><span>The whole history zips to Downloads in one action.</span></li>
+              <li><b>Transactional restore</b><span>Import validates first and rolls back on any failure.</span></li>
+              <li><b>Clear all, guarded</b><span>Wipe the history in one confirmed action.</span></li>
+              <li><b>Safe deletes</b><span>Media deletions ask first; plain text goes instantly.</span></li>
+            </ul>
+          </div>
+
+          <div class="ix-group">
+            <h3>Secrets &amp; privacy</h3>
+            <ul>
+              <li><b>Automatic secret detection</b><span>20+ token patterns masked the moment they're copied.</span></li>
+              <li><b>Encryption at rest</b><span>AES-256-GCM with the key in the macOS Keychain.</span></li>
+              <li><b>Self-re-masking reveal</b><span>The eye button shows a secret only while you look.</span></li>
+              <li><b>Copy-only credentials</b><span>Secrets never auto-paste, never drag out, never join format paths.</span></li>
+              <li><b>Leak-proof search</b><span>Queries skip credential cleartext entirely.</span></li>
+              <li><b>Masked exports</b><span>PDFs, ZIPs and Markdown write a placeholder — never the token.</span></li>
+              <li><b>Manual mark / unmark</b><span>Flag any clip as a credential, or clear a false positive.</span></li>
+              <li><b>Legacy secret promotion</b><span>Old plaintext secrets are sealed automatically on load.</span></li>
+              <li><b>Password-manager respect</b><span>Concealed and transient pasteboard types are ignored by default.</span></li>
+              <li><b>Excluded apps</b><span>A per-app blacklist Klip never records from.</span></li>
+              <li><b>Owner-only files</b><span>The entire store runs at 0600/0700 permissions.</span></li>
+              <li><b>Zero network by design</b><span>On-device engines only; copied HTML can never phone home.</span></li>
+              <li><b>Hardened imports</b><span>Zips with symlinks or path escapes are rejected outright.</span></li>
+              <li><b>Cross-Mac safety</b><span>A secret keyed to another Mac stays a placeholder, never raw ciphertext.</span></li>
+              <li><b>Old-secret cleanup</b><span>Keys left by removed cloud features are deleted at launch.</span></li>
+            </ul>
+          </div>
+
+          <div class="ix-group">
+            <h3>Quality of life</h3>
+            <ul>
+              <li><b>8 remappable shortcuts</b><span>Recorder fields, suggestions, collision detection and recovery.</span></li>
+              <li><b>8 UI languages</b><span>The whole UI re-localizes live — no restart.</span></li>
+              <li><b>Launch at login</b><span>Auto-enabled on first run, toggleable from menu or Preferences.</span></li>
+              <li><b>Recording-aware sounds</b><span>Cues mute themselves whenever a mic is hot.</span></li>
+              <li><b>Actionable toasts</b><span>Every toast carries a follow-up, and is announced to VoiceOver.</span></li>
+              <li><b>First-run welcome</b><span>Permissions, shortcuts and the model download in one window.</span></li>
+              <li><b>Built-in guide</b><span>Klip's shortcuts, macOS's own, and usage tips.</span></li>
+              <li><b>Full preferences</b><span>Behavior, shortcuts, voice, privacy and exclusions in one form.</span></li>
+              <li><b>Reduce Motion respected</b><span>Every animation degrades to instant swaps.</span></li>
+              <li><b>Deep VoiceOver support</b><span>Per-type rotor actions and credential-safe labels.</span></li>
+              <li><b>Clean uninstaller</b><span>Removes app, login item and cert — asks before touching history.</span></li>
+              <li><b>Identity migrations</b><span>Data, settings and keys follow the app across renames.</span></li>
+              <li><b>Crash recovery</b><span>Stuck notes recover; a corrupt index is backed up, not overwritten.</span></li>
+              <li><b>Image details</b><span>Pixel-dimension badges, open in Preview, save as PNG.</span></li>
+            </ul>
+          </div>
+
+        </div>
       </div>
     </div>
   </section>
@@ -716,6 +916,28 @@ xcode-select --install
       </div>
       <p class="note">A clipboard glyph lands in your menu bar — press <kbd>⌥⇧E</kbd> to open the history. macOS 14 (Sonoma) or later, Intel or Apple Silicon; a Windows version is planned.</p>
       <p class="note"><b>There is no download link, and that is deliberate.</b> A prebuilt <code>.app</code> handed out on the internet needs Apple Developer ID notarization — without it Gatekeeper quarantines the file and macOS calls Klip damaged. Building it on your own Mac sidesteps that: <code>install.sh</code> signs with a certificate it creates locally in your Keychain, which is also what makes macOS remember the microphone, screen-recording and accessibility permissions across updates. <code>uninstall.sh</code> removes the app, that certificate and the login item, and asks separately before it touches your history.</p>
+    </div>
+  </section>
+
+  <!-- ============ GITHUB CTA ============ -->
+  <section id="github">
+    <div class="wrap">
+      <div class="gh-card glass glass--flat reveal">
+        <p class="sec-kicker">Free &amp; open source</p>
+        <h2>If Klip earns a spot in your menu bar, star it.</h2>
+        <p class="lead">Klip is free, Apache 2.0, and stays on your Mac — no account, no tracking, no paid tier. Stars help other people find it; your ideas and bug reports decide what gets built next.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://github.com/tamibot/klip" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.9 5.88 6.5.94-4.7 4.58 1.1 6.47L12 17.42l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.94L12 2.6z"/></svg>
+            Star Klip on GitHub
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/tamibot/klip/issues/new" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6.5 6.5 0 0 0-3.6 11.9c.6.4 1.1 1.1 1.1 1.9v.2h5v-.2c0-.8.5-1.5 1.1-1.9A6.5 6.5 0 0 0 12 3Z"/><path d="M9.8 20h4.4"/></svg>
+            Report an idea
+          </a>
+        </div>
+        <p class="gh-alt">Not running it yet? <a href="#install">Build it in two minutes.</a></p>
+      </div>
     </div>
   </section>
 
