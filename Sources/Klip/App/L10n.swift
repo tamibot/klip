@@ -12,7 +12,9 @@ enum L10n {
         ("it", "Italiano"), ("pt", "Português"), ("zh", "中文"), ("ja", "日本語")
     ]
 
-    private static let tables: [String: [String: String]] =
+    /// Internal, not private, so L10nIntegrityTests can compare the tables against each other — a key
+    /// missing from one language is otherwise invisible: `t` silently returns the English string.
+    static let tables: [String: [String: String]] =
         ["en": en, "es": es, "fr": fr, "de": de, "it": it, "pt": pt, "zh": zh, "ja": ja]
 
     static func t(_ key: String) -> String {

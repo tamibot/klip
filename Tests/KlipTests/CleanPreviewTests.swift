@@ -13,10 +13,19 @@ struct CleanPreviewTests {
     @Test("strips paired markers")
     func stripsPairedMarkers() {
         #expect(ItemRow.cleanPreview("**bold**") == "bold")
-        #expect(ItemRow.cleanPreview("__bold__") == "bold")
         #expect(ItemRow.cleanPreview("*italic*") == "italic")
         #expect(ItemRow.cleanPreview("`code`") == "code")
         #expect(ItemRow.cleanPreview("a **b** and `c` here") == "a b and c here")
+    }
+
+    /// `__bold__` and `__init__` are the same string, so this is a choice, not a fix: a dunder in a
+    /// row is far more likely than `__bold__` (Markdown's common bold is `**`), and a clipboard for
+    /// people writing Python should not rename their code. `__bold__` keeps its underscores.
+    @Test("a Python dunder is shown intact, not read as bold")
+    func dunderSurvives() {
+        #expect(ItemRow.cleanPreview("def __init__(self):") == "def __init__(self):")
+        #expect(ItemRow.cleanPreview("if __name__ == '__main__':") == "if __name__ == '__main__':")
+        #expect(ItemRow.cleanPreview("__bold__") == "__bold__")
     }
 
     @Test("strips leading headings only")

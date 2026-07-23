@@ -634,9 +634,11 @@ struct ItemRow: View {
     /// Strips Markdown emphasis syntax from the PREVIEW so "**DealLost**" reads as "DealLost".
     /// Only paired markers are removed — lone underscores stay so identifiers like GN_MASIVO_X
     /// are never mangled. Display-only; the stored text and search are untouched.
+    /// No `__bold__` rule, for the same reason Markdownify dropped it: a Python dunder is lexically
+    /// identical to it, so the rule turned a copied `__init__` into `init` in the row.
     static func cleanPreview(_ s: String) -> String {
         var t = s
-        for p in [#"\*\*(.+?)\*\*"#, #"__(.+?)__"#, #"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)"#, "`(.+?)`"] {
+        for p in [#"\*\*(.+?)\*\*"#, #"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)"#, "`(.+?)`"] {
             t = t.replacingOccurrences(of: p, with: "$1", options: .regularExpression)
         }
         t = t.replacingOccurrences(of: #"^\s{0,3}#{1,6}\s+"#, with: "", options: .regularExpression)

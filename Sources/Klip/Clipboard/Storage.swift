@@ -137,8 +137,12 @@ final class Storage {
     func loadImage(fileName: String) -> NSImage? { NSImage(contentsOf: imageURL(for: fileName)) }
 
     /// The stamp every Downloads export is named after: "2026-07-22 at 14.03.51".
+    /// Fixed locale because this is a FILENAME, not display text: with Locale.current the same instant
+    /// becomes "2569-07-22…" in th_TH and Arabic-Indic digits in ar_SA, so exports stop sorting by name
+    /// in Finder. (MarkdownExporter.history uses Locale.current on purpose — that one IS display text.)
     static var exportTimestamp: String {
         let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
         df.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         return df.string(from: Date())
     }
@@ -147,9 +151,14 @@ final class Storage {
     /// or empty falls back to the timestamped "Klip <date> at <time>"; a clip's own name is kept,
     /// sanitized for the filesystem. Saving never opens a dialog (Shottr-style: it should not ask
     /// for a name), so this uniquing is the only thing separating two captures in the same second.
-    static func uniqueDownloadsURL(base: String?, ext: String) -> URL {
-        let dir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+    /// `dir` defaults to ~/Downloads: picking a free, filesystem-safe NAME is this function's job,
+    /// choosing the folder is the caller's (its siblings already stage through the temp directory).
+    static var downloadsDirectory: URL {
+        FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
+    }
+
+    static func uniqueDownloadsURL(base: String?, ext: String, in dir: URL = Storage.downloadsDirectory) -> URL {
         let name: String
         if let base, !base.isEmpty {
             name = base.replacingOccurrences(of: "[/:\\\\]", with: "-", options: .regularExpression)

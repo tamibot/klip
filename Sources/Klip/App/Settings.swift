@@ -66,7 +66,19 @@ struct KeyCombo: Equatable {
     /// right-aligned in system gray like every native menu (instead of embedded in the title).
     /// Empty for keys with no single-character form (callers fall back to the title suffix).
     var menuKeyEquivalent: String {
-        if keyCode == UInt32(kVK_Space) { return " " }
+        // keyName renders these as GLYPHS (↩ ⇥ ⎋ ⌫), each exactly one Character, so the `count == 1`
+        // test below used to hand the glyph itself to NSMenuItem. The row LOOKED right — AppKit draws
+        // whatever character it gets — but no keypress can match a glyph, so the equivalent was dead
+        // and the title-suffix fallback never ran either. AppKit matches these keys by their control
+        // characters. Reachable: ⌥↩ passes both isValid and the recorder's non-Shift-modifier rule.
+        switch Int(keyCode) {
+        case kVK_Space:  return " "
+        case kVK_Return: return "\r"
+        case kVK_Tab:    return "\t"
+        case kVK_Escape: return "\u{1b}"
+        case kVK_Delete: return "\u{8}"
+        default: break
+        }
         let name = KeyCombo.keyName(for: keyCode)
         return name.count == 1 ? name.lowercased() : ""
     }
@@ -103,8 +115,12 @@ struct KeyCombo: Equatable {
         return map[keyCode] ?? String(format: "Key %02X", keyCode)
     }
 
-    /// Suggested combinations to pick without recording (shown in Preferences). Leads with ⌥⌘ combos, which
-    /// rarely collide with app accelerators (so the global hotkey reliably fires); ⌘⇧ options come after.
+    /// Suggested combinations to pick without recording (shown in Preferences), and the pool the startup
+    /// recovery/dedup loops draw from when a shortcut cannot register. Mostly ⌥⇧ letters, which rarely
+    /// collide with app accelerators (so the global hotkey reliably fires). Every entry MUST carry a
+    /// modifier other than Shift — a bare or Shift-only combo registers fine and then swallows that key in
+    /// every app on the Mac (see ShortcutTableTests). Must also stay pairwise distinct: the recovery loops
+    /// walk this list in order, and Preferences renders it keyed by displayString.
     static let suggestions: [KeyCombo] = [
         KeyCombo(keyCode: UInt32(kVK_ANSI_Y), carbonModifiers: UInt32(optionKey | shiftKey)),  // ⌥⇧Y (panel)
         KeyCombo(keyCode: UInt32(kVK_ANSI_R), carbonModifiers: UInt32(optionKey | shiftKey)),  // ⌥⇧R (voice)
@@ -371,7 +387,8 @@ final class Settings: ObservableObject {
         guard !std.bool(forKey: migratedFlagKey) else { return }
         defer { std.set(true, forKey: migratedFlagKey) }
         guard let legacy = UserDefaults(suiteName: "com.proper.pastaclip") else { return }
-        // We don't migrate the shortcuts (Klip uses its own defaults: ⌘⇧E / ⌘⇧I / ⌘⇧U) or didAutoEnableLogin
+        // We don't migrate the shortcuts (Klip has its own defaults — the ⌥⇧ set above; ⌘⇧E / ⌘⇧I / ⌘⇧U
+        // have been LEGACY combos since the V3 migration) or didAutoEnableLogin
         // (Klip registers itself under its new identity).
         let keys = [K.maxItems, K.autoPaste, K.concealed, K.transient, K.autoGen, K.excluded]
         for key in keys {
