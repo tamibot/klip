@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push supersedes the running job on the same ref: the release build is minutes of runner
+# time and nobody reads the result of a superseded commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    # macos-14 is Klip's floor (Package.swift: platforms: [.macOS(.v14)]). Building on the oldest
+    # supported OS is the only way CI catches an API that quietly needs a newer SDK.
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select toolchain
+        id: toolchain
+        # Tests/KlipTests imports Testing (swift-testing), which arrived with the Swift 6 tools —
+        # an image whose default is still an Xcode 15 would fail to compile the test target.
+        # Stable versions only: a beta sorts highest and would make the toolchain drift silently.
+        run: |
+          latest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -E '/Xcode_[0-9.]+\.app$' | sort -V | tail -1 || true)
+          if [ -n "$latest" ]; then sudo xcode-select -s "$latest"; fi
+          echo "id=$(basename "${latest:-default}" .app)" >> "$GITHUB_OUTPUT"
+          swift --version
+
+      - name: Cache SwiftPM
+        # WhisperKit and its transitive deps (swift-transformers, swift-crypto, …) dominate the
+        # ~114 s cold build. Keyed by Package.resolved, and by toolchain because artifacts compiled
+        # by another Swift version are not reusable.
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ steps.toolchain.outputs.id }}-
+
+      - name: Build release and assemble Klip.app
+        # build.sh, not `swift build -c release`: the bundle assembly (Info.plist, icon, sounds,
+        # ad-hoc signing) is part of what a contributor runs, so it is part of what can break.
+        run: ./build.sh
+
+      - name: Test
+        # test.sh's Command-Line-Tools shim looks for Testing.framework under
+        # $(xcode-select -p)/Library/Developer/Frameworks — a path that exists in the CLT layout
+        # only (Xcode keeps it under Platforms/MacOSX.platform/…). On a runner the check misses and
+        # the script execs plain `swift test`, which is what we want. Never set DEVELOPER_DIR here:
+        # that is a local workaround for an Xcode with an unaccepted licence and would send the
+        # shim at the wrong toolchain.
+        run: ./test.sh

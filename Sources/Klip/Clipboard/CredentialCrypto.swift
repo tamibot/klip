@@ -49,6 +49,13 @@ enum CredentialCrypto {
             // WEDGES the whole app before it ever runs (no menu bar, no poll, no capture). Fail fast instead:
             // open() then returns nil, the sealed token is preserved, and decrypt resumes once a trusting
             // identity is back (a stable signing cert).
+            // ponytail: pinned to the deprecated flag on purpose — it is the one remaining build
+            // warning. The modern form is an LAContext with interactionNotAllowed passed as
+            // kSecUseAuthenticationContext, and it is almost certainly equivalent. "Almost" is the
+            // problem: if it is not, the failure is this read blocking on a modal during launch,
+            // which is invisible in a test and looks to the user like Klip never started. Migrate
+            // when someone can reproduce the untrusted-ACL case (re-sign with a different identity,
+            // relaunch, confirm open() still returns nil promptly) — not before.
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
         var out: CFTypeRef?

@@ -1,15 +1,11 @@
 #!/bin/bash
 # Local deploy: build, sign with a STABLE identity (so macOS remembers the
 # microphone/accessibility permissions across updates), install and relaunch.
+#
+# macOS version and Swift toolchain are checked by build.sh's preflight (step 1), before anything
+# slow runs — it owns those checks so they aren't stated twice. Nothing below needs a toolchain:
+# codesign/security/xattr/defaults are plain /usr/bin tools.
 set -euo pipefail
-
-# Prefer the Command Line Tools when a freshly-installed Xcode has an unaccepted license — that
-# state makes every swift/xcrun call fail with "You have not agreed to the Xcode license
-# agreements", which looks like a broken build. Only used if the CLT are actually present.
-if [ -z "${DEVELOPER_DIR:-}" ] && ! /usr/bin/xcrun --find swift >/dev/null 2>&1 \
-   && [ -d /Library/Developer/CommandLineTools ]; then
-    export DEVELOPER_DIR=/Library/Developer/CommandLineTools
-fi
 
 cd "$(dirname "$0")"
 
@@ -56,7 +52,7 @@ EOF
     rm -rf "$tmp"; return 1
 }
 
-echo "==> 1) Building the .app (release)…"
+echo "==> 1) Preflight + building the .app (release)…"
 ./build.sh release
 
 echo "==> 2) Closing previous instances (if any)…"
@@ -98,20 +94,39 @@ else
     echo "  (stable signature '$SIGN_ID': the microphone permission is remembered across updates)"
 fi
 
-# Local default language (UI + audio transcription). Only on a FRESH install (respects a later choice).
-# Override with KLIP_DEFAULT_LANG=en ./install.sh
-KLIP_LANG="${KLIP_DEFAULT_LANG:-es}"
+# Default language on a FRESH install only (a later choice in Preferences always wins).
+# Follows the Mac's own language when Klip speaks it, else English — the app's registered default.
+# It used to hard-code Spanish, which meant anyone cloning this repo got a Spanish interface with no
+# explanation, in a project whose UI base language is English.
+# Override with KLIP_DEFAULT_LANG=xx ./install.sh
+if [ -n "${KLIP_DEFAULT_LANG:-}" ]; then
+    KLIP_LANG="$KLIP_DEFAULT_LANG"
+else
+    SYS_LANG="$(defaults read -g AppleLocale 2>/dev/null | cut -d_ -f1 | cut -d- -f1)"
+    case "$SYS_LANG" in
+        en|es|fr|de|it|pt|zh|ja) KLIP_LANG="$SYS_LANG" ;;   # keep in sync with L10n.supported
+        *)                       KLIP_LANG="en" ;;
+    esac
+fi
 defaults read com.proper.klip uiLanguage            >/dev/null 2>&1 || defaults write com.proper.klip uiLanguage            -string "$KLIP_LANG"
 defaults read com.proper.klip transcriptionLanguage >/dev/null 2>&1 || defaults write com.proper.klip transcriptionLanguage -string "$KLIP_LANG"
+
+# Drop the build artifact now that the real app lives in /Applications. Leaving it here is a trap:
+# it carries the same bundle id but only an ad-hoc signature, so opening it by accident runs a
+# second, unsigned Klip that macOS reports as damaged — and it holds none of the granted permissions.
+rm -rf "$SRC_BUNDLE"
 
 echo "==> 4) Launching…"
 open "$DEST"
 
 echo ""
 echo "✓ Installed at $DEST"
-echo "  · Default shortcuts:  History ⌥⇧E · Voice ⌥⇧R · Annotate ⌥⇧D · OCR text ⌥⇧F · Upload ⌥⇧O · Record ⌥⇧V · Scroll ⌥⇧S"
+echo "  · Default shortcuts:  History ⌥⇧E · Voice ⌥⇧R · Annotate ⌥⇧D · OCR text ⌥⇧F"
+echo "                        Upload ⌥⇧O · Meeting ⌥⇧M · Record ⌥⇧V · Scroll ⌥⇧S"
 echo "    (the exact ones are shown in the Klip menu and can be changed in Preferences › Shortcuts)"
 echo "  · Launch at login: registered automatically the first time."
 echo "    If Settings › General › Login Items asks for approval, enable it there."
 echo "  · Auto-paste: enable it from the Klip menu → 'Enable auto-paste…'"
 echo "    (grant Accessibility when the system asks)."
+echo "  · Changed your mind? ./uninstall.sh removes the app, the login item and the signing"
+echo "    certificate; it only touches your history if you say yes (--dry-run shows the plan)."

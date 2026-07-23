@@ -70,6 +70,8 @@ Loop closed. Everything you touched is still in the history tomorrow.
 xcode-select --install
 ```
 
+**There is no download link, and that is on purpose.** A prebuilt `.app` handed out on the internet needs Apple Developer ID notarization; without it Gatekeeper quarantines the download and macOS calls Klip damaged or from an unidentified developer. Building it on your own Mac sidesteps that: `install.sh` signs with a certificate it makes locally, and the app simply opens.
+
 ### Quick install
 
 ```bash
@@ -78,11 +80,25 @@ cd klip
 ./install.sh
 ```
 
-That builds Klip, signs it, copies it to `/Applications`, launches it and registers launch-at-login. The icon appears in the menu bar; `⌥⇧E` opens the history.
+That builds Klip, signs it, copies it to `/Applications` and launches it; Klip registers launch-at-login itself on first run. The icon appears in the menu bar; `⌥⇧E` opens the history.
+
+**The first build takes about two minutes and is quiet for most of them.** Swift Package Manager fetches WhisperKit and everything it drags in — eight packages, around 90 MB of source (`WhisperKit`, `swift-transformers`, `swift-jinja`, `swift-crypto`, `swift-asn1`, `swift-collections`, `swift-argument-parser`, `yyjson`) — before a single file compiles, and then compiles in silence. Later builds reuse `.build/` and take seconds. That download is source code, not the speech model: the model arrives the first time you record a voice note.
+
+Klip starts in your Mac's language if it speaks it (English, Spanish, French, German, Italian, Portuguese, Chinese, Japanese), and in English otherwise. `KLIP_DEFAULT_LANG=fr ./install.sh` forces one; so does Preferences › Language, at any point.
 
 > **On the signing certificate.** On first run `install.sh` creates a local signing certificate ("Klip Code Signing") in your Keychain so the signature is stable. That is what makes macOS remember the microphone, screen-recording and accessibility permissions across updates instead of re-prompting on every reinstall. Local and reversible: delete it from Keychain Access.
 
-macOS may ask you to approve the login item in Settings › General. For auto-paste, grant Accessibility when prompted (Klip menu → "Enable auto-paste…"). The first `⌥⇧D` asks for Screen Recording.
+### Permissions
+
+Klip asks for three. The first-run window offers all three up front; skip them there and the feature that needs one asks when you first use it. Nothing is captured until you press a shortcut.
+
+| Permission | What needs it | If you say no |
+|---|---|---|
+| **Screen Recording** | `⌥⇧D` annotate · `⌥⇧F` OCR · `⌥⇧S` scrolling capture · `⌥⇧V` screen recording · the system-audio half of `⌥⇧M` meetings | Those five stop with a pointer to System Settings. Clipboard history and voice notes carry on. |
+| **Accessibility** | Auto-paste (`Enter` pasting into the app you came from) and the *automatic* scrolling in `⌥⇧S` | The clip is still copied and focus still returns — you press `⌘V`. Scrolling capture falls back to stitching while *you* scroll, so it still hands you an image. |
+| **Microphone** | `⌥⇧R` voice notes and `⌥⇧M` meetings | Neither can start. Nothing else changes. |
+
+Screen Recording is the one macOS only honours after Klip is reopened. Accessibility is never requested behind your back — it comes from the Klip menu → "Enable auto-paste…" or from Preferences › General. macOS may also ask you to approve the login item in Settings › General › Login Items.
 
 ### Build without installing
 
@@ -90,6 +106,20 @@ macOS may ask you to approve the login item in Settings › General. For auto-pa
 ./build.sh
 open Klip.app
 ```
+
+### Uninstall
+
+```bash
+./uninstall.sh              # asks before each step
+./uninstall.sh --dry-run    # prints the plan, changes nothing
+```
+
+It quits Klip, removes `/Applications/Klip.app` — which takes the launch-at-login registration with it — and deletes the "Klip Code Signing" certificate from your login keychain. Then it asks *separately* about your data: `~/Library/Application Support/Klip`, the `com.proper.klip` preferences and the credential encryption key in the Keychain, telling you how many images, voice notes and recordings that is before you answer. The default is no. `--keep-data` leaves all of it alone; `--yes` removes everything, data included, without asking.
+
+Two things no script may touch, both printed again when it finishes:
+
+- **The permissions.** Remove Klip by hand in System Settings › Privacy & Security under Microphone, Screen Recording ("Screen & System Audio Recording" on macOS 15+) and Accessibility — and in General › Login Items & Extensions if it is still listed.
+- **The speech models** in `~/Documents/huggingface/models/argmaxinc/whisperkit-coreml`. That is the shared WhisperKit cache and another app may be using it, so deleting it is your call.
 
 ### Development
 
@@ -212,7 +242,7 @@ Good places to start:
 - **A "copy for X" formatter.** `Markdownify.swift` already turns a clip into WhatsApp or email shapes; another target is one function plus a menu entry.
 - **A language pass.** `L10n.swift` holds eight tables. They must stay key-complete with each other and duplicate-free — a duplicate key in a dict literal traps at *launch*, not at compile time.
 
-It builds with just the Command Line Tools (`swift build`), so there is nothing to set up. Code and comments are in English. Run the tests with `./test.sh`.
+It builds with just the Command Line Tools (`swift build`), so there is nothing to set up. Code and comments are in English. Run the tests with `./test.sh`; every push and pull request runs `./build.sh` and `./test.sh` on macOS 14 — results in the repo's [Actions tab](https://github.com/tamibot/klip/actions).
 
 > **Anyone touching panel or window material should read `DESIGN.md` first** — the glass breaks in ways that fail silently.
 
