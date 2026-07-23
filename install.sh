@@ -111,10 +111,12 @@ fi
 defaults read com.proper.klip uiLanguage            >/dev/null 2>&1 || defaults write com.proper.klip uiLanguage            -string "$KLIP_LANG"
 defaults read com.proper.klip transcriptionLanguage >/dev/null 2>&1 || defaults write com.proper.klip transcriptionLanguage -string "$KLIP_LANG"
 
-# Drop the build artifact now that the real app lives in /Applications. Leaving it here is a trap:
+# Drop the build artifacts now that the real app lives in /Applications. Leaving one here is a trap:
 # it carries the same bundle id but only an ad-hoc signature, so opening it by accident runs a
 # second, unsigned Klip that macOS reports as damaged — and it holds none of the granted permissions.
-rm -rf "$SRC_BUNDLE"
+# The glob matters: Finder and sync clients name their copies "Klip 2.app", "Klip 3.app"… and those
+# survived every install back when only the exact name was removed.
+rm -rf "$SRC_BUNDLE" "$APP_NAME "*.app
 
 echo "==> 4) Launching…"
 open "$DEST"

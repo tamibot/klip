@@ -2,11 +2,13 @@
   <title>Klip</title>
   <!-- The app icon, cropped to the tile so it fills a README header at 80px.
        Same geometry as Resources/AppIcon.svg — keep the two in step.
-       A tile-less version was tried and dropped: subtracting the notch from a
-       single-colour glyph leaves pointed shoulders that read as a bag, not a
-       clipboard. The white-on-blue glyph survives down to 16px. -->
-  <rect x="100" y="100" width="824" height="824" rx="184" ry="184" fill="#5B6BF0"/>
-  <rect x="292" y="284" width="440" height="516" rx="88" fill="#ffffff"/>
-  <rect x="364" y="176" width="296" height="196" rx="98" fill="#5B6BF0"/>
-  <rect x="412" y="224" width="200" height="100" rx="50" fill="#ffffff"/>
+       The tile is separated from the page by its FILL, not by the hairline: a 10px stroke on a
+       1024 grid is a sixth of a pixel at 16px, so a near-white tile lost its silhouette on a white
+       background. The light fill survives any downscale, and still reads on GitHub's dark theme. -->
+  <rect x="100" y="100" width="824" height="824" rx="184" ry="184" fill="#EFF1F7"/>
+  <rect x="105" y="105" width="814" height="814" rx="179" ry="179"
+        fill="none" stroke="#D0D4E4" stroke-width="10"/>
+  <rect x="292" y="284" width="440" height="516" rx="88" fill="#5B6BF0"/>
+  <rect x="364" y="176" width="296" height="196" rx="98" fill="#EFF1F7"/>
+  <rect x="412" y="224" width="200" height="100" rx="50" fill="#5B6BF0"/>
 </svg>

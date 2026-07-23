@@ -129,6 +129,14 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
     /// on retina — reuses the same pixelDimensions logic as the history dimension badge).
     private let imagePixelSize: NSSize
 
+    /// Tool the editor opens with: the last one used, or the PENCIL on a fresh install — freehand is what
+    /// you reach for to circle or scribble on a screenshot. Read twice (once to size the window for the
+    /// tool's contextual controls, once to actually select it), so it lives in ONE place: if the two ever
+    /// disagreed the window would size for one tool and open with another.
+    private static var restoredTool: SnapTool {
+        SnapTool(rawValue: UserDefaults.standard.string(forKey: "klip.editor.tool") ?? "") ?? .pencil
+    }
+
     init(image: NSImage, onFinish: @escaping (NSImage?) -> Void) {
         self.canvas = AnnotationCanvasView(image: image)
         self.onFinish = onFinish
@@ -148,7 +156,7 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         // visible AT ONCE, inflating every window by two unused groups' width — the "dead gray
         // surround around the capture" complaint. Measure the base and each group alone, then size
         // for the tool the editor will actually open with.
-        let restoredTool = SnapTool(rawValue: UserDefaults.standard.string(forKey: "klip.editor.tool") ?? "") ?? .arrow
+        let restoredTool = Self.restoredTool
         setInfoHidden(true)
         func fitting() -> CGFloat { toolbar.layoutSubtreeIfNeeded(); return toolbar.fittingSize.width }
         setContextualVisible(stroke: false, blur: false, text: false)
@@ -245,13 +253,13 @@ final class SnapEditorController: NSObject, NSWindowDelegate {
         if !reduceMotion {
             Motion.run(Motion.appear) { _ in win.animator().alphaValue = 1 }
         }
-        // Restore last-used tool state across editor sessions (defaults: 3pt stroke, arrow, swatch 0).
+        // Restore last-used tool state across editor sessions (defaults: 3pt stroke, pencil, swatch 0).
         let defaults = UserDefaults.standard
         let storedWidth = defaults.double(forKey: "klip.editor.lineWidth")
         canvas.currentLineWidth = storedWidth > 0 ? CGFloat(storedWidth) : 3
         strokeControl?.selectedSegment = canvas.currentLineWidth >= 6 ? 1 : 0
         colorIndex = max(0, defaults.integer(forKey: "klip.editor.colorIndex"))
-        selectTool(SnapTool(rawValue: defaults.string(forKey: "klip.editor.tool") ?? "") ?? .arrow)
+        selectTool(Self.restoredTool)
         canvas.setDefaultColor(palette[min(colorIndex, palette.count - 1)])
         refreshColorSwatches()
         // When the selection changes, reflect its color in the palette and swap the contextual

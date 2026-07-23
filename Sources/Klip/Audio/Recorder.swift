@@ -39,6 +39,12 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     /// session (the one-time ~20 s Neural Engine warm-up). Lets the UI say "Preparing model…"
     /// so the first note doesn't look stuck on a plain "Transcribing…" spinner.
     @Published private(set) var preparingModel = false
+    /// Non-nil while the on-device model's weights are still being DOWNLOADED (a one-time,
+    /// hundreds-of-MB fetch) — the value is the model's human size, e.g. "~480 MB", or "" if unknown.
+    /// Distinct from `preparingModel`: that one is the ~20 s Core ML warm-up AFTER the files are on disk.
+    /// Without this the first upload showed "Preparing model… (~20 s)" for several minutes of downloading,
+    /// which is exactly what made it look hung.
+    @Published private(set) var downloadingModel: String?
     /// Transcriptions of files dropped/picked in the Upload window, newest first — so the
     /// result shows up right there when done (not just in the history). Capped; cleared when a new upload session opens.
     @Published private(set) var uploadResults: [UploadTranscription] = []
@@ -63,6 +69,10 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     /// An upload classified as video turned out to be pure audio (audio-only .mp4, etc.): its audio was stored, so
     /// attach it to the note so playback/retry keep working (real videos are intentionally not stored).
     var onVoiceNoteAudioStored: ((UUID, String) -> Void)?
+
+    /// Notes whose transcription is still running. The download watcher only relabels rows from this set:
+    /// relabeling a note that already finished would blank the transcription it holds.
+    private var inFlight: Set<UUID> = []
 
     // Silence detection (0.1 s timer): warns at 2 min, stops at 3 min.
     private var silentTicks = 0
@@ -278,6 +288,56 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     /// Clears the Upload window's results list (called when a new upload session opens, see PanelController).
     @MainActor func clearUploadResults() { uploadResults.removeAll() }
 
+    // MARK: - "The model isn't ready yet" feedback
+
+    /// Human download size of an on-device model, read out of LocalTranscriber's own table
+    /// ("~480 MB · balanced (recommended)" → "~480 MB"). Digits + MB/GB are language-neutral, so it needs
+    /// no localization. "" for a model that isn't in the table — the UI then drops the size instead of
+    /// promising a number we don't have.
+    nonisolated static func modelSize(_ model: String) -> String {
+        let id = model.isEmpty ? LocalTranscriber.defaultModel : model
+        guard let note = LocalTranscriber.models.first(where: { $0.id == id })?.note,
+              let size = note.split(separator: "·").first else { return "" }
+        return size.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Announces the two one-time waits the user must be able to tell apart (and from a hang) before a
+    /// transcription can even start: DOWNLOADING the weights, then WARMING UP Core ML. Shared by the
+    /// voice-note/upload path and the meeting path — both used to duplicate this, and only the second
+    /// one ever reached the Upload window.
+    @MainActor
+    private func startModelFeedback(model: String, id: UUID?) {
+        if let id { inFlight.insert(id) }
+        if !LocalTranscriber.isModelReady(model) {
+            if let id { onVoiceNoteDownloadingModel?(id) }
+            watchModelDownload(model: model)
+        }
+        if !LocalTranscriber.pipelineReady { preparingModel = true }
+    }
+
+    /// Polls for the weights landing on disk. WhisperKit downloads the model inside its own initializer
+    /// and exposes no progress callback there, so the files appearing is the only HONEST "it finished"
+    /// signal available — hence a 1 Hz existence check rather than an invented percentage. Without it the
+    /// UI would keep saying "Downloading…" for the whole job. One watcher is enough: all transcriptions
+    /// share one model.
+    /// ponytail: polling, not progress — swap for a real callback if WhisperKit ever exposes one on init.
+    @MainActor
+    private func watchModelDownload(model: String) {
+        guard downloadingModel == nil else { return }
+        downloadingModel = Self.modelSize(model)
+        Task { @MainActor in
+            while transcribingCount > 0, !LocalTranscriber.isModelReady(model) {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            downloadingModel = nil
+            guard LocalTranscriber.isModelReady(model) else { return }   // every job ended before it landed
+            // The history rows stuck on "Downloading model…" move on to "Transcribing…". `false` keeps the
+            // pasteboard guard registered when the note was created (re-arming it here would let a
+            // background transcription clobber something the user copied during the download).
+            for id in inFlight { onVoiceNoteRetrying?(id, false) }
+        }
+    }
+
     private func fillUploadResult(_ id: UUID, text: String?, failed: Bool, errorKey: String? = nil) {
         guard let i = uploadResults.firstIndex(where: { $0.id == id }) else { return }   // not an upload: no-op
         uploadResults[i].text = text
@@ -337,12 +397,13 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         let model = Settings.shared.localModel
         let language = Settings.shared.transcriptionLanguage
         let vocabulary = Settings.shared.transcriptionVocabulary
-        if !LocalTranscriber.isModelReady(model) { onVoiceNoteDownloadingModel?(itemID) }
-        if !LocalTranscriber.pipelineReady { preparingModel = true }
+        startModelFeedback(model: model, id: itemID)
         Task { @MainActor in
             defer {
                 transcribingCount -= 1
+                inFlight.remove(itemID)
                 if transcribingCount == 0 || LocalTranscriber.pipelineReady { preparingModel = false }
+                if transcribingCount == 0 { downloadingModel = nil }
                 deleteTemps()
             }
             // Each track is best-effort: a dead system capture must not kill the whole meeting note.
@@ -421,15 +482,18 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         let model = Settings.shared.localModel
         let language = languageOverride ?? Settings.shared.transcriptionLanguage   // the per-upload override wins
         let vocabulary = Settings.shared.transcriptionVocabulary
-        // First on-device use downloads the model: show "Downloading model…" so it doesn't look stuck.
-        if !LocalTranscriber.isModelReady(model), let id { onVoiceNoteDownloadingModel?(id) }
-        // The session's first on-device transcription pays a one-time Core ML / Neural Engine
-        // warm-up (~20 s, then cached): surface it as "Preparing model…" instead of a plain "Transcribing…" spinner.
-        if !LocalTranscriber.pipelineReady { preparingModel = true }
+        // First on-device use downloads the model and then warms Core ML up: name both waits so a
+        // multi-minute first run doesn't look stuck (see startModelFeedback).
+        startModelFeedback(model: model, id: id)
         Task { @MainActor in
             // Clear "Preparing…" when the counter empties OR the pipeline is already warm (an overlapping
             // transcription is then actually transcribing, not preparing).
-            defer { transcribingCount -= 1; if transcribingCount == 0 || LocalTranscriber.pipelineReady { preparingModel = false } }
+            defer {
+                transcribingCount -= 1
+                if let id { inFlight.remove(id) }
+                if transcribingCount == 0 || LocalTranscriber.pipelineReady { preparingModel = false }
+                if transcribingCount == 0 { downloadingModel = nil }
+            }
             do {
                 // VIDEO NORMALIZATION: WhisperKit/AVAudioFile can't decode video containers, so
                 // first demux the audio track to a temp 16 kHz mono AAC .m4a. Only runs for

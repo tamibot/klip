@@ -47,13 +47,10 @@ struct UploadView: View {
                 if recorder.transcribingCount > 0 {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
-                        Text(recorder.extractingCount > 0
-                             ? L10n.t("upload.extracting")
-                             : recorder.preparingModel
-                               ? L10n.t("upload.preparing")
-                               : String(format: L10n.t(recorder.transcribingCount == 1 ? "upload.transcribing.one" : "upload.transcribing.many"), recorder.transcribingCount))
+                        Text(statusText).multilineTextAlignment(.leading)
                     }
                     .font(.system(size: 13, weight: .medium)).monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)   // the download line wraps instead of truncating
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(Capsule().fill(Color.accentColor.opacity(0.14)))
                 }
@@ -69,6 +66,24 @@ struct UploadView: View {
         .animation(.easeOut(duration: 0.2), value: recorder.uploadResults)
         // Each fresh upload session (results cleared by uploadAudio) starts back at the global language.
         .onChange(of: recorder.uploadResults.isEmpty) { _, empty in if empty { languageOverride = nil } }
+    }
+
+    /// What the progress pill says, in the order the waits actually happen: extracting a video's audio →
+    /// downloading the one-time model → warming Core ML up → transcribing. The download used to be
+    /// reported as "Preparing model… (first time only, ~20 s)", so a first upload spent several minutes
+    /// pulling hundreds of MB while the window claimed 20 seconds — that is what looked like a hang.
+    private var statusText: String {
+        if recorder.extractingCount > 0 { return L10n.t("upload.extracting") }
+        if let size = recorder.downloadingModel {
+            // Same wording as the history row (one string, eight languages, already written) plus the
+            // model's size: on a first run that is hundreds of MB, and a number is the difference between
+            // "it's working" and "it's frozen". Unknown size → no number rather than a made-up one.
+            return L10n.t("voice.downloading") + (size.isEmpty ? "" : " · " + size)
+        }
+        if recorder.preparingModel { return L10n.t("upload.preparing") }
+        return String(format: L10n.t(recorder.transcribingCount == 1 ? "upload.transcribing.one"
+                                                                     : "upload.transcribing.many"),
+                      recorder.transcribingCount)
     }
 
     /// The transcriptions of the just-uploaded files, filled in live as each one finishes.

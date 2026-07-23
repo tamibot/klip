@@ -262,7 +262,11 @@ final class Settings: ObservableObject {
     private init() {
         Settings.migrateLegacyDefaultsIfNeeded()
         d.register(defaults: [
-            K.maxItems: 200,
+            // Registration domain only: init assigns `maxItems` WITHOUT firing didSet (Swift skips property
+            // observers during initialization), so nothing is written to the persistent domain until the user
+            // moves the stepper. Raising this therefore reaches everyone who never chose a value — including
+            // existing installs — while a deliberate 200 stays 200 (it lives in the persistent domain).
+            K.maxItems: 500,
             K.keyCode: Int(kVK_ANSI_E),
             K.mods: Int(optionKey | shiftKey),
             K.autoPaste: true,
@@ -366,6 +370,17 @@ final class Settings: ObservableObject {
             if uploadCombo == KeyCombo.prevShiftUpload { uploadCombo = KeyCombo.defaultUploadCombo }     // ⌥⇧G → ⌥⇧O
             if textCaptureCombo == KeyCombo.prevShiftText { textCaptureCombo = KeyCombo.defaultTextCaptureCombo } // ⌥⇧E → ⌥⇧F
             d.set(true, forKey: migHotkeysV5)
+        }
+
+        // The annotation editor's default tool changed from arrow to pencil. It persists the tool on
+        // EVERY open, so the old default had already written "arrow" for anyone who opened the editor
+        // once — indistinguishable from a deliberate choice, and it would pin them to the old default
+        // forever. Clear that one value so the new default applies; any other stored tool is a real
+        // preference and is left alone.
+        let migEditorTool = "migratedEditorToolV2"
+        if !d.bool(forKey: migEditorTool) {
+            if d.string(forKey: "klip.editor.tool") == "arrow" { d.removeObject(forKey: "klip.editor.tool") }
+            d.set(true, forKey: migEditorTool)
         }
     }
 
