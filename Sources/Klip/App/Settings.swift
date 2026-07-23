@@ -413,8 +413,13 @@ final class Settings: ObservableObject {
         guard !std.bool(forKey: migratedDomainKey) else { return }
         defer { std.set(true, forKey: migratedDomainKey) }
         guard let old = UserDefaults(suiteName: "com.proper.klip") else { return }
+        // NOT didAutoEnableLogin. SMAppService registers by bundle id, so the launch-at-login entry
+        // the old domain remembers still points at com.proper.klip and no longer matches this app —
+        // carrying the flag across told Klip "already registered" and left it never starting at
+        // login again. Leaving it unset makes registerLoginItemOnce() re-register under the new id.
+        let doNotCarry: Set<String> = ["didAutoEnableLogin"]
         for (key, value) in old.persistentDomain(forName: "com.proper.klip") ?? [:]
-        where std.object(forKey: key) == nil {
+        where std.object(forKey: key) == nil && !doNotCarry.contains(key) {
             std.set(value, forKey: key)
         }
     }
