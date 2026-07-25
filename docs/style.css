@@ -360,9 +360,12 @@ section{ padding:58px 0 }
 .feat:hover{ transform:translateY(-4px) }
 .feat .picto{ margin-bottom:14px; color:var(--ink) }
 .feat .picto svg{ width:104px; height:80px; display:block }
-.feat .picto .n{ stroke:currentColor; opacity:.52 }      /* neutral tone: the canvas.
-   .52, not .45: at .45 the composited stroke is 2.84:1 on the light card, under the
-   3:1 floor for non-text graphics (WCAG 1.4.11). .52 = 3.46 light / 4.43 dark. */
+.feat .picto .n{ stroke:currentColor; stroke-width:3.6; opacity:.56 }
+   /* neutral tone: the stage, not the actor. 3.6 against the accent's 4.5 so the eye
+      lands on the accent first; opacity .52 → .56 pays back the contrast the thinner
+      stroke costs. Measured off the rendered card: 3.87:1 light / 5.08:1 dark, both
+      clear of the 3:1 floor for non-text graphics (WCAG 1.4.11), and on light the
+      neutral now sits *under* the accent's 4.22:1 — hierarchy, not just taste. */
 .feat .picto .a{ stroke:var(--accent) }                  /* brand tone: the action */
 .feat .picto .af{ fill:var(--accent); stroke:none }
 .feat .picto.voice .a{ stroke:var(--voice) }             /* purple = voice only */
