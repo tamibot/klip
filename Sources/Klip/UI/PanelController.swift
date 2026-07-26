@@ -580,10 +580,20 @@ final class PanelController: NSObject, NSWindowDelegate {
         previousApp?.activate()   // transcription runs in the background; we only restore focus
     }
 
-    /// First-run onboarding window. Shown once; "Get started" sets the flag and closes it.
+    /// Onboarding AND the permanent setup surface (menu → "Setup & permissions…"), so it is reopened,
+    /// not just shown once. The window is cached, which means the SwiftUI view keeps the permission
+    /// state it last read: reopening re-reads it because makeKeyAndOrderFront below posts
+    /// didBecomeKeyNotification on a window that was ordered out, and WelcomeView refreshes on that.
+    /// ponytail: the one case it misses is "already visible AND key" — where the user is looking at a
+    /// state that was current when it became key. Add a poll if that ever matters.
     func showWelcome() {
         if welcomeWindow == nil {
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 580),
+            // WIDTH MUST MATCH WelcomeView's own .frame(width:). It used to be 440 against a view
+            // that asks for 540, and the two never settled: the hosting view re-proposed its width
+            // every layout pass, so AppKit hit "more Update Constraints passes than there are views"
+            // and aborted — killing the app the moment this window was presented, which on a fresh
+            // install is during launch. GuideView works precisely because its frame matches its window.
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: WelcomeView.width, height: WelcomeView.height),
                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
             w.title = L10n.t("win.welcome")
             w.isReleasedWhenClosed = false
@@ -594,11 +604,6 @@ final class PanelController: NSObject, NSWindowDelegate {
                 // Hand the user straight to the panel under the status item (its first-run empty state).
                 self?.show()
             }), in: w)
-            // The content is width-fixed and grows to fit its (localized) text: take the height from
-            // the hosting view, never a literal — a short rect lays the logo/primary button off-window.
-            if let fitting = w.contentView?.fittingSize, fitting.width > 0, fitting.height > 0 {
-                w.setContentSize(fitting)
-            }
             w.center()
             welcomeWindow = w
         }

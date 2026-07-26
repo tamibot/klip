@@ -107,6 +107,22 @@ Screen Recording is the one macOS only honours after Klip is reopened. Accessibi
 open Klip.app
 ```
 
+### Check the install
+
+`install.sh` does not end with advice. Once Klip is launched it reports what is actually true on your Mac — signature verified, which of the three permissions are recorded as granted, stray `Klip*.app` copies, a login item left behind by the old bundle id — and lists only what still needs you, with the exact place to do it.
+
+The same check runs on its own, any time Klip misbehaves:
+
+```bash
+./doctor.sh
+```
+
+It adds the rest of the picture: is Klip running, is the installed binary older than `Sources/`, how big the data folder is, and recent crash reports **with the termination reason printed** — the line that says `CODESIGNING — Launch Constraint Violation` when macOS killed Klip over its signature, instead of leaving you to guess why the app vanished. It ends with a plain verdict and one next step per problem.
+
+`doctor.sh` is read-only: no deletes, no `defaults write`, no `tccutil`, no `sudo`. It never removes the stale login item either — that record belongs to the old bundle id, so it is reported and you remove it by hand in System Settings › General › Login Items & Extensions. It also runs when the Swift toolchain is broken, since that is one of the things it diagnoses.
+
+Permissions are read from macOS's own record, which needs Full Disk Access for your terminal. Without it `doctor.sh` says `unknown — check in the app` rather than guessing.
+
 ### Uninstall
 
 ```bash

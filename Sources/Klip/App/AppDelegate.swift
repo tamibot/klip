@@ -91,9 +91,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var meetingHUD: NSPanel?
     private var prefsController: PreferencesWindowController?
     private var launchItem: NSMenuItem?
+    /// The "something is missing" line and its separator. Kept as references because the status menu
+    /// is NOT rebuilt when it opens (menuNeedsUpdate only patches items) — see refreshPermissionWarning().
+    private var permWarningItem: NSMenuItem?
+    private var permWarningSeparator: NSMenuItem?
     private var cancellables = Set<AnyCancellable>()
 
+    /// Screen Recording is only honoured by a process that already had it when it started: granting it
+    /// later flips CGPreflightScreenCaptureAccess to true while the running app still captures nothing.
+    /// Snapshotted at launch so the setup window can say "restart" instead of claiming success.
+    static let screenPermissionAtLaunch = ScreenCapturer.hasPermission()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        _ = Self.screenPermissionAtLaunch   // force the snapshot now, not on first use
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             let cfg = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
@@ -344,8 +354,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
+    /// Names the permissions that are missing RIGHT NOW. Microphone is deliberately absent: the voice
+    /// flow raises the system prompt itself at the point of use, so it can't be lost silently.
+    private func missingPermissionNames() -> [String] {
+        [ScreenCapturer.hasPermission() ? nil : L10n.t("perm.name.screen"),
+         Paster.hasAccessibilityPermission ? nil : L10n.t("perm.name.ax")].compactMap { $0 }
+    }
+
+    /// Shows/hides the warning line. Called from buildMenu() AND from menuNeedsUpdate(), because the
+    /// status menu is built once and only patched on open — a permission revoked while Klip runs would
+    /// otherwise stay invisible until something else triggered a rebuild.
+    private func refreshPermissionWarning() {
+        let missing = missingPermissionNames()
+        permWarningItem?.isHidden = missing.isEmpty
+        permWarningSeparator?.isHidden = missing.isEmpty
+        guard !missing.isEmpty else { return }
+        permWarningItem?.title = String(format: L10n.t("menu.permsMissing"),
+                                        missing.joined(separator: ", "))
+    }
+
     private func buildMenu() {
         let menu = NSMenu()
+        // First line of the menu when (and only when) something is missing: the user should never have
+        // to press a shortcut to find out a permission is gone.
+        let warn = menu.addItem(withTitle: "", action: #selector(showSetup), keyEquivalent: "")
+        // Not a template image: the colour is the signal. Hierarchical keeps it a native menu glyph.
+        warn.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(hierarchicalColor: .systemOrange))
+        permWarningItem = warn
+        let warnSep = NSMenuItem.separator()
+        menu.addItem(warnSep)
+        permWarningSeparator = warnSep
+        refreshPermissionWarning()
         addShortcutItem(menu, title: L10n.t("menu.show"), action: #selector(showPanel),
                         combo: Settings.shared.combo)
         addShortcutItem(menu, title: L10n.t("rec.record"), action: #selector(startVoice),
@@ -384,6 +424,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         let prefs = menu.addItem(withTitle: L10n.t("menu.prefs"), action: #selector(openPreferences), keyEquivalent: ",")
         prefs.keyEquivalentModifierMask = [.command]
+        // Named for the errand, not for the greeting: someone hunting a broken permission looks for
+        // "permissions", never for "Welcome".
+        menu.addItem(withTitle: L10n.t("menu.setup"), action: #selector(showSetup), keyEquivalent: "")
         let launch = NSMenuItem(title: L10n.t("menu.login"), action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launch.state = LoginItem.shared.isEnabledOrPending ? .on : .off
         menu.addItem(launch); self.launchItem = launch
@@ -644,6 +687,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if menu === statusItem.menu {   // approval can happen in System Settings while we run → reflect it on open
             launchItem?.state = LoginItem.shared.isEnabledOrPending ? .on : .off
             meetingItem?.title = meetingMenuTitle()   // refresh the elapsed mm:ss each time the menu opens
+            refreshPermissionWarning()                // a permission can be revoked while Klip runs
             return
         }
         guard menu === recentsMenu else { return }
@@ -864,6 +908,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func startTextCapture() { snapController.startTextCapture() }
     @objc private func startUpload() { panelController.uploadAudio() }
     @objc private func showGuideMenu() { panelController.showGuide() }
+    /// The one surface that can both report and fix a permission. Reachable forever, not just on first run.
+    @objc private func showSetup() { panelController.showWelcome() }
 
     @objc private func openPreferences() {
         if prefsController == nil {

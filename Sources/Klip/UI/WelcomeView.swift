@@ -6,7 +6,29 @@ import WhisperKit  // WhisperKit.download — the speech-model row's "get it now
 /// First-run onboarding. Explains what Klip does and — importantly for privacy / App Store review —
 /// discloses that it keeps a local clipboard history and never sends anything off the Mac
 /// (voice notes are transcribed on-device). Shown once (Settings.hasSeenWelcome).
+/// Keeps the window a FIXED size and lets long content scroll inside it. The size must never be
+/// derived from the content: a hosting view that reports its ideal height while pinned to the window
+/// makes AppKit's constraint loop diverge (see WelcomeView.height).
+private struct ScrollIfTall: ViewModifier {
+    func body(content: Content) -> some View {
+        ScrollView(.vertical, showsIndicators: false) { content }
+            .frame(width: WelcomeView.width, height: WelcomeView.height)
+            .scrollBounceBehavior(.basedOnSize)
+    }
+}
+
 struct WelcomeView: View {
+    /// The window is built at exactly this size, and the view is pinned to it — no negotiation.
+    /// It used to be width-only plus .fixedSize(vertical:), which asks the hosting view for its
+    /// ideal height while Glass.install has it anchored to the window edges. The window resized to
+    /// fit, the resize invalidated the layout, the layout asked to resize again — and AppKit aborted
+    /// with "more Update Constraints in Window passes than there are views", killing the app every
+    /// time this window was shown. On a fresh install that is during launch. GuideView never had the
+    /// bug because it declares a fixed frame; this now does the same, with a scroll view so a verbose
+    /// translation scrolls instead of clipping. See PanelController.showWelcome().
+    static let width: CGFloat = 540
+    static let height: CGFloat = 760
+
     @ObservedObject var settings = Settings.shared   // re-localize live + show the current shortcuts
     var onStart: () -> Void
 
@@ -63,12 +85,10 @@ struct WelcomeView: View {
                 .font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
         .padding(.horizontal, 24).padding(.vertical, 16)
-        // Width-fixed only: the height is whatever the (localized, wrapping) content needs, and the
-        // window is sized from it. A hardcoded height clips the logo or the primary button.
         // 540, not 440: at 440 the eight shortcuts only fit in one column and the window grew past
         // 900pt — taller than a 13" laptop screen. The extra 100pt buys the second column back.
-        .frame(width: 540)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: Self.width)
+        .modifier(ScrollIfTall())
         .onAppear { rowsVisible = true; refresh() }
         // Re-check when any window becomes key: covers coming back from System Settings.
         // ponytail: app-wide notification, cheap enough — no per-window filter or timer needed.
@@ -93,10 +113,12 @@ struct WelcomeView: View {
                         request: { AVAudioApplication.requestRecordPermission { _ in } },
                         isGranted: { AVAudioApplication.shared.recordPermission == .granted })
                 Divider()
-                // Screen Recording only takes effect for an already-running app after a relaunch,
-                // hence the standing note while it isn't granted yet.
+                // Screen Recording only takes effect for an already-running app after a relaunch, hence
+                // the standing note while it isn't granted yet — and the same note AFTER it's granted
+                // when this process started without it, because "Granted" alone would be a lie here.
                 permRow("rectangle.dashed.badge.record", L10n.t("welcome.perms.screen"), pane: Pane.screen,
                         note: L10n.t("welcome.perms.relaunch"),
+                        grantedNote: AppDelegate.screenPermissionAtLaunch ? nil : L10n.t("welcome.perms.relaunch"),
                         request: { _ = ScreenCapturer.requestPermission() },
                         isGranted: { ScreenCapturer.hasPermission() })
                 Divider()
@@ -140,11 +162,13 @@ struct WelcomeView: View {
     }
 
     private func permRow(_ icon: String, _ name: String, pane: String, note: String? = nil,
+                         grantedNote: String? = nil,
                          request: @escaping () -> Void,
                          isGranted: @escaping () -> Bool) -> some View {
         let ok = granted.contains(pane)
         let sentToSettings = bounced.contains(pane)
-        let notes = ok ? [] : [sentToSettings ? L10n.t("welcome.perms.openSettings") : nil, note].compactMap { $0 }
+        let notes = ok ? [grantedNote].compactMap { $0 }
+                       : [sentToSettings ? L10n.t("welcome.perms.openSettings") : nil, note].compactMap { $0 }
         return statusRow(icon, name, note: notes.isEmpty ? nil : notes.joined(separator: " · ")) {
             if ok {
                 grantedLabel(L10n.t("welcome.perms.granted"))

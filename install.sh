@@ -120,15 +120,20 @@ rm -rf "$SRC_BUNDLE" "$APP_NAME "*.app
 
 echo "==> 4) Launching…"
 open "$DEST"
+perl -e 'select(undef,undef,undef,1.5)'   # let it come up, so the "is it running" check below is real
 
 echo ""
 echo "✓ Installed at $DEST"
 echo "  · Default shortcuts:  History ⌥⇧E · Voice ⌥⇧R · Annotate ⌥⇧D · OCR text ⌥⇧F"
 echo "                        Upload ⌥⇧O · Meeting ⌥⇧M · Record ⌥⇧V · Scroll ⌥⇧S"
 echo "    (the exact ones are shown in the Klip menu and can be changed in Preferences › Shortcuts)"
-echo "  · Launch at login: registered automatically the first time."
-echo "    If Settings › General › Login Items asks for approval, enable it there."
-echo "  · Auto-paste: enable it from the Klip menu → 'Enable auto-paste…'"
-echo "    (grant Accessibility when the system asks)."
+echo "  · Auto-paste stays off until you turn it on in the Klip menu."
 echo "  · Changed your mind? ./uninstall.sh removes the app, the login item and the signing"
 echo "    certificate; it only touches your history if you say yes (--dry-run shows the plan)."
+
+# This used to end with advice — "grant Accessibility when the system asks" — and never checked
+# whether it happened. The user found out features were dead by trying them. doctor.sh does the
+# checking, so the last thing on screen is what is actually true on THIS Mac. It exits 1 when
+# something needs the user, which is not an install failure — hence the `|| true` under `set -e`.
+echo ""
+./doctor.sh --brief || true
