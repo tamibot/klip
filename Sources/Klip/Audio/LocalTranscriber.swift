@@ -18,14 +18,26 @@ actor LocalTranscriber {
     /// otherwise race. Each call chains after the previous one's decode.
     private var serialTail: Task<Void, Never> = Task {}
 
-    /// Friendly model name → WhisperKit model identifier (WhisperKit resolves these against its HF repo).
+    /// Friendly model name → WhisperKit model identifier. Each id is a folder name in the
+    /// argmaxinc/whisperkit-coreml HF repo (WhisperKit globs `*<id>/*` against it), so a typo here is a
+    /// download that 404s on first use. Sizes are the summed blob sizes of that folder — measured, not
+    /// guessed: the old table claimed "~1.5 GB" for large-v3_turbo, which actually pulls 3 GB.
     static let models: [(id: String, label: String, note: String)] = [
         ("tiny",        "Tiny",        "~75 MB · fastest · lowest accuracy"),
         ("base",        "Base",        "~145 MB · faster · decent accuracy"),
-        ("small",       "Small",       "~480 MB · balanced (recommended)"),
-        ("large-v3_turbo", "Large v3 Turbo", "~1.5 GB · slowest · best accuracy"),
+        ("small",       "Small",       "~464 MB · balanced"),
+        ("large-v3-v20240930_turbo_632MB", "Large v3 Turbo (compact)",
+                                       "~616 MB · recommended · near-best accuracy for ~150 MB more than Small"),
+        ("large-v3_turbo", "Large v3 Turbo (full)",
+                                       "~3.0 GB · best accuracy · 5× the download of the compact one"),
     ]
-    static let defaultModel = "base"
+    /// What a FRESH install is seeded with (see Settings.init). Quantized Large v3 Turbo: the accuracy of
+    /// large-v3 on mixed-language speech and proper nouns, at 1/5 the download of the full turbo weights.
+    static let recommendedModel = "large-v3-v20240930_turbo_632MB"
+    /// Stand-in for an empty stored id AND the fallback when the chosen model fails to load/download.
+    /// Deliberately NOT `recommendedModel`: a fallback that itself needs a 616 MB download is no fallback.
+    /// Kept equal to what Settings registers, so existing installs have exactly one answer.
+    static let defaultModel = "small"
 
     /// Loads an ALREADY-DOWNLOADED model into memory so the first voice note is instant. Best-effort, on
     /// launch. It deliberately does NOT trigger a first-use download here — pulling a multi-hundred-MB model
@@ -44,8 +56,12 @@ actor LocalTranscriber {
         guard let base = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
                                                        appropriateFor: nil, create: false) else { return false }
         let dir = base.appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml")
+        // Exact folder name, not a prefix: WhisperKit names the folder "openai_whisper-<id>" verbatim, and a
+        // prefix match makes one variant claim another's download ("large-v3_turbo" would accept the
+        // "…_954MB" folder, "base" the "base.en" one) → "Ready" for a model that isn't there.
+        let folder = "openai_whisper-\(id)"
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir.path),
-              let folder = entries.first(where: { $0.hasPrefix("openai_whisper-\(id)") }) else { return false }
+              entries.contains(folder) else { return false }
         // Require the actual weights: an interrupted download leaves only metadata (generation_config.json).
         let modelDir = dir.appendingPathComponent(folder)
         return ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc"].allSatisfy {
@@ -55,12 +71,17 @@ actor LocalTranscriber {
 
     /// Transcribes an audio file fully on-device. `model` is a WhisperKit model name (see `models`).
     /// `vocabulary` (context words/names) biases recognition via Whisper prompt tokens.
+    /// `strict` forbids the fallback to `defaultModel` when the requested model can't be loaded — set it
+    /// when the CALLER picked the model on purpose and a different one would be worse than an error
+    /// (Recorder.improve overwrites an existing transcript with the result).
     /// Public entry: serializes decodes on the shared pipeline (see `serialTail`).
-    func transcribe(audioURL: URL, model: String, language: String?, vocabulary: String) async throws -> String {
+    func transcribe(audioURL: URL, model: String, language: String?, vocabulary: String,
+                    strict: Bool = false) async throws -> String {
         let previous = serialTail
         let job = Task<String, Error> {
             _ = await previous.value   // wait for any in-flight decode before touching the shared WhisperKit
-            let results = try await self.performTranscribe(audioURL: audioURL, model: model, language: language, vocabulary: vocabulary)
+            let results = try await self.performTranscribe(audioURL: audioURL, model: model, language: language,
+                                                           vocabulary: vocabulary, strict: strict)
             return results.map { $0.text }
                 .joined(separator: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -85,8 +106,8 @@ actor LocalTranscriber {
     }
 
     private func performTranscribe(audioURL: URL, model: String, language: String?, vocabulary: String,
-                                   timestamps: Bool = false) async throws -> [TranscriptionResult] {
-        let wk = try await pipeline(for: model.isEmpty ? Self.defaultModel : model)
+                                   timestamps: Bool = false, strict: Bool = false) async throws -> [TranscriptionResult] {
+        let wk = try await pipeline(for: model.isEmpty ? Self.defaultModel : model, strict: strict)
         var opts = DecodingOptions()
         opts.task = .transcribe
         opts.skipSpecialTokens = true
@@ -120,8 +141,10 @@ actor LocalTranscriber {
     /// failing download on every subsequent transcription.
     private var fallbackFor: [String: String] = [:]
 
-    private func pipeline(for model: String) async throws -> WhisperKit {
-        let effective = fallbackFor[model] ?? model
+    private func pipeline(for model: String, strict: Bool = false) async throws -> WhisperKit {
+        // A remembered fallback is a convenience for the automatic path only: when the caller asked for
+        // THIS model explicitly, honour the request (and fail loudly if it still can't be loaded).
+        let effective = strict ? model : (fallbackFor[model] ?? model)
         if let pipe, loadedModel == effective { return pipe }
         let wk: WhisperKit
         do {
@@ -130,7 +153,9 @@ actor LocalTranscriber {
         } catch {
             // A bad/unavailable model id (or a failed download for that variant) shouldn't break every
             // transcription — fall back to the default model and remember it (no repeated failed downloads).
-            guard effective != Self.defaultModel else { throw error }
+            // Never under `strict`: that caller replaces an existing transcript with the result, so a
+            // silent downgrade to a weaker model would be data loss wearing a success message.
+            guard !strict, effective != Self.defaultModel else { throw error }
             wk = try await WhisperKit(WhisperKitConfig(model: Self.defaultModel))
             loadedModel = Self.defaultModel
             fallbackFor[model] = Self.defaultModel

@@ -14,6 +14,10 @@ struct CaptureSource {
 final class ClipboardManager: ObservableObject {
     @Published private(set) var items: [ClipboardItem] = []
 
+    /// The live instance, so Preferences can read the history without AppDelegate having to thread it
+    /// through the window controller. Weak + read-only: nothing here keeps the manager alive.
+    static private(set) weak var current: ClipboardManager?
+
     private var timer: Timer?
     private var lastChangeCount: Int
     private var maxItems: Int { Settings.shared.maxItems }
@@ -36,6 +40,22 @@ final class ClipboardManager: ObservableObject {
                 referencedImages: Set(items.compactMap { $0.imageFileName }),
                 referencedVideos: Set(items.compactMap { $0.videoFileName }))
         }
+        Self.current = self
+    }
+
+    /// Text of the newest clips, for `VocabularyMiner`. NOT on the launch path — this only runs when the
+    /// user presses "Suggest from my history" in Preferences.
+    /// Credentials are dropped HERE, before the text ever leaves the manager: anything the user flagged
+    /// (or that was auto-detected) as a credential is excluded, and the miner drops the rest.
+    func vocabularySourceTexts() -> [String] {
+        var out: [String] = []
+        out.reserveCapacity(min(items.count, VocabularyMiner.maxClips))
+        for item in items where item.kind == .text && item.isCredential != true {
+            guard let t = item.text, !CredentialCrypto.isSealed(t) else { continue }
+            out.append(String(t.prefix(VocabularyMiner.maxCharsPerClip)))
+            if out.count == VocabularyMiner.maxClips { break }
+        }
+        return out
     }
 
     /// Repairs voice notes stuck at "Transcribing…" (the app quit during transcription):

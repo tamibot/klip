@@ -15,6 +15,11 @@ struct PreferencesView: View {
     @State private var loginError: String?
     @State private var accessibilityGranted = Paster.hasAccessibilityPermission
 
+    /// Words mined from the history, waiting to be picked. nil = the user hasn't asked yet (nothing is
+    /// shown); empty = asked and nothing came back. They are never written into the setting on their own.
+    @State private var vocabSuggestions: [String]?
+    @State private var vocabMining = false
+
     // Dictation/audio languages passed to the transcriber (endonyms). "" = auto-detect.
     private let dictationLanguages = DictationLanguage.all
 
@@ -159,6 +164,7 @@ struct PreferencesView: View {
                                 .fixedSize()
                         }
                     }
+                    vocabSuggestBlock
                 }
             }
 
@@ -207,6 +213,61 @@ struct PreferencesView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)   // let the window's glass material show through
+    }
+
+    /// "Suggest from my history": Klip proposes words mined from what the user already copied, and the
+    /// user taps the ones they want. It never writes into the field by itself — that field is theirs.
+    @ViewBuilder private var vocabSuggestBlock: some View {
+        HStack(spacing: 8) {
+            Button {
+                vocabMining = true
+                let texts = ClipboardManager.current?.vocabularySourceTexts() ?? []
+                let taken = Set(settings.transcriptionVocabulary
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
+                // Off the main actor: bounded, but the credential screen makes this seconds, not
+                // milliseconds, and the window must stay live.
+                Task.detached(priority: .userInitiated) {
+                    let found = VocabularyMiner.suggestions(from: texts).filter { !taken.contains($0.lowercased()) }
+                    await MainActor.run { vocabSuggestions = found; vocabMining = false }
+                }
+            } label: {
+                Label(L10n.t("prefs.vocab.suggest"), systemImage: "wand.and.stars")
+            }
+            .controlSize(.small)
+            .disabled(vocabMining)
+            if vocabMining { ProgressView().controlSize(.small) }
+            Spacer(minLength: 0)
+        }
+
+        if let s = vocabSuggestions {
+            if s.isEmpty {
+                Text(L10n.t("prefs.vocab.suggest.none")).font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text(L10n.t("prefs.vocab.suggest.hint")).font(.caption).foregroundStyle(.secondary)
+                // Rows of three: a real wrapping layout is not worth it for at most 12 short chips.
+                ForEach(stride(from: 0, to: s.count, by: 3).map { Array(s[$0..<min($0 + 3, s.count)]) },
+                        id: \.self) { row in
+                    HStack(spacing: 6) {
+                        ForEach(row, id: \.self) { word in
+                            Button { addVocabWord(word) } label: {
+                                Label(word, systemImage: "plus").labelStyle(.titleAndIcon)
+                            }
+                            .controlSize(.small)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Appends one picked word to the comma-separated field, leaving whatever the user typed intact.
+    private func addVocabWord(_ word: String) {
+        var v = settings.transcriptionVocabulary.trimmingCharacters(in: .whitespacesAndNewlines)
+        while v.hasSuffix(",") { v.removeLast() }
+        settings.transcriptionVocabulary = v.isEmpty ? word : "\(v), \(word)"
+        vocabSuggestions?.removeAll { $0 == word }
     }
 
     /// One shortcut row with a uniform height so all eight rows line up in the grouped Form.

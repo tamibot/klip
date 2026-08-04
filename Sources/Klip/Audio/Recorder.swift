@@ -40,7 +40,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     /// so the first note doesn't look stuck on a plain "Transcribing…" spinner.
     @Published private(set) var preparingModel = false
     /// Non-nil while the on-device model's weights are still being DOWNLOADED (a one-time,
-    /// hundreds-of-MB fetch) — the value is the model's human size, e.g. "~480 MB", or "" if unknown.
+    /// hundreds-of-MB fetch) — the value is the model's human size, e.g. "~616 MB", or "" if unknown.
     /// Distinct from `preparingModel`: that one is the ~20 s Core ML warm-up AFTER the files are on disk.
     /// Without this the first upload showed "Preparing model… (~20 s)" for several minutes of downloading,
     /// which is exactly what made it look hung.
@@ -69,6 +69,13 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     /// An upload classified as video turned out to be pure audio (audio-only .mp4, etc.): its audio was stored, so
     /// attach it to the note so playback/retry keep working (real videos are intentionally not stored).
     var onVoiceNoteAudioStored: ((UUID, String) -> Void)?
+    /// A re-transcription with a better model produced nothing usable (error, empty result, or the model
+    /// never downloaded). The note still holds its ORIGINAL text — the UI only has to say it didn't work.
+    var onVoiceNoteImproveFailed: ((UUID) -> Void)?
+
+    /// Notes being re-transcribed with a better model right now (see `improve`). Unlike a retry, these
+    /// rows keep showing the text they already have, so this set is the only thing marking them busy.
+    @Published private(set) var improving: Set<UUID> = []
 
     /// Notes whose transcription is still running. The download watcher only relabels rows from this set:
     /// relabeling a note that already finished would blank the transcription it holds.
@@ -291,7 +298,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     // MARK: - "The model isn't ready yet" feedback
 
     /// Human download size of an on-device model, read out of LocalTranscriber's own table
-    /// ("~480 MB · balanced (recommended)" → "~480 MB"). Digits + MB/GB are language-neutral, so it needs
+    /// ("~464 MB · balanced" → "~464 MB"). Digits + MB/GB are language-neutral, so it needs
     /// no localization. "" for a model that isn't in the table — the UI then drops the size instead of
     /// promising a number we don't have.
     nonisolated static func modelSize(_ model: String) -> String {
@@ -470,6 +477,92 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
             uploadResults[i].errorKey = "upload.sourceMissing"
             uploadResults[i].audioFileName = nil
             uploadResults[i].sourceURL = nil
+        }
+    }
+
+    // MARK: - Re-transcribe a SUCCEEDED note with a better model
+
+    /// Models more accurate than `current`, worst first. `LocalTranscriber.models` is ordered by accuracy,
+    /// so the better ones are just the tail; each keeps its own `note` ("~616 MB · recommended · …") so the
+    /// menu can show the download size BEFORE the user commits to it. Empty when the note already ran on
+    /// the best model — the UI then offers nothing.
+    /// An unknown id (a model dropped from the table) offers everything: better an honest full list than
+    /// silently refusing to improve a note.
+    nonisolated static func betterModels(than current: String) -> [(id: String, label: String, note: String)] {
+        let id = current.isEmpty ? LocalTranscriber.defaultModel : current
+        guard let i = LocalTranscriber.models.firstIndex(where: { $0.id == id }) else { return LocalTranscriber.models }
+        return Array(LocalTranscriber.models.dropFirst(i + 1))
+    }
+
+    /// True when the text is a MEETING transcript (it opens with a "Me:"/"Them:" speaker label).
+    /// Re-transcribing one is impossible: the Me/Them interleaving comes from the two SEPARATE track
+    /// files, which `transcribeMeetingTracks` deletes when it finishes — only the mixed-down audio
+    /// survives, so a retry would flatten the conversation into one anonymous voice. Refuse instead.
+    /// All eight L10n tables are checked, not just the current UI language: the note may well predate a
+    /// language change, and matching only the current one would let the labels be silently destroyed.
+    nonisolated static func isSpeakerLabeled(_ text: String) -> Bool {
+        let head = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !head.isEmpty else { return false }
+        return L10n.tables.values.contains { table in
+            ["meeting.me", "meeting.them"].contains { key in
+                table[key].map { head.hasPrefix($0 + ":") } ?? false
+            }
+        }
+    }
+
+    /// Whether this item can be re-transcribed with a better model — the single gate for both the menu
+    /// item and the action, so the UI can never offer what `improve` would reject.
+    /// The audio is what makes it possible, and only some notes keep it: a mic recording and an AUDIO
+    /// upload are copied into the store, a real VIDEO upload deliberately is not (`audioFileName == nil`,
+    /// see `transcribeFiles`), and a note trimmed out of the history or pruned after a crash has lost the
+    /// file (`audioExists == false`). A failed note goes through `retry`, not here — there is no text to protect.
+    @MainActor
+    static func canImprove(_ item: ClipboardItem) -> Bool {
+        guard item.isVoiceNote == true, item.transcribing != true,
+              let text = item.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !isSpeakerLabeled(text),
+              let af = item.audioFileName, Storage.shared.audioExists(fileName: af) else { return false }
+        return true
+    }
+
+    /// Re-runs an ALREADY TRANSCRIBED note through `model` (used for THIS run only — the user's default
+    /// in Settings is never written). The note keeps the text it has for the whole run and only a
+    /// non-empty result replaces it, atomically, through the normal `onVoiceNoteTranscribed` path:
+    /// every failure below leaves the note byte-for-byte as it was. Losing a transcript the user already
+    /// has is worse than keeping a mediocre one.
+    @MainActor
+    func improve(itemID: UUID, audioFileName: String, model: String) {
+        guard !improving.contains(itemID) else { return }   // second click while one is running: ignore
+        guard storage.audioExists(fileName: audioFileName) else { onVoiceNoteImproveFailed?(itemID); return }
+        let url = storage.audioURL(for: audioFileName)
+        improving.insert(itemID)
+        transcribingCount += 1
+        let language = Settings.shared.transcriptionLanguage
+        let vocabulary = Settings.shared.transcriptionVocabulary
+        // `id: nil` on purpose: the per-ROW "Downloading model…" label overwrites the row's preview and is
+        // never restored if the run fails. The global `downloadingModel` banner is the non-destructive half
+        // of that same feedback and needs no new mechanism — the picked model may well be a 616 MB fetch.
+        startModelFeedback(model: model, id: nil)
+        Task { @MainActor in
+            defer {
+                improving.remove(itemID)
+                transcribingCount -= 1
+                if transcribingCount == 0 || LocalTranscriber.pipelineReady { preparingModel = false }
+                if transcribingCount == 0 { downloadingModel = nil }
+            }
+            do {
+                // strict: no silent fallback to `defaultModel`. Here that would hand back a transcript from
+                // a WORSE model than the note already had, and we would overwrite good text with it.
+                let text = try await LocalTranscriber.shared.transcribe(audioURL: url, model: model,
+                                                                        language: language, vocabulary: vocabulary,
+                                                                        strict: true)
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { onVoiceNoteImproveFailed?(itemID); return }   // keep the old text
+                onVoiceNoteTranscribed?(itemID, trimmed)
+            } catch {
+                NSLog("Klip: re-transcription with %@ failed — %@", model, String(describing: error))
+                onVoiceNoteImproveFailed?(itemID)   // note untouched, including its preview
+            }
         }
     }
 

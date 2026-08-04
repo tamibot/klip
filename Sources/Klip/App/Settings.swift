@@ -262,6 +262,15 @@ final class Settings: ObservableObject {
     private init() {
         Settings.migratePreviousBundleDomainIfNeeded()   // must precede everything that reads a default
         Settings.migrateLegacyDefaultsIfNeeded()
+        // Fresh installs start on the recommended model; anyone who has already run Klip keeps what they
+        // have. Unlike `maxItems` below this is NOT done through the registration domain: the model is a
+        // several-hundred-MB download, so silently re-pointing existing users at a different one would cost
+        // them a surprise fetch on their next voice note. Must run BEFORE register() (afterwards
+        // object(forKey:) answers from the registration domain and never reads nil), and it WRITES the value
+        // so it survives `hasSeenWelcome` flipping to true.
+        if !d.bool(forKey: "hasSeenWelcome"), d.object(forKey: K.localModel) == nil {
+            d.set(LocalTranscriber.recommendedModel, forKey: K.localModel)
+        }
         d.register(defaults: [
             // Registration domain only: init assigns `maxItems` WITHOUT firing didSet (Swift skips property
             // observers during initialization), so nothing is written to the persistent domain until the user
@@ -281,7 +290,7 @@ final class Settings: ObservableObject {
             K.detectRem: true,
             K.transLang: "",   // auto-detect: forcing a language mistranscribes any other (UI defaults to en, so "es" was wrong on fresh installs; local installs seed their own via install.sh)
             K.transVocab: "",
-            K.localModel: "small",   // best accuracy/speed balance on Apple Silicon (downloads ~480 MB once)
+            K.localModel: LocalTranscriber.defaultModel,   // what every EXISTING install already resolves to
             K.keyCode2: Int(kVK_ANSI_R),
             K.mods2: Int(optionKey | shiftKey),
             K.keyCode3: Int(kVK_ANSI_D),
@@ -313,7 +322,7 @@ final class Settings: ObservableObject {
         detectRemoteSource = d.object(forKey: K.detectRem) as? Bool ?? true
         transcriptionLanguage = d.string(forKey: K.transLang) ?? "es"
         transcriptionVocabulary = d.string(forKey: K.transVocab) ?? ""
-        localModel = d.string(forKey: K.localModel) ?? "small"
+        localModel = d.string(forKey: K.localModel) ?? LocalTranscriber.defaultModel
         voiceCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode2)),
                               carbonModifiers: UInt32(d.integer(forKey: K.mods2)))
         captureCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode3)),

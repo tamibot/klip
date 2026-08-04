@@ -49,6 +49,9 @@ struct GuideView: View {
                     bullet(String(format: L10n.t("guide.howto.paste"), settings.combo.displayString))
                     bullet(L10n.t("guide.howto.creds"))
                     bullet(L10n.t("guide.howto.voice"))
+                    // The one place a user meets the feature before they need it: the guide is opened
+                    // from the panel, Preferences › Voice is not. One sentence, no modal, no nag.
+                    bullet(L10n.t("guide.howto.vocab"))
                 }
             }
             .padding(20)

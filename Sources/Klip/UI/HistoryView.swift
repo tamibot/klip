@@ -48,6 +48,7 @@ struct HistoryView: View {
     var onRename: (ClipboardItem) -> Void
     var onDelete: (ClipboardItem) -> Void
     var onRetryTranscription: (ClipboardItem) -> Void
+    var onEditTranscript: (ClipboardItem) -> Void
     var onSaveAsFile: (ClipboardItem) -> Void
     var onCopyAsCode: (ClipboardItem) -> Void
     var onCaptureAnnotate: () -> Void
@@ -421,6 +422,7 @@ struct HistoryView: View {
                                 onCopyMarkdown: onCopyMarkdown, onOCR: { runOCR(item) },
                                 onRename: onRename, onDelete: onDelete,
                                 onRetryTranscription: onRetryTranscription,
+                                onEditTranscript: onEditTranscript,
                                 onSaveAsFile: onSaveAsFile, onCopyAsCode: onCopyAsCode,
                                 searchTerm: search,
                                 selecting: selecting, isChecked: selectedBatch.contains(item.id),
@@ -540,6 +542,7 @@ struct ItemRow: View {
     var onRename: (ClipboardItem) -> Void
     var onDelete: (ClipboardItem) -> Void
     var onRetryTranscription: (ClipboardItem) -> Void
+    var onEditTranscript: (ClipboardItem) -> Void
     var onSaveAsFile: (ClipboardItem) -> Void
     var onCopyAsCode: (ClipboardItem) -> Void
     var searchTerm: String = ""
@@ -594,6 +597,14 @@ struct ItemRow: View {
         return af
     }
     private var isTranscribing: Bool { item.transcribing == true }
+
+    /// Hand-correcting a transcript is offered on voice/meeting notes only, and never on a credential:
+    /// a credential's text is masked in the row, may be sealed ciphertext on this Mac, and is kept out
+    /// of every export — an editor over it is a reveal surface that would walk straight around all three.
+    /// Also not while transcribing: the running transcription is about to overwrite the text anyway.
+    private var canEditTranscript: Bool {
+        item.isVoiceNote == true && !isCredential && !isTranscribing
+    }
 
     /// Color if the item's text is a hex value (#RGB / #RRGGBB / #RRGGBBAA) → shows a swatch.
     private var swatchColor: NSColor? {
@@ -810,11 +821,22 @@ struct ItemRow: View {
         }
     }
 
+    /// "Fix the transcript" lives in the ⋯ menu, and the row collapses to ONE accessibility element —
+    /// so without this it would be pointer-only, exactly like rename/delete in `accessibleRow`.
+    @ViewBuilder private func voiceActions<V: View>(_ content: V) -> some View {
+        if canEditTranscript {
+            voicePlaybackActions(content)
+                .accessibilityAction(named: Text(L10n.t("row.editText"))) { onEditTranscript(item) }
+        } else {
+            voicePlaybackActions(content)
+        }
+    }
+
     /// Voice rows, split out because playback has to be mirrored on BOTH shapes the row takes: the
     /// leading play button (no transcript yet) and the strip's play button (transcribed). The row is one
     /// collapsed accessibility element, so `VoicePlayButton` isn't in the tree — without this the only
     /// thing a voice note can do under VoiceOver is copy.
-    @ViewBuilder private func voiceActions<V: View>(_ content: V) -> some View {
+    @ViewBuilder private func voicePlaybackActions<V: View>(_ content: V) -> some View {
         if let af = voiceAudioFile {
             if hasText {
                 playAction(content, af)
@@ -1030,6 +1052,10 @@ struct ItemRow: View {
         if item.isVoiceNote == true {
             if let af = voiceAudioFile {
                 Button { NSWorkspace.shared.activateFileViewerSelecting([Storage.shared.audioURL(for: af)]) } label: { Label(L10n.t("voice.reveal"), systemImage: "folder") }
+            }
+            if canEditTranscript {
+                Button { onEditTranscript(item) } label: { Label(L10n.t("row.editText"), systemImage: "square.and.pencil") }
+                    .keyboardShortcut("e", modifiers: .command)   // display only (the real handler is PanelController's key monitor)
             }
             if hasText { Button { onCopyMarkdown(item) } label: { Label(L10n.t("row.markdown"), systemImage: "doc.richtext") } }
         } else if item.kind == .image {

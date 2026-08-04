@@ -92,6 +92,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             onRename: { [weak self] item in self?.renameItem(item) },
             onDelete: { [weak self] item in self?.confirmDelete(item) },
             onRetryTranscription: { [weak self] item in self?.retryTranscription(item) },
+            onEditTranscript: { [weak self] item in self?.editTranscript(item) },
             onSaveAsFile: { [weak self] item in self?.saveTextAsFile(item) },
             onCopyAsCode: { [weak self] item in self?.copyAsCode(of: item) },
             onCaptureAnnotate: { [weak self] in self?.onCaptureAnnotate?() },
@@ -289,6 +290,15 @@ final class PanelController: NSObject, NSWindowDelegate {
         if flags == .command, event.keyCode == 51, !selection.selecting,
            let id = selection.selectedID, let item = manager.items.first(where: { $0.id == id }) {
             DispatchQueue.main.async { [weak self] in self?.confirmDelete(item) }
+            return nil
+        }
+        // ⌘E → fix the selected voice/meeting note's transcript by hand. Deferred like ⌘⌫: don't start
+        // a modal alert loop from inside the event-monitor callback. Not while batching, same as ⌘↩/⌘⌫.
+        // Anything else selected falls through to the ⌘-passthrough below (⌘E does nothing in the search field).
+        if flags == .command, event.keyCode == 14, !selection.selecting,
+           let id = selection.selectedID, let item = manager.items.first(where: { $0.id == id }),
+           item.isVoiceNote == true, item.isCredential != true, item.transcribing != true {
+            DispatchQueue.main.async { [weak self] in self?.editTranscript(item) }
             return nil
         }
         // ⌘⇧F → toggle favorite (star) on the selected item.
@@ -737,6 +747,52 @@ final class PanelController: NSObject, NSWindowDelegate {
         let resp = alert.runModal()
         isRenaming = false
         if resp == .alertFirstButtonReturn { manager.rename(item, to: field.stringValue) }
+        if panel.isVisible {
+            panel.makeKeyAndOrderFront(nil)
+            selection.focusToken &+= 1   // restore focus to the search field (without clearing search/filter)
+        }
+    }
+
+    /// Fixes a transcription by hand. Same shape as renameItem — a modal NSAlert over the panel, with
+    /// `isRenaming` holding the panel open behind it — because it is the same kind of edit and the user
+    /// already knows that dialog.
+    ///
+    /// Persistence goes through `finishVoiceNote`, the path the transcriber itself uses: it is the only
+    /// public entry point that writes a voice note's text, and it already re-runs credential detection,
+    /// regenerates the preview and saves. It mutates the item IN PLACE, so id, createdAt, pinned, name,
+    /// collection, audioFileName and audioDuration are untouched. It cannot auto-paste here either: the
+    /// note's pasteboard guard was consumed when it first finished, so `canPaste` is false.
+    private func editTranscript(_ item: ClipboardItem) {
+        // Never on a credential (masked, never auto-pasted, excluded from exports) and never mid-transcription;
+        // the row hides the action under the same rule, this guard covers ⌘E and a stale menu.
+        guard item.isVoiceNote == true, item.isCredential != true, item.transcribing != true else { return }
+        let alert = NSAlert()
+        alert.messageText = L10n.t("edit.title")
+        alert.informativeText = L10n.t("edit.info")
+        let save = alert.addButton(withTitle: L10n.t("rename.save"))
+        // ⌘↩ commits, not ↩: a transcript is multi-line, and a plain Return default button would make
+        // it impossible to type a line break (key equivalents are matched before the text view sees the key).
+        save.keyEquivalentModifierMask = .command
+        let cancel = alert.addButton(withTitle: L10n.t("common.cancel"))
+        cancel.keyEquivalent = "\u{1b}"   // Esc cancels the EDIT — the panel's own Esc never sees it (the alert is key)
+
+        let scroll = NSTextView.scrollableTextView()
+        scroll.frame = NSRect(x: 0, y: 0, width: 380, height: 180)
+        guard let field = scroll.documentView as? NSTextView else { return }
+        field.string = item.text ?? ""
+        field.font = .systemFont(ofSize: 13)
+        field.isRichText = false
+        // Transcripts are full of code, IDs and acronyms — smart quotes/dashes would corrupt a fix.
+        field.isAutomaticQuoteSubstitutionEnabled = false
+        field.isAutomaticDashSubstitutionEnabled = false
+        alert.accessoryView = scroll
+        alert.window.initialFirstResponder = field
+
+        isRenaming = true
+        NSApp.activate(ignoringOtherApps: true)
+        let resp = alert.runModal()
+        isRenaming = false
+        if resp == .alertFirstButtonReturn { manager.finishVoiceNote(id: item.id, text: field.string) }
         if panel.isVisible {
             panel.makeKeyAndOrderFront(nil)
             selection.focusToken &+= 1   // restore focus to the search field (without clearing search/filter)

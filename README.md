@@ -201,7 +201,7 @@ Automatic text and image history · instant search with match highlighting and f
 ### Voice & meetings
 
 - **Record** (`⌥⇧R`) or **upload files** (`⌥⇧O`): audio (m4a, m4b, mp3, wav, WhatsApp `.opus`, ogg, flac…) and video (mp4, mov, mkv, webm…), whose audio track Klip extracts first.
-- **Transcription runs on-device with Whisper (WhisperKit on Core ML). No key, nothing uploaded** — the model downloads once on first use (Tiny ~75 MB · Base ~145 MB · Small ~480 MB · Large v3 Turbo ~1.5 GB), then works offline.
+- **Transcription runs on-device with Whisper (WhisperKit on Core ML). No key, nothing uploaded** — the model downloads once on first use (Tiny ~75 MB · Base ~145 MB · Small ~464 MB · Large v3 Turbo compact ~616 MB · Large v3 Turbo full ~3.0 GB), then works offline.
 - It runs in the background, so you can start another recording immediately. The **original audio is kept** with duration and a progress bar: play it, reveal it in Finder, retry a failed transcription. (Videos are not stored — only their text.)
 - **Per-upload language override**, dictation language with auto-detect, and **context words** — list brands or jargon (GitHub, React, Supabase, webhook) so proper nouns come out spelled right.
 - **Meeting notes** (`⌥⇧M`) on any call — Zoom, Meet, Teams, FaceTime. Records your microphone **and** the system audio. No bot joins, nobody sees a recorder. Stop with `⌥⇧M` again, or it stops itself after 15 continuous minutes of silence on both sources. Each track is transcribed separately and interleaved chronologically into a "Me:" / "Them:" transcript. Lands in history as `Meeting — Jul 9, 2:03 PM` (renamable), audio kept and playable, retry on failure.
