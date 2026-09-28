@@ -36,7 +36,7 @@ enum SnapTool: String, CaseIterable {
 }
 
 /// A drawable annotation. `points` holds the freehand stroke (pencil/marker); shapes use the
-/// first and last point; text stores its string and its origin; a counter stores its center.
+/// first and last point; text stores its string and its TOP-LEFT corner; a counter stores its center.
 struct Annotation {
     var id = UUID()
     var tool: SnapTool
@@ -46,6 +46,13 @@ struct Annotation {
     var text: String?
     var fontSize: CGFloat = 20   // only for .text
     var blurLevel: CGFloat = 12  // only for .blur: pixel-block divisor; higher = coarser blocks
+    /// Only for .text. nil = point text (auto width: grows with what's typed, breaks only on Return).
+    /// A value = area text: lines wrap to this width, and resizing the box re-flows them — the font
+    /// size never follows the box (Figma "fixed width", Illustrator area type, Keynote, Canva).
+    var boxWidth: CGFloat? = nil
+    /// Only for .text: height the user gave the box. The text is never clipped — the box is at least
+    /// as tall as its lines — so this only makes it TALLER than the content (Preview-style auto height).
+    var boxMinHeight: CGFloat = 0
 
     var start: CGPoint { points.first ?? .zero }
     var end: CGPoint { points.last ?? .zero }
@@ -58,12 +65,37 @@ struct Annotation {
     /// Badge radius for .counter: a ~26pt badge at the default stroke, growing with thickness.
     var counterRadius: CGFloat { max(13, lineWidth * 3.25) }
 
-    /// Rectangle occupied by the text (for selection/hit-testing/moving). nil if not text.
+    /// Attributes for text: ONE definition shared by the canvas draw, the flattened export, the
+    /// measuring below and the in-place editor, so all four break lines in the same places.
+    static func textAttributes(font: NSFont, color: NSColor) -> [NSAttributedString.Key: Any] {
+        let para = NSMutableParagraphStyle()
+        para.lineBreakMode = .byWordWrapping
+        return [.font: font, .foregroundColor: color, .paragraphStyle: para]
+    }
+
+    /// Layout options shared by `measureText` and the draw. `.usesFontLeading` matches the line
+    /// height NSLayoutManager gives the in-place NSTextView (it uses font leading by default).
+    static let textDrawingOptions: NSString.DrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
+
+    /// Size the text occupies when wrapped to `width` (nil = no wrap, only explicit line breaks).
+    /// Rounded UP: a box a fraction of a point short truncates its last line intermittently.
+    static func measureText(_ text: String, font: NSFont, width: CGFloat?) -> CGSize {
+        let attributed = NSAttributedString(string: text, attributes: textAttributes(font: font, color: .black))
+        let limit = CGSize(width: width ?? .greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        let r = attributed.boundingRect(with: limit, options: textDrawingOptions)
+        let lineHeight = ceil(font.ascender - font.descender + font.leading)
+        return CGSize(width: ceil(r.width), height: max(ceil(r.height), lineHeight))
+    }
+
+    /// Rectangle occupied by the text (for selection/hit-testing/moving/drawing). nil if not text.
+    /// Anchored by its top-left corner, so a box grows DOWNWARD as lines are added.
     func textBounds() -> CGRect? {
         guard tool == .text, let text, !text.isEmpty else { return nil }
-        let size = (text as NSString).size(withAttributes: [.font: textFont])
-        let o = points.first ?? .zero
-        return CGRect(x: o.x, y: o.y, width: size.width, height: size.height)
+        let content = Self.measureText(text, font: textFont, width: boxWidth)
+        let width = boxWidth ?? content.width
+        let height = max(content.height, boxMinHeight)
+        let topLeft = points.first ?? .zero
+        return CGRect(x: topLeft.x, y: topLeft.y - height, width: width, height: height)
     }
 
     /// Draws the annotation in the current context (view coordinates, not flipped).
@@ -96,12 +128,10 @@ struct Annotation {
         case .counter:
             drawCounter(number: number)
         case .text:
-            guard let text, !text.isEmpty else { return }
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: textFont,
-                .foregroundColor: color
-            ]
-            (text as NSString).draw(at: start, withAttributes: attrs)
+            guard let text, !text.isEmpty, let box = textBounds() else { return }
+            // Lines start at the TOP of the box; a box taller than its text keeps the space below.
+            NSAttributedString(string: text, attributes: Self.textAttributes(font: textFont, color: color))
+                .draw(with: box, options: Self.textDrawingOptions)
         }
     }
 
