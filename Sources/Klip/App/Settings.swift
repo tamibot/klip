@@ -262,6 +262,20 @@ final class Settings: ObservableObject {
     private init() {
         Settings.migratePreviousBundleDomainIfNeeded()   // must precede everything that reads a default
         Settings.migrateLegacyDefaultsIfNeeded()
+        // Klip is Spanish-first. Migrate the old empty default once; an explicit auto-detect choice made
+        // later in Preferences must remain empty on subsequent launches.
+        let spanishDefaultMigration = "migratedTranscriptionLanguageToSpanishV1"
+        if !d.bool(forKey: spanishDefaultMigration) {
+            if d.object(forKey: K.transLang) != nil, d.string(forKey: K.transLang)?.isEmpty == true {
+                d.set("es", forKey: K.transLang)
+            }
+            d.set(true, forKey: spanishDefaultMigration)
+        }
+        // The old default list (including "n8n") was prepended to every transcript, whether spoken or not.
+        // Clear only that exact seeded value; preserve any context words the user entered themselves.
+        if d.string(forKey: K.transVocab) == VocabularyMiner.defaultPromptTerms.joined(separator: ", ") {
+            d.set("", forKey: K.transVocab)
+        }
         // Fresh installs start on the recommended model; anyone who has already run Klip keeps what they
         // have. Unlike `maxItems` below this is NOT done through the registration domain: the model is a
         // several-hundred-MB download, so silently re-pointing existing users at a different one would cost
@@ -288,8 +302,8 @@ final class Settings: ObservableObject {
             K.cleanCap: true,
             K.capDest: "editor",
             K.detectRem: true,
-            K.transLang: "",   // auto-detect: forcing a language mistranscribes any other (UI defaults to en, so "es" was wrong on fresh installs; local installs seed their own via install.sh)
-            K.transVocab: "",
+            K.transLang: "es",  // Spanish is Klip's default; users can still choose auto-detect in Preferences
+            K.transVocab: "",  // context words are opt-in; automatic hints can bias or shorten a transcript
             K.localModel: LocalTranscriber.defaultModel,   // what every EXISTING install already resolves to
             K.keyCode2: Int(kVK_ANSI_R),
             K.mods2: Int(optionKey | shiftKey),

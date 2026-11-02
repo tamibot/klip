@@ -42,6 +42,16 @@ struct VocabularyMinerTests {
         }
     }
 
+    @Test("Only specific context terms reach the decoder prompt")
+    func filtersPromptTerms() {
+        #expect(VocabularyMiner.promptTerms(from: "ROI, marketing, workflow, the, Kommo, roi, OpenAI")
+                == ["ROI", "Kommo", "OpenAI"])
+        #expect(VocabularyMiner.promptTerms(from: "Klip, GitHub, Supabase, WhatsApp, WhisperKit, OpenAI, Kommo, WAHA, n8n, TamiBot")
+                .count == VocabularyMiner.maxPromptTerms)
+        #expect(VocabularyMiner.promptTerms(from: "CRM, Creators, Klip, Kommo, WhatsApp, WhisperKit, WAHA, n8n")
+                == VocabularyMiner.defaultPromptTerms)
+    }
+
     /// The loanword shape only fires inside Spanish text: in English prose the same orthographic
     /// markers match half the dictionary.
     @Test("English technical terms inside Spanish text are found; in English text they are not")

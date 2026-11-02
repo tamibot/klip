@@ -24,23 +24,12 @@ struct PreferencesView: View {
     private let dictationLanguages = DictationLanguage.all
 
     /// Comma-separated entries in the context-words field ("Klip, GitHub" → 2).
-    /// Above this many context words the transcript starts getting cut off.
+    /// Only the first eight specific terms can influence Whisper; generic bilingual terms are ignored.
     ///
-    /// Whisper gives the prompt and the transcript ONE shared budget of 224 tokens per 30-second
-    /// window. Measured on this project with the `small` model: 24 words (72 prompt tokens) still
-    /// transcribed a 30 s clip in full at 102 words, while 32 words (97 tokens) truncated the same
-    /// clip to 88 — mid-sentence, with no error anywhere. The threshold sits between those two.
-    ///
-    /// Deliberately a WARNING and not a silent cap: capping the list was tried and was worse. Cutting
-    /// it to the last 48 tokens destroyed 10-20 second notes entirely (36 words became 2, in the wrong
-    /// language), because which words survive changes what the decoder does. Telling the user beats
-    /// guessing for them.
-    static let vocabSafeWordCount = 24
+    static let vocabSafeWordCount = VocabularyMiner.maxPromptTerms
 
     private var vocabWordCount: Int {
-        settings.transcriptionVocabulary.split(separator: ",")
-            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-            .count
+        VocabularyMiner.promptTerms(from: settings.transcriptionVocabulary, limit: Int.max).count
     }
 
     private var appLogo: NSImage? {

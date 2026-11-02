@@ -128,7 +128,8 @@ struct UploadView: View {
             }
             if let t = r.text {
                 Text(t).font(.system(size: 13)).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading).lineLimit(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             } else if r.failed {
                 Text(L10n.t(r.errorKey ?? "upload.failed")).font(.system(size: 11)).foregroundStyle(.orange)
                     .transition(.opacity)

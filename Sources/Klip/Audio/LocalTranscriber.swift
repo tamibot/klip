@@ -9,6 +9,13 @@ actor LocalTranscriber {
 
     private var pipe: WhisperKit?
     private var loadedModel: String?
+    /// Coalesces model initialization across actor reentrancy. Actor methods can be entered again while
+    /// `WhisperKit` is loading, so launch prewarm and the first transcription must await the same load.
+    private struct PipelineLoad {
+        let id: UUID
+        let task: Task<WhisperKit, Error>
+    }
+    private var pipelineLoads: [String: PipelineLoad] = [:]
     /// Flips to true once a pipeline has finished loading this session. The first on-device load pays a
     /// one-time Core ML / Neural-Engine specialization (~20 s, cached on disk afterwards); the UI reads this
     /// (best-effort, hence nonisolated) to show "Preparing model…" instead of a bare spinner until ready.
@@ -38,6 +45,11 @@ actor LocalTranscriber {
     /// Deliberately NOT `recommendedModel`: a fallback that itself needs a 616 MB download is no fallback.
     /// Kept equal to what Settings registers, so existing installs have exactly one answer.
     static let defaultModel = "small"
+    /// Whisper shares a small decode budget between prompt and transcript. Keep user vocabulary as a
+    /// light hint instead of letting a long base list steer or truncate the spoken sentence.
+    // ponytail: 24 prompt tokens is the safe ceiling measured in this app; add weighted vocabulary support
+    // only if real Spanish recordings show that this cap misses required proper nouns.
+    private static let maxVocabularyPromptTokens = 24
 
     /// Loads an ALREADY-DOWNLOADED model into memory so the first voice note is instant. Best-effort, on
     /// launch. It deliberately does NOT trigger a first-use download here — pulling a multi-hundred-MB model
@@ -51,22 +63,27 @@ actor LocalTranscriber {
 
     /// Whether the model's CoreML weights are actually on disk (not just a folder created mid-download).
     /// Used to (a) skip the launch prewarm for un-downloaded models and (b) show "Downloading model…".
-    nonisolated static func isModelReady(_ model: String) -> Bool {
+    nonisolated static func localModelFolder(_ model: String) -> URL? {
         let id = model.isEmpty ? defaultModel : model
         guard let base = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
-                                                       appropriateFor: nil, create: false) else { return false }
+                                                       appropriateFor: nil, create: false) else { return nil }
         let dir = base.appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml")
         // Exact folder name, not a prefix: WhisperKit names the folder "openai_whisper-<id>" verbatim, and a
         // prefix match makes one variant claim another's download ("large-v3_turbo" would accept the
         // "…_954MB" folder, "base" the "base.en" one) → "Ready" for a model that isn't there.
         let folder = "openai_whisper-\(id)"
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir.path),
-              entries.contains(folder) else { return false }
+              entries.contains(folder) else { return nil }
         // Require the actual weights: an interrupted download leaves only metadata (generation_config.json).
         let modelDir = dir.appendingPathComponent(folder)
-        return ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc"].allSatisfy {
+        guard ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc"].allSatisfy({
             FileManager.default.fileExists(atPath: modelDir.appendingPathComponent($0).path)
-        }
+        }) else { return nil }
+        return modelDir
+    }
+
+    nonisolated static func isModelReady(_ model: String) -> Bool {
+        localModelFolder(model) != nil
     }
 
     /// Transcribes an audio file fully on-device. `model` is a WhisperKit model name (see `models`).
@@ -112,23 +129,31 @@ actor LocalTranscriber {
         opts.task = .transcribe
         opts.skipSpecialTokens = true
         opts.withoutTimestamps = !timestamps
-        // SPEED: split long audio at silence (energy VAD) and decode chunks in parallel
-        // (concurrentWorkerCount defaults to 16). Short clips stay one chunk → no overhead; long uploads
-        // transcribe much faster. The model is loaded once and reused (see `pipeline`).
+        // Split long audio at silence and decode at most two chunks at once. WhisperKit defaults to 16
+        // workers, which can start too many Core ML decoders for a multi-minute upload.
         opts.chunkingStrategy = .vad
+        opts.concurrentWorkerCount = 2
         if let language, !language.isEmpty {
             opts.language = language          // explicit audio language
             opts.detectLanguage = false
         } else {
             opts.detectLanguage = true        // "auto-detect"
         }
-        // Bias toward the user's context words/names: encode them as
-        // Whisper prompt tokens. WhisperKit also strips special tokens and caps length internally.
-        let vocab = vocabulary.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !vocab.isEmpty, let tok = wk.tokenizer {
-            let ids = tok.encode(text: " " + vocab).filter { $0 < tok.specialTokens.specialTokenBegin }
+        // Bias toward the user's specific context words/names, after dropping generic bilingual terms.
+        // WhisperKit has no prompt-weight parameter: a shorter prompt is the safe way to make the hint weaker.
+        if let tok = wk.tokenizer {
+            let terms = VocabularyMiner.promptTerms(from: vocabulary)
+            var prompt = ""
+            for term in terms {
+                let candidate = prompt.isEmpty ? term : "\(prompt), \(term)"
+                let candidateIDs = tok.encode(text: " " + candidate)
+                    .filter { $0 < tok.specialTokens.specialTokenBegin }
+                guard candidateIDs.count <= Self.maxVocabularyPromptTokens else { break }
+                prompt = candidate
+            }
+            let ids = tok.encode(text: " " + prompt).filter { $0 < tok.specialTokens.specialTokenBegin }
             if !ids.isEmpty {
-                opts.promptTokens = Array(ids.suffix(200))
+                opts.promptTokens = ids
                 opts.usePrefillPrompt = true
                 // Once per transcription, so the context-words feature is verifiable in Console.app.
                 NSLog("Klip LocalTranscriber: biasing decode with %d context-word prompt tokens", opts.promptTokens?.count ?? 0)
@@ -148,14 +173,7 @@ actor LocalTranscriber {
         if let pipe, loadedModel == effective { return pipe }
         let wk: WhisperKit
         do {
-            // load: true is NOT the default. WhisperKitConfig only loads at init when a modelFolder is
-            // passed, so without this the pipeline comes back UNLOADED: `tokenizer` is nil, which
-            // silently disables the context-word prompt on the first note of every session; `prewarm`
-            // warms nothing; and `pipelineReady` reports true for a pipeline that is not. Worse, the
-            // models then load lazily inside transcribe — and with VAD chunking every concurrent chunk
-            // calls loadModels() at once, which was observed crashing in objc_release with three
-            // threads inside loadModels simultaneously.
-            wk = try await WhisperKit(WhisperKitConfig(model: effective, load: true))   // downloads the model on first use
+            wk = try await loadPipelineModel(effective)   // downloads the model on first use
             loadedModel = effective
         } catch {
             // A bad/unavailable model id (or a failed download for that variant) shouldn't break every
@@ -163,12 +181,38 @@ actor LocalTranscriber {
             // Never under `strict`: that caller replaces an existing transcript with the result, so a
             // silent downgrade to a weaker model would be data loss wearing a success message.
             guard !strict, effective != Self.defaultModel else { throw error }
-            wk = try await WhisperKit(WhisperKitConfig(model: Self.defaultModel))
+            wk = try await loadPipelineModel(Self.defaultModel)
             loadedModel = Self.defaultModel
             fallbackFor[model] = Self.defaultModel
         }
         pipe = wk
         Self.pipelineReady = true
         return wk
+    }
+
+    /// Actor isolation alone is not enough here: it is reentrant at each `await`. Keep one in-flight
+    /// load per model so prewarm, retries, and transcription cannot initialize the same Core ML model
+    /// simultaneously. Load with `load: true` for both the selected model and its fallback.
+    private func loadPipelineModel(_ model: String) async throws -> WhisperKit {
+        if let existing = pipelineLoads[model] {
+            return try await existing.task.value
+        }
+
+        let id = UUID()
+        let task = Task {
+            if let folder = Self.localModelFolder(model) {
+                return try await WhisperKit(WhisperKitConfig(modelFolder: folder.path, load: true, download: false))
+            }
+            return try await WhisperKit(WhisperKitConfig(model: model, load: true))
+        }
+        pipelineLoads[model] = PipelineLoad(id: id, task: task)
+        do {
+            let loaded = try await task.value
+            if pipelineLoads[model]?.id == id { pipelineLoads[model] = nil }
+            return loaded
+        } catch {
+            if pipelineLoads[model]?.id == id { pipelineLoads[model] = nil }
+            throw error
+        }
     }
 }

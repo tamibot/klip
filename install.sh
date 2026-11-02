@@ -54,45 +54,44 @@ EOF
 
 echo "==> 1) Preflight + building the .app (release)…"
 ./build.sh release
+STAGING=""
+cleanup_install() {
+    [ -z "$STAGING" ] || rm -rf "$STAGING"
+    rm -rf "$SRC_BUNDLE"
+}
+trap cleanup_install EXIT
 
-echo "==> 2) Closing previous instances (if any)…"
+echo "==> 2) Preparing signed app…"
+SIGN_ID="$(ensure_identity)" || {
+    echo "✗ Could not prepare the stable signing identity. The installed Klip was not changed." >&2
+    exit 1
+}
+SUDO=""
+if [ ! -w /Applications ]; then SUDO="sudo"; fi
+if [ -z "$SUDO" ]; then
+    STAGING="$(mktemp -d /Applications/.klip-install.XXXXXX)"
+else
+    STAGING="$(mktemp -d)"
+fi
+cp -R "$SRC_BUNDLE" "$STAGING/$SRC_BUNDLE"
+xattr -cr "$STAGING/$SRC_BUNDLE" 2>/dev/null || true
+if ! codesign --force --sign "$SIGN_ID" --identifier io.github.tamibot.klip \
+        --entitlements Resources/Klip.entitlements "$STAGING/$SRC_BUNDLE"; then
+    echo "✗ Stable signing failed (errSecInternalComponent). In Terminal, authorize Apple's signing tools for this key, then rerun:" >&2
+    echo "  security set-key-partition-list -S 'apple-tool:,apple:' -s -l 'Klip Code Signing' \"$HOME/Library/Keychains/login.keychain-db\"" >&2
+    echo "  Enter the login-keychain password at the prompt. The installed Klip was not changed." >&2
+    exit 1
+fi
+codesign --verify --strict "$STAGING/$SRC_BUNDLE"
+
+echo "==> 3) Installing into /Applications…"
 /usr/bin/pkill -x "$APP_NAME" 2>/dev/null || true
 /usr/bin/pkill -x Pasta 2>/dev/null || true   # previous name
 perl -e 'select(undef,undef,undef,0.4)'
-
-echo "==> 3) Installing into /Applications…"
-SUDO=""
-if [ ! -w /Applications ]; then SUDO="sudo"; fi
 $SUDO rm -rf "$DEST"
-$SUDO cp -R "$SRC_BUNDLE" "$DEST"
-$SUDO xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
-
-# Signing identity: stable if possible (no sudo, so it can use the user's keychain).
-SIGN_ID="-"
-if [ -z "$SUDO" ]; then
-    if ID="$(ensure_identity)"; then SIGN_ID="$ID"; fi
-fi
-
-echo "==> 3.5) Signing in /Applications (stable location, no metadata re-added)…"
-$SUDO xattr -cr "$DEST" 2>/dev/null || true
-if ! $SUDO codesign --force --sign "$SIGN_ID" --identifier io.github.tamibot.klip \
-        --entitlements Resources/Klip.entitlements "$DEST" 2>/tmp/klip_sign_err; then
-    if [ "$SIGN_ID" != "-" ]; then
-        echo "  ⚠ signing with '$SIGN_ID' failed; falling back to ad-hoc"
-        SIGN_ID="-"
-        $SUDO codesign --force --sign - --identifier io.github.tamibot.klip \
-            --entitlements Resources/Klip.entitlements "$DEST"
-    else
-        cat /tmp/klip_sign_err; rm -f /tmp/klip_sign_err; exit 1
-    fi
-fi
-rm -f /tmp/klip_sign_err
-$SUDO codesign --verify --strict "$DEST" && echo "  ✓ valid signature in /Applications"
-if [ "$SIGN_ID" = "-" ]; then
-    echo "  (ad-hoc signature: macOS will re-ask for permissions after each reinstall)"
-else
-    echo "  (stable signature '$SIGN_ID': the microphone permission is remembered across updates)"
-fi
+$SUDO mv "$STAGING/$SRC_BUNDLE" "$DEST"
+codesign --verify --strict "$DEST"
+echo "  ✓ stable signature '$SIGN_ID'"
 
 # Default language on a FRESH install only (a later choice in Preferences always wins).
 # Follows the Mac's own language when Klip speaks it, else English — the app's registered default.
@@ -109,7 +108,7 @@ else
     esac
 fi
 defaults read io.github.tamibot.klip uiLanguage            >/dev/null 2>&1 || defaults write io.github.tamibot.klip uiLanguage            -string "$KLIP_LANG"
-defaults read io.github.tamibot.klip transcriptionLanguage >/dev/null 2>&1 || defaults write io.github.tamibot.klip transcriptionLanguage -string "$KLIP_LANG"
+defaults read io.github.tamibot.klip transcriptionLanguage >/dev/null 2>&1 || defaults write io.github.tamibot.klip transcriptionLanguage -string "es"
 
 # Drop the build artifacts now that the real app lives in /Applications. Leaving one here is a trap:
 # it carries the same bundle id but only an ad-hoc signature, so opening it by accident runs a

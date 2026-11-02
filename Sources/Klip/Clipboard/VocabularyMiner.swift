@@ -23,6 +23,10 @@ enum VocabularyMiner {
     /// it is shared privacy code, so it wants its own change, not a drive-by here.
     static let maxClips = 400
     static let maxCharsPerClip = 2000
+    /// Prompt terms are a hint, not a transcript. Keep the user-facing list small before token budgeting.
+    static let maxPromptTerms = 8
+    /// Previous automatic prompt list; retained to clear that exact seeded value and allow opt-in terms.
+    static let defaultPromptTerms = ["CRM", "Creators", "Klip", "Kommo", "WhatsApp", "WhisperKit", "WAHA", "n8n"]
 
     // MARK: - Public
 
@@ -79,6 +83,22 @@ enum VocabularyMiner {
     /// Convenience for the UI: the top `limit` words.
     static func suggestions(from texts: [String], limit: Int = 12) -> [String] {
         rank(texts).prefix(limit).map(\.word)
+    }
+
+    /// Cleans the user-entered context list before it reaches Whisper's decoder prompt.
+    /// Unlike history mining, this preserves unknown product names (including lowercase ones), but drops
+    /// ordinary bilingual prose that can make Whisper copy the wrong language or spend its output budget.
+    static func promptTerms(from raw: String, limit: Int = maxPromptTerms) -> [String] {
+        var seen = Set<String>()
+        let terms: [String] = raw.split(separator: ",", omittingEmptySubsequences: true).compactMap { part in
+            let term = part.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            let key = term.lowercased()
+            guard !term.isEmpty, term.count <= 32, term.split(separator: " ").count <= 4,
+                  key.count >= 2, (!promptStopwords.contains(key) || defaultPromptTerms.contains { $0.lowercased() == key }),
+                  seen.insert(key).inserted else { return nil }
+            return term
+        }
+        return Array(terms.prefix(limit))
     }
 
     // MARK: - Shapes
@@ -163,6 +183,15 @@ enum VocabularyMiner {
         // shouted acronym-shaped noise
         "www", "http", "https", "html", "faq", "nan", "null"
     ]
+
+    /// Common technical words are valid history-mining candidates, but are too weak to steer every note.
+    private static let promptStopwords: Set<String> = stopwords.union([
+        "lead", "leads", "deal", "deals", "marketing", "workflow", "workflows", "sales", "meeting",
+        "report", "reporting", "project", "projects", "client", "clients", "team", "call", "calls",
+        "note", "notes", "audio", "voice", "text", "business", "content", "campaign", "strategy",
+        "data", "system", "app", "mac", "spanish", "español", "inglés", "proper", "token", "tokens",
+        "chatbot", "dashboard", "onboarding"
+    ])
 
     /// True when the unbroken run of secret-ish characters containing `token` looks like an opaque
     /// blob rather than words: long, and mixing letters with digits or base64 padding.
