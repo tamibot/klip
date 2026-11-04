@@ -1,10 +1,10 @@
 import AppKit
 
 /// Editor canvas: draws the base capture and the annotations on top. Handles live drawing,
-/// in-place text (a temporary NSTextField — supports accents), universal select/move/delete of
+/// in-place text (a temporary multi-line NSTextView — supports accents), universal select/move/delete of
 /// any annotation (.select tool), blur/spotlight/counter rendering, and for text: re-editing
 /// and resizing. Flattens everything to a full-resolution image.
-final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
+final class AnnotationCanvasView: NSView, NSTextViewDelegate {
     private let baseImage: NSImage
     /// Base capture as CGImage, resolved once: the blur tool pixelates regions of it.
     private lazy var baseCG: CGImage? = baseImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
@@ -12,10 +12,22 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     private var draft: Annotation?
 
     // In-place text / selection.
-    private var activeTextField: NSTextField?
+    private var activeTextView: NSTextView?
     private var editingID: UUID?              // text annotation currently being re-edited
     private var editFontSize: CGFloat = 20
     private var editColor: NSColor = .systemRed
+    /// Geometry of the text being edited: its top-left corner stays put while the box grows down.
+    private var editTopLeft = CGPoint.zero
+    private var editBoxWidth: CGFloat?        // nil = point text (auto width)
+    private var editBoxMinHeight: CGFloat = 0
+    /// Text tool press point and latest drag point: a drag draws the box of a new area text.
+    private var textBoxAnchor: CGPoint?
+    private var textBoxPoint: CGPoint?
+    /// A text-tool drag shorter than this is a click (point text), not a box.
+    private static let minTextBoxDrag: CGFloat = 12
+    /// Gap between the editor's border and the glyphs — the glyphs themselves sit exactly where
+    /// the committed text will be drawn, so committing never makes the text jump.
+    private static let textEditInset: CGFloat = 4
     private(set) var selectedID: UUID?        // selected annotation (dashed outline); any type via .select
     private var movingID: UUID?               // annotation currently being dragged
     /// Grab anchor and latest pointer position of a move. The move is applied as a TOTAL offset from
@@ -196,14 +208,31 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         baseImage.draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
         drawAnnotationLayers(forCanvas: true)
         draft?.draw(base: baseCG, canvasSize: bounds.size)
+        drawTextBoxDraft()
         drawSelectionHighlight()
+    }
+
+    private static func textDragRect(_ a: CGPoint, _ b: CGPoint) -> CGRect {
+        CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y))
+    }
+
+    /// Dashed outline of the text box being dragged out, so the user sees the width the text will wrap to.
+    private func drawTextBoxDraft() {
+        guard let a = textBoxAnchor, let b = textBoxPoint else { return }
+        let r = Self.textDragRect(a, b)
+        guard r.width >= Self.minTextBoxDrag else { return }
+        let path = NSBezierPath(rect: r)
+        path.lineWidth = 1
+        path.setLineDash([4, 3], count: 2, phase: 0)
+        NSColor.controlAccentColor.setStroke()
+        path.stroke()
     }
 
     /// Annotation pass shared by the canvas and both flatten paths, so the export renders exactly
     /// what the canvas shows: the spotlight dim layer first (ONE layer with a clear hole per
     /// spotlight), then every annotation in array order. Counter numbers are derived here from
     /// each counter's ordinal among counters, so deleting/undoing one renumbers the rest.
-    /// The text being re-edited is hidden from the canvas (the NSTextField on top shows it);
+    /// The text being re-edited is hidden from the canvas (the NSTextView on top shows it);
     /// that way an Undo/cancel during re-editing restores the original instead of losing it.
     private func drawAnnotationLayers(forCanvas: Bool) {
         drawSpotlightDim(includeDraft: forCanvas)
@@ -319,7 +348,6 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
                 out.append(Handle(kind: .box(x: xe, y: ye),
                                   point: Self.boxPoint(box, xe, ye), geometry: Self.boxPoint(geom, xe, ye)))
             }
-            guard ann.tool != .text else { return out }   // text scales by font size: corners only
             for (xe, ye) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
                 if xe != 0, geom.height < Self.minEdgeHandleExtent { continue }
                 if ye != 0, geom.width < Self.minEdgeHandleExtent { continue }
@@ -333,7 +361,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     }
 
     private func handleHitTest(_ p: CGPoint) -> Handle? {
-        guard currentTool == .select, activeTextField == nil, let id = selectedID,
+        guard currentTool == .select, activeTextView == nil, let id = selectedID,
               let ann = annotations.first(where: { $0.id == id }) else { return nil }
         let reach = Self.handleSize / 2 + Self.handleHitSlop
         return selectionHandles(for: ann).first {
@@ -365,10 +393,19 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         case .endpoint(let i):
             resizeEndpoint(&updated, index: i, to: p)
         case .box(let xe, let ye):
-            if base.tool == .text { resizeText(&updated, x: xe, y: ye, to: p) }
-            else { resizeBox(&updated, x: xe, y: ye, to: p) }
+            if base.tool == .text {
+                // ⌥ on a corner keeps the old gesture on purpose: it SCALES the text (font and box
+                // together, like Figma's Scale tool). Every other drag re-flows it at the same size.
+                if optionHeld, xe != 0, ye != 0 { scaleText(&updated, x: xe, y: ye, to: p) }
+                else { resizeTextBox(&updated, x: xe, y: ye, to: p) }
+            } else {
+                resizeBox(&updated, x: xe, y: ye, to: p)
+            }
         }
-        if updated.points != base.points || updated.fontSize != base.fontSize { resizedDuringDrag = true }
+        if updated.points != base.points || updated.fontSize != base.fontSize
+            || updated.boxWidth != base.boxWidth || updated.boxMinHeight != base.boxMinHeight {
+            resizedDuringDrag = true
+        }
         annotations[idx] = updated
         Self.resizeCursor(for: kind).set()   // cursor rects can re-assert if the pointer leaves mid-drag
         needsDisplay = true
@@ -428,22 +465,53 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         ann.points = pts
     }
 
-    /// Text has no box to stretch — its extent IS its font size, so a corner drag maps the distance
-    /// from the held corner onto the size (uniform by construction, which is why ⇧ has nothing to
-    /// constrain here). The origin is then re-derived so the anchor corner stays exactly where it was.
-    private func resizeText(_ ann: inout Annotation, x xe: Int, y ye: Int, to p: CGPoint) {
+    /// Narrowest a text box can get: about two characters, so a squeezed box still shows something.
+    private static func minTextBoxWidth(_ ann: Annotation) -> CGFloat { max(24, ann.fontSize * 1.5) }
+
+    /// Area-text resize: the grabbed edge(s) move, the opposite ones stay, and the FONT NEVER CHANGES —
+    /// the lines re-flow to the new width. Width comes from the side handles (and corners); height from
+    /// the top/bottom handles, as a minimum only: the box can't be dragged shorter than its lines, so
+    /// no text is ever clipped. A point text that gets resized becomes an area text at that width.
+    private func resizeTextBox(_ ann: inout Annotation, x xe: Int, y ye: Int, to p: CGPoint) {
+        guard let base = ann.textBounds(), let text = ann.text else { return }
+        var left = base.minX
+        var width = base.width
+        if xe != 0 {
+            let anchorX = xe > 0 ? base.minX : base.maxX
+            width = max(Self.minTextBoxWidth(ann), abs(p.x - anchorX))
+            // Dragging past the anchor doesn't flip text inside out: the edge just stops at the minimum.
+            left = xe > 0 ? anchorX : anchorX - width
+        }
+        ann.boxWidth = width
+        let content = Annotation.measureText(text, font: ann.textFont, width: width).height
+        var top = base.maxY
+        if ye != 0 {
+            let anchorY = ye > 0 ? base.minY : base.maxY   // the edge that stays put
+            ann.boxMinHeight = abs(p.y - anchorY)
+            let height = max(content, ann.boxMinHeight)
+            top = ye > 0 ? anchorY + height : anchorY
+        }
+        ann.points = [CGPoint(x: left, y: top)]
+    }
+
+    /// ⌥ + corner: scales the whole text — font size and box together — about the opposite corner, so
+    /// the lines keep breaking in the same places. Uniform by construction, so ⇧ has nothing to add.
+    private func scaleText(_ ann: inout Annotation, x xe: Int, y ye: Int, to p: CGPoint) {
         guard let base = ann.textBounds(), base.width > 0.5, base.height > 0.5 else { return }
-        // Fraction of the box the anchor sits at: the opposite corner, or (⌥) the center.
-        let fx: CGFloat = optionHeld ? 0.5 : (xe > 0 ? 0 : 1)
-        let fy: CGFloat = optionHeld ? 0.5 : (ye > 0 ? 0 : 1)
+        let fx: CGFloat = xe > 0 ? 0 : 1
+        let fy: CGFloat = ye > 0 ? 0 : 1
         let anchor = CGPoint(x: base.minX + base.width * fx, y: base.minY + base.height * fy)
         let grabbed = Self.boxPoint(base, xe, ye)
         let reach = hypot(grabbed.x - anchor.x, grabbed.y - anchor.y)
         guard reach > 0.5 else { return }
-        let scale = hypot(p.x - anchor.x, p.y - anchor.y) / reach
-        ann.fontSize = max(10, min(120, ann.fontSize * scale))   // same clamp as setFontSize
+        let wanted = hypot(p.x - anchor.x, p.y - anchor.y) / reach
+        let newSize = max(10, min(120, ann.fontSize * wanted))   // same clamp as setFontSize
+        let scale = newSize / ann.fontSize
+        ann.fontSize = newSize
+        if let w = ann.boxWidth { ann.boxWidth = w * scale }
+        ann.boxMinHeight *= scale
         guard let grown = ann.textBounds() else { return }
-        ann.points = [CGPoint(x: anchor.x - grown.width * fx, y: anchor.y - grown.height * fy)]
+        ann.points = [CGPoint(x: anchor.x - grown.width * fx, y: anchor.y - grown.height * fy + grown.height)]
     }
 
     /// Standard macOS resize feedback. AppKit ships only the straight up/down and left/right cursors
@@ -527,7 +595,8 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
                     // editingID while editing (draw skips it), so an Undo/cancel restores the original text.
                     editingID = ann.id
                     selectedID = nil
-                    beginTextEditing(at: ann.start, existing: ann)
+                    beginTextEditing(topLeft: ann.start, boxWidth: ann.boxWidth,
+                                     boxMinHeight: ann.boxMinHeight, existing: ann)
                 } else {
                     // Single click → select and prepare to drag.
                     selectedID = ann.id
@@ -541,10 +610,11 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
                 needsDisplay = true
                 return
             }
-            // Empty space → new text.
+            // Empty space → new text, decided on mouseUp: a click is point text, a drag draws a box.
             selectedID = nil
             onSelectionChange?()   // with no text selected, the toolbar reflects the current color/size
-            beginTextEditing(at: p, existing: nil)
+            textBoxAnchor = p
+            textBoxPoint = p
             needsDisplay = true
             return
         }
@@ -584,6 +654,12 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         if resizingID != nil {
             lastResizePoint = p
             updateResize()
+            return
+        }
+
+        if textBoxAnchor != nil {
+            textBoxPoint = p
+            needsDisplay = true
             return
         }
 
@@ -684,6 +760,24 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         }
         draftAnchor = nil
         lastDraftPoint = nil
+        if let anchor = textBoxAnchor {
+            let box = textBoxPoint.map { Self.textDragRect(anchor, $0) } ?? .zero
+            textBoxAnchor = nil
+            textBoxPoint = nil
+            if box.width >= Self.minTextBoxDrag {
+                // Drag → area text: wraps to the dragged width, at least as tall as the dragged height.
+                beginTextEditing(topLeft: CGPoint(x: box.minX, y: box.maxY), boxWidth: box.width,
+                                 boxMinHeight: box.height, existing: nil)
+            } else {
+                // Click → point text, its first line centered on the click like before.
+                let font = NSFont.systemFont(ofSize: currentFontSize, weight: .semibold)
+                let lineHeight = font.ascender - font.descender
+                beginTextEditing(topLeft: CGPoint(x: anchor.x, y: anchor.y + lineHeight / 2),
+                                 boxWidth: nil, boxMinHeight: 0, existing: nil)
+            }
+            needsDisplay = true
+            return
+        }
         if resizingID != nil {
             if resizedDuringDrag, let snap = preMoveSnapshot { pushUndo(snap) }   // ONE undo per completed resize
             resizingID = nil; resizeKind = nil; preMoveSnapshot = nil; resizedDuringDrag = false
@@ -711,64 +805,107 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
 
     // MARK: - In-place text
 
-    private func beginTextEditing(at point: NSPoint, existing: Annotation?) {
+    /// Opens the in-place editor. It is a multi-line NSTextView (not an NSTextField) because area
+    /// text needs real wrapping and Return as a line break; it also takes IME/accents/emoji natively.
+    /// Its glyphs sit exactly where `Annotation.draw` will put them — same attributes, same layout
+    /// options, zero line-fragment padding — so committing never makes the text jump or re-wrap.
+    private func beginTextEditing(topLeft: CGPoint, boxWidth: CGFloat?, boxMinHeight: CGFloat,
+                                  existing: Annotation?) {
         let fontSize = existing?.fontSize ?? currentFontSize
         let color = existing?.color ?? currentColor
         let font = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
-        let lineHeight = font.ascender - font.descender
-        let fieldHeight = max(24, lineHeight + 8)
-        // Position the field so that, on commit, the drawn text lands at `point`.
-        let field = NSTextField(frame: NSRect(x: point.x - 4,
-                                              y: point.y - (fieldHeight - lineHeight) / 2,
-                                              width: 260, height: fieldHeight))
-        field.isBordered = true
-        field.bezelStyle = .roundedBezel
-        field.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.92)   // adapts to dark mode
-        field.font = font
-        field.textColor = color
-        field.focusRingType = .default   // the active field carries the accent focus ring (active = accent)
-        field.placeholderString = L10n.t("editor.text.placeholder")
-        field.stringValue = existing?.text ?? ""
-        field.target = self
-        field.action = #selector(textFieldCommitted(_:))
-        // Return fires the action; but Esc (abortEditing), click-away and focus loss end editing WITHOUT
-        // firing it — and only commitActiveText re-enables the toolbar's key equivalents. Route every
-        // end-of-editing through the delegate so ⌘C/⌘S/⌘Z + the tool keys can't get stranded off.
-        field.delegate = self
-        addSubview(field)
-        window?.makeFirstResponder(field)
-        activeTextField = field
+        // TextKit 1 on purpose: `boundingRect`/`draw(with:)` use it, and TextKit 2 breaks lines
+        // slightly differently in edge cases — the editor and the export must agree.
+        let view = NSTextView(usingTextLayoutManager: false)
+        view.isRichText = false
+        view.importsGraphics = false
+        view.allowsUndo = true
+        view.isVerticallyResizable = false
+        view.isHorizontallyResizable = false
+        view.textContainerInset = NSSize(width: Self.textEditInset, height: Self.textEditInset)
+        view.textContainer?.lineFragmentPadding = 0
+        view.textContainer?.widthTracksTextView = false
+        view.textContainer?.heightTracksTextView = false
+        view.drawsBackground = true
+        view.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.92)   // adapts to dark mode
+        view.wantsLayer = true
+        view.layer?.borderWidth = 1
+        view.layer?.borderColor = NSColor.controlAccentColor.cgColor   // active = accent
+        view.layer?.cornerRadius = 4
+        let attrs = Annotation.textAttributes(font: font, color: color)
+        view.typingAttributes = attrs
+        view.defaultParagraphStyle = attrs[.paragraphStyle] as? NSParagraphStyle
+        view.font = font
+        view.textColor = color
+        view.insertionPointColor = color
+        view.string = existing?.text ?? ""
+        view.delegate = self
+        editTopLeft = topLeft
+        editBoxWidth = boxWidth
+        editBoxMinHeight = boxMinHeight
         editFontSize = fontSize
         editColor = color
+        addSubview(view)
+        activeTextView = view
+        layoutActiveTextView()
+        window?.makeFirstResponder(view)
+        view.selectAll(nil)
         onTextEditingChanged?(true)   // let the toolbar release its ⌘ shortcuts while typing
     }
 
-    @objc private func textFieldCommitted(_ sender: NSTextField) { commitActiveText() }
+    /// Sizes the editor to its text on every keystroke: point text grows sideways, area text keeps
+    /// its width and grows downward. The top-left corner never moves.
+    private func layoutActiveTextView() {
+        guard let view = activeTextView else { return }
+        let font = NSFont.systemFont(ofSize: editFontSize, weight: .semibold)
+        let content = Annotation.measureText(view.string, font: font, width: editBoxWidth)
+        // Point text: room for the caret past the last glyph, and a minimum so an empty field is clickable.
+        let width = editBoxWidth ?? max(content.width + 2, 60)
+        let height = max(content.height, editBoxMinHeight)
+        let inset = Self.textEditInset
+        view.textContainer?.containerSize = NSSize(width: editBoxWidth ?? .greatestFiniteMagnitude,
+                                                   height: .greatestFiniteMagnitude)
+        view.frame = NSRect(x: editTopLeft.x - inset, y: editTopLeft.y - height - inset,
+                            width: width + inset * 2, height: height + inset * 2)
+    }
 
-    /// Fires on EVERY end-of-editing — Return, Esc-abort, click-away, focus loss. commitActiveText is
-    /// idempotent (it nils activeTextField first, so the Return path's action + this both land safely),
-    /// so this is the single choke point that guarantees the toolbar key equivalents get restored.
-    /// On Esc, abortEditing has already reverted the field to its original value, so committing it is a
-    /// clean cancel: empty for a new text (adds nothing), the original for a re-edit (keeps it).
-    func controlTextDidEndEditing(_ obj: Notification) { commitActiveText() }
+    func textDidChange(_ notification: Notification) { layoutActiveTextView() }
 
-    /// True while the in-place field holds real (non-whitespace) uncommitted text — the editor's
+    /// Return is a line break (area text is multi-line); ⌘Return and Esc finish editing KEEPING the
+    /// text, as in Figma/Keynote. Clicking away finishes it too (textDidEndEditing).
+    func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        if selector == #selector(NSResponder.cancelOperation(_:)) {
+            commitActiveText()
+            return true
+        }
+        if selector == #selector(NSResponder.insertNewline(_:)),
+           NSApp.currentEvent?.modifierFlags.contains(.command) == true {
+            commitActiveText()
+            return true
+        }
+        return false
+    }
+
+    /// Fires on EVERY end-of-editing — Esc, ⌘Return, click-away, focus loss. commitActiveText is
+    /// idempotent (it nils activeTextView first), so this is the single choke point that guarantees
+    /// the toolbar key equivalents get restored.
+    func textDidEndEditing(_ notification: Notification) { commitActiveText() }
+
+    /// True while the in-place editor holds real (non-whitespace) uncommitted text — the editor's
     /// close path treats it as unsaved work (trimmed, matching commitActiveText's semantics).
     var hasPendingText: Bool {
-        guard let field = activeTextField else { return false }
-        return !field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard let view = activeTextView else { return false }
+        return !view.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func commitActiveText() {
-        guard let field = activeTextField else { return }
-        let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let frame = field.frame
-        let font = field.font ?? NSFont.systemFont(ofSize: editFontSize, weight: .semibold)
+        guard let view = activeTextView else { return }
+        let text = view.string.trimmingCharacters(in: .whitespacesAndNewlines)
         let id = editingID
-        activeTextField = nil
+        activeTextView = nil
         editingID = nil
-        field.removeFromSuperview()
-        window?.makeFirstResponder(self)   // removing the field editor dropped keyboard focus
+        view.removeFromSuperview()
+        window?.makeFirstResponder(self)   // removing the editor dropped keyboard focus
         onTextEditingChanged?(false)   // restore the toolbar key equivalents
         // Record undo only if this commit actually changes the annotations (new text, or re-edit).
         if !text.isEmpty || id != nil { pushUndo() }
@@ -776,11 +913,10 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         // empty) we delete it by committing empty.
         if let id { annotations.removeAll { $0.id == id } }
         guard !text.isEmpty else { needsDisplay = true; return }
-        let lineHeight = font.ascender - font.descender
-        let drawY = frame.minY + (frame.height - lineHeight) / 2
-        let origin = CGPoint(x: frame.minX + 4, y: drawY)
         var ann = Annotation(tool: .text, color: editColor, lineWidth: currentLineWidth,
-                             points: [origin], text: text, fontSize: editFontSize)
+                             points: [editTopLeft], text: text, fontSize: editFontSize)
+        ann.boxWidth = editBoxWidth
+        ann.boxMinHeight = editBoxMinHeight
         if let id { ann.id = id }   // preserves identity when re-editing
         annotations.append(ann)
         selectedID = ann.id
@@ -821,9 +957,12 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     func setFontSize(_ size: CGFloat) {
         let clamped = max(10, min(120, size))
         currentFontSize = clamped
-        if let field = activeTextField {
-            field.font = NSFont.systemFont(ofSize: clamped, weight: .semibold)
+        if let view = activeTextView {
+            let font = NSFont.systemFont(ofSize: clamped, weight: .semibold)
+            view.font = font
+            view.typingAttributes[.font] = font
             editFontSize = clamped
+            layoutActiveTextView()
         }
         if let id = selectedID, let idx = annotations.firstIndex(where: { $0.id == id }),
            annotations[idx].tool == .text {   // font size only means something for text
@@ -835,11 +974,18 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
 
     func bumpFontSize(_ delta: CGFloat) { setFontSize(effectiveFontSize + delta) }
 
+    private func setEditorColor(_ view: NSTextView, _ color: NSColor) {
+        view.textColor = color
+        view.typingAttributes[.foregroundColor] = color
+        view.insertionPointColor = color
+        editColor = color
+    }
+
     /// Sets the current color and, if there is a selected annotation or text being edited,
     /// recolors it. Use for explicit user color actions (tapping a swatch / the color panel).
     func setColor(_ color: NSColor) {
         currentColor = color
-        if let field = activeTextField { field.textColor = color; editColor = color }
+        if let view = activeTextView { setEditorColor(view, color) }
         if let id = selectedID, let idx = annotations.firstIndex(where: { $0.id == id }) {
             pushUndo()
             annotations[idx].color = color
@@ -859,7 +1005,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             if selectedID != nil { pushUndo() }   // one snapshot for the whole drag
         }
         currentColor = color
-        if let field = activeTextField { field.textColor = color; editColor = color }
+        if let view = activeTextView { setEditorColor(view, color) }
         if let id = selectedID, let idx = annotations.firstIndex(where: { $0.id == id }) {
             annotations[idx].color = color   // no pushUndo: already snapshotted at drag start
         }
@@ -900,7 +1046,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     /// Used on tool switches so changing tools doesn't silently rewrite an existing text's color.
     func setDefaultColor(_ color: NSColor) {
         currentColor = color
-        if let field = activeTextField { field.textColor = color; editColor = color }
+        if let view = activeTextView { setEditorColor(view, color) }
         needsDisplay = true
     }
 
@@ -915,8 +1061,10 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     func undo() {
         // If text is being edited, cancel the edit first: the original stays in the array (hidden by
         // editingID) and reappears once editingID is cleared. The re-edited text is not lost.
-        if activeTextField != nil {
-            activeTextField?.removeFromSuperview(); activeTextField = nil; editingID = nil
+        if let view = activeTextView {
+            // Nil BEFORE removing: removal resigns first responder, and textDidEndEditing would
+            // otherwise commit the very edit this Undo is meant to cancel.
+            activeTextView = nil; editingID = nil; view.removeFromSuperview()
             window?.makeFirstResponder(self)   // removing the field editor dropped keyboard focus
             onTextEditingChanged?(false)
             needsDisplay = true
@@ -970,13 +1118,13 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         if event.keyCode == 53 { cancelOperation(nil); return }
 
         if event.keyCode == 49 {   // Space = hold to pan the zoomed canvas
-            guard activeTextField == nil, canPan else { super.keyDown(with: event); return }
+            guard activeTextView == nil, canPan else { super.keyDown(with: event); return }
             setSpaceHeld(true)
             return                 // swallow the repeats too: Space must not also page-scroll
         }
 
         let isDelete = event.keyCode == 51 || event.keyCode == 117   // Backspace / Forward-Delete
-        if isDelete, activeTextField == nil, let id = selectedID,
+        if isDelete, activeTextView == nil, let id = selectedID,
            annotations.contains(where: { $0.id == id }) {
             pushUndo()
             annotations.removeAll { $0.id == id }
@@ -986,7 +1134,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             return
         }
 
-        if let unit = Self.nudgeDelta(for: event.keyCode), activeTextField == nil,
+        if let unit = Self.nudgeDelta(for: event.keyCode), activeTextView == nil,
            let id = selectedID, let idx = annotations.firstIndex(where: { $0.id == id }) {
             let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
             if event.timestamp - lastNudgeTime > Self.nudgeBurstGap { nudgeCoalescingArmed = true }
