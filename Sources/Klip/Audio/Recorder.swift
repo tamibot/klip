@@ -403,7 +403,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         transcribingCount += 1
         let model = Settings.shared.localModel
         let language = Settings.shared.transcriptionLanguage
-        let vocabulary = Settings.shared.transcriptionVocabulary
+        let vocabulary = Settings.shared.transcriptionPrompt
         startModelFeedback(model: model, id: itemID)
         Task { @MainActor in
             defer {
@@ -538,7 +538,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         improving.insert(itemID)
         transcribingCount += 1
         let language = Settings.shared.transcriptionLanguage
-        let vocabulary = Settings.shared.transcriptionVocabulary
+        let vocabulary = Settings.shared.transcriptionPrompt
         // `id: nil` on purpose: the per-ROW "Downloading model…" label overwrites the row's preview and is
         // never restored if the run fails. The global `downloadingModel` banner is the non-destructive half
         // of that same feedback and needs no new mechanism — the picked model may well be a 616 MB fetch.
@@ -574,7 +574,7 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         // Settings.shared off-main.
         let model = Settings.shared.localModel
         let language = languageOverride ?? Settings.shared.transcriptionLanguage   // the per-upload override wins
-        let vocabulary = Settings.shared.transcriptionVocabulary
+        let vocabulary = Settings.shared.transcriptionPrompt
         // First on-device use downloads the model and then warms Core ML up: name both waits so a
         // multi-minute first run doesn't look stuck (see startModelFeedback).
         startModelFeedback(model: model, id: id)

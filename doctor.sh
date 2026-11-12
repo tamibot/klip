@@ -146,7 +146,9 @@ fi
 
 # ---------------------------------------------------------------- old bundle id
 head_ "Leftovers from the previous bundle id ($OLD_ID)"
-BTM="$(sfltool dumpbtm 2>/dev/null)"
+# macOS 27 makes dumpbtm wait for an admin authorization that never comes from a script, which hung
+# install.sh at its very last step. Cap it; an empty result already falls back to "check by hand".
+BTM="$(perl -e 'alarm 10; exec @ARGV' sfltool dumpbtm 2>/dev/null)"
 if [ -z "$BTM" ]; then
     say "  login items: could not be listed on this Mac — check System Settings › General › Login Items"
 else

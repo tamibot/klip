@@ -170,6 +170,7 @@ final class Settings: ObservableObject {
         static let detectRem  = "detectRemoteSource"
         static let transLang  = "transcriptionLanguage"
         static let transVocab = "transcriptionVocabulary"
+        static let transVocabOn = "transcriptionVocabularyEnabled"
         static let localModel = "localModel"
         static let keyCode2   = "voiceHotKeyCode"
         static let mods2      = "voiceHotKeyModifiers"
@@ -210,6 +211,11 @@ final class Settings: ObservableObject {
     @Published var transcriptionLanguage: String { didSet { d.set(transcriptionLanguage, forKey: K.transLang) } }
     /// Context words / vocabulary (names, brands, jargon) sent to the transcriber so it spells them right.
     @Published var transcriptionVocabulary: String { didSet { d.set(transcriptionVocabulary, forKey: K.transVocab) } }
+    /// Off by default: a Whisper prompt can make the decoder silently drop whole 30 s windows (a 135 s
+    /// voice note lost its first 45 s with a 40-token prompt and came back complete without it).
+    @Published var transcriptionVocabularyEnabled: Bool { didSet { d.set(transcriptionVocabularyEnabled, forKey: K.transVocabOn) } }
+    /// What actually goes to the transcriber: the vocabulary only when the user opted in.
+    var transcriptionPrompt: String { transcriptionVocabularyEnabled ? transcriptionVocabulary : "" }
     /// On-device (WhisperKit) transcription model name.
     @Published var localModel: String { didSet { d.set(localModel, forKey: K.localModel) } }
     @Published var voiceCombo: KeyCombo   { didSet {
@@ -336,6 +342,7 @@ final class Settings: ObservableObject {
         detectRemoteSource = d.object(forKey: K.detectRem) as? Bool ?? true
         transcriptionLanguage = d.string(forKey: K.transLang) ?? "es"
         transcriptionVocabulary = d.string(forKey: K.transVocab) ?? ""
+        transcriptionVocabularyEnabled = d.object(forKey: K.transVocabOn) as? Bool ?? false
         localModel = d.string(forKey: K.localModel) ?? LocalTranscriber.defaultModel
         voiceCombo = KeyCombo(keyCode: UInt32(d.integer(forKey: K.keyCode2)),
                               carbonModifiers: UInt32(d.integer(forKey: K.mods2)))

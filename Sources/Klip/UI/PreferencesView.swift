@@ -148,6 +148,8 @@ struct PreferencesView: View {
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text(L10n.t("prefs.vocab.label")).font(.headline)
+                    Toggle(L10n.t("prefs.vocab.enable"), isOn: $settings.transcriptionVocabularyEnabled)
+                    Text(L10n.t("prefs.vocab.enable.info")).font(.caption).foregroundStyle(.secondary)
                     // Empty title + labelsHidden: with a non-empty title the grouped Form renders it as a
                     // leading label and squeezes the field into a cramped trailing column.
                     TextField("", text: $settings.transcriptionVocabulary,

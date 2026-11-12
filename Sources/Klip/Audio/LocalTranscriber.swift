@@ -1,3 +1,5 @@
+import AVFoundation
+import CoreML
 import Foundation
 import WhisperKit
 
@@ -128,11 +130,19 @@ actor LocalTranscriber {
         var opts = DecodingOptions()
         opts.task = .transcribe
         opts.skipSpecialTokens = true
-        opts.withoutTimestamps = !timestamps
-        // Split long audio at silence and decode at most two chunks at once. WhisperKit defaults to 16
-        // workers, which can start too many Core ML decoders for a multi-minute upload.
-        opts.chunkingStrategy = .vad
-        opts.concurrentWorkerCount = 2
+        // Always decode WITH timestamps. Without them, any note spanning two 30 s windows is a coin flip:
+        // the turbo model sometimes stops after one window and the transcript silently loses its head or its
+        // tail (measured on this Mac, macOS 27: 36 s note 13 of 68 words in 3/6 runs, 44 s note 48 of 83 in 2/4;
+        // with timestamps 20/20 runs complete, on 36 s, 44 s, 103 s and 209 s notes). Speed cost is small.
+        opts.withoutTimestamps = false
+        // SPEED: split long audio at silence (energy VAD) and decode chunks in parallel
+        // (concurrentWorkerCount defaults to 16). Short clips stay one chunk → no overhead; long uploads
+        // transcribe much faster. The model is loaded once and reused (see `pipeline`).
+        // Only for long audio: on a short clip the energy VAD can find no speech and leave zero chunks,
+        // which reads as an empty transcript.
+        let clipSeconds = (try? AVAudioFile(forReading: audioURL)).map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
+        if clipSeconds > 60 { opts.chunkingStrategy = .vad }
+        opts.concurrentWorkerCount = 2   // main: at most two Core ML decoders at once
         if let language, !language.isEmpty {
             opts.language = language          // explicit audio language
             opts.detectLanguage = false
@@ -159,12 +169,42 @@ actor LocalTranscriber {
                 NSLog("Klip LocalTranscriber: biasing decode with %d context-word prompt tokens", opts.promptTokens?.count ?? 0)
             }
         }
-        return try await wk.transcribe(audioPath: audioURL.path, decodeOptions: opts)
+        var results = try await wk.transcribe(audioPath: audioURL.path, decodeOptions: opts)
+        let isBlank = { (r: [TranscriptionResult]) in r.allSatisfy { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } }
+        let wordCount = { (r: [TranscriptionResult]) in r.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count } }
+        // Coverage guard: a long clip with far too few words lost a window → retry once, split at silence.
+        // ponytail: 0.5 words/s floor (speech runs ~2/s; slow dictation with pauses still clears it).
+        if !timestamps, clipSeconds > 20, !isBlank(results), Double(wordCount(results)) / clipSeconds < 0.5 {
+            NSLog("Klip LocalTranscriber: low coverage (%d words in %.1fs clip), retrying with VAD", wordCount(results), clipSeconds)
+            var retry = opts
+            retry.chunkingStrategy = .vad
+            let second = try await wk.transcribe(audioPath: audioURL.path, decodeOptions: retry)
+            if wordCount(second) > wordCount(results) { results = second }
+        }
+        // Empty with a prompt means the prompt ate the output: retry once without it.
+        if isBlank(results), opts.promptTokens != nil {
+            NSLog("Klip LocalTranscriber: empty result with %d prompt tokens (%.1fs clip), retrying without prompt", opts.promptTokens?.count ?? 0, clipSeconds)
+            opts.promptTokens = nil
+            opts.usePrefillPrompt = false
+            results = try await wk.transcribe(audioPath: audioURL.path, decodeOptions: opts)
+        }
+        if isBlank(results) { NSLog("Klip LocalTranscriber: still empty (%.1fs clip, model %@)", clipSeconds, loadedModel ?? "?") }
+        return results
     }
 
     /// Remembers a model id that failed to load → the id it fell back to, so we don't re-attempt the
     /// failing download on every subsequent transcription.
     private var fallbackFor: [String: String] = [:]
+
+    /// Escape hatch for a Neural Engine that stops answering (reported on the macOS 27 RC for other
+    /// Core ML speech apps): `defaults write io.github.tamibot.klip whisperComputeUnits gpu` runs the
+    /// encoder and decoder on the GPU instead. nil keeps WhisperKit's own defaults (Neural Engine).
+    /// ponytail: a hidden defaults key, not a setting — promote it to Preferences if it turns out to
+    /// be needed on shipping macOS 27, or delete it if the Neural Engine path keeps working.
+    static var computeOptions: ModelComputeOptions? {
+        guard UserDefaults.standard.string(forKey: "whisperComputeUnits") == "gpu" else { return nil }
+        return ModelComputeOptions(audioEncoderCompute: .cpuAndGPU, textDecoderCompute: .cpuAndGPU)
+    }
 
     private func pipeline(for model: String, strict: Bool = false) async throws -> WhisperKit {
         // A remembered fallback is a convenience for the automatic path only: when the caller asked for
@@ -180,6 +220,7 @@ actor LocalTranscriber {
             // transcription — fall back to the default model and remember it (no repeated failed downloads).
             // Never under `strict`: that caller replaces an existing transcript with the result, so a
             // silent downgrade to a weaker model would be data loss wearing a success message.
+            NSLog("Klip LocalTranscriber: loading %@ FAILED (%@), falling back to %@", effective, String(describing: error), Self.defaultModel)
             guard !strict, effective != Self.defaultModel else { throw error }
             wk = try await loadPipelineModel(Self.defaultModel)
             loadedModel = Self.defaultModel
@@ -201,9 +242,9 @@ actor LocalTranscriber {
         let id = UUID()
         let task = Task {
             if let folder = Self.localModelFolder(model) {
-                return try await WhisperKit(WhisperKitConfig(modelFolder: folder.path, load: true, download: false))
+                return try await WhisperKit(WhisperKitConfig(modelFolder: folder.path, computeOptions: Self.computeOptions, load: true, download: false))
             }
-            return try await WhisperKit(WhisperKitConfig(model: model, load: true))
+            return try await WhisperKit(WhisperKitConfig(model: model, computeOptions: Self.computeOptions, load: true))
         }
         pipelineLoads[model] = PipelineLoad(id: id, task: task)
         do {
