@@ -21,12 +21,25 @@ CLT="${DEVELOPER_DIR:-$(xcode-select -p)}"
 FW="$CLT/Library/Developer/Frameworks"
 LIB="$CLT/Library/Developer/usr/lib"
 
+# Command Line Tools 27: the macOS 27 SDK needs SwiftUI macros that ship only with Xcode (same fallback
+# as build.sh), and swift-testing's macro plugin moved to host/plugins/testing, which SwiftPM doesn't search.
+if [ -z "${SDKROOT:-}" ] && [ ! -d "$CLT/Platforms" ] \
+   && [ ! -e "$CLT/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib" ] \
+   && [ -d "$CLT/SDKs/MacOSX26.sdk" ]; then
+    export SDKROOT="$(cd "$CLT/SDKs/MacOSX26.sdk" && pwd -P)"
+fi
+PLUGIN_ARGS=()
+if [ -d "$CLT/usr/lib/swift/host/plugins/testing" ]; then
+    PLUGIN_ARGS=(-Xswiftc -plugin-path -Xswiftc "$CLT/usr/lib/swift/host/plugins/testing")
+fi
+
 if [ ! -d "$FW/Testing.framework" ]; then
     echo "==> Testing.framework not found under $FW — running plain 'swift test'."
     exec swift test "$@"
 fi
 
 exec swift test \
+    ${PLUGIN_ARGS[@]+"${PLUGIN_ARGS[@]}"} \
     -Xswiftc -F -Xswiftc "$FW" \
     -Xlinker -rpath -Xlinker "$FW" \
     -Xlinker -rpath -Xlinker "$LIB" \
